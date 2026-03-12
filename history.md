@@ -18,6 +18,8 @@
 | 5 | Step 1: 프로젝트 스캐폴딩 | Package.swift, 디렉토리 구조, @main 진입점, swift build 성공 |
 | 6 | Step 2: Document 모델 + CLI 인자 처리 | MarkdownDocument, ContentView, 에러 UI, swift build 성공 |
 | 7 | 로컬라이제이션 설정 | defaultLocalization: "en" 추가 |
+| 8 | 윈도우 미표시 문제 진단 및 해결 | WindowGroup → main.swift + AppDelegate + NSWindow 직접 생성으로 전환 |
+| 9 | 윈도우 정상 동작 확인 후 커밋 & 푸시 | dev 브랜치에 반영 완료 |
 
 ---
 
@@ -135,3 +137,50 @@ SPM macOS SwiftUI 앱 구성, swift-markdown API 등을 조사 후 구현 진행
 Package.swift에 `defaultLocalization: "en"` 추가. 한국어 텍스트는 UTF-8 기반으로 별도 처리 없이 렌더링됨. 추후 UI 문자열 로컬라이제이션 시 `Resources/ko.lproj/` 추가 가능.
 
 변경 파일: `Package.swift`
+
+---
+
+### 대화 3: macOS 윈도우 미표시 문제 진단
+
+**사용자:**
+> `swift run ma README.md` 실행 시 macOS 윈도우가 뜨지 않아. 독의 아이콘을 클릭해야 윈도우가 나타남. Mission Control로 확인해도 윈도우가 생성되지 않고, Cmd+Tab으로 앱 전환해도 윈도우가 안 나옴.
+
+**응답:**
+SPM으로 빌드한 executable은 `.app` 번들이 아니므로, SwiftUI `WindowGroup`이 윈도우 생성을 Dock 클릭까지 미루는 문제 확인. `NSApp.setActivationPolicy(.regular)` + `NSApp.activate(ignoringOtherApps:)` 추가를 시도했으나, `@main App.init()` 내에서 `NSApp`에 접근하면 macOS 26에서 assertion failure crash 발생.
+
+1차 시도: `MarkAgentApp.init()`에서 `NSApp.setActivationPolicy(.regular)` → crash
+2차 시도: `AppDelegate` + `applicationDidFinishLaunching`에서 activation → 여전히 WindowGroup이 윈도우를 생성하지 않음
+
+변경 파일: `Sources/App/MarkAgentApp.swift`
+
+---
+
+### 대화 4: WindowGroup → AppKit 직접 윈도우 생성으로 전환
+
+**사용자:**
+> 아까와 똑같아. Mission Control로 봤을 때 윈도우가 생성되지 않았고, Cmd+Tab으로 앱을 전환해도 윈도우가 생성되지 않고, 독의 아이콘을 클릭해야 윈도우가 나타나.
+
+**응답:**
+SwiftUI `WindowGroup`이 SPM executable 환경에서 윈도우를 자동 생성하지 않는 근본적 한계를 확인. 해결책으로 `@main App` + `WindowGroup` 구조를 완전히 버리고, 전통적인 AppKit 방식으로 전환:
+
+- `main.swift` — `NSApplication` 수동 설정 + `NSApp.setActivationPolicy(.regular)` + `NSApp.run()`
+- `AppDelegate.swift` — `applicationDidFinishLaunching`에서 `NSWindow` + `NSHostingView<ContentView>` 직접 생성, CLI 인자 파싱 및 Document 로드
+- 기존 `MarkAgentApp.swift` 삭제
+
+이 방식으로 `swift run ma README.md` 실행 시 즉시 윈도우가 나타나고 앱이 포그라운드로 활성화됨.
+
+변경 파일: `Sources/App/main.swift` (신규), `Sources/App/AppDelegate.swift` (신규), `Sources/App/MarkAgentApp.swift` (삭제)
+
+---
+
+### 대화 5: 윈도우 정상 동작 확인 및 커밋
+
+**사용자:**
+> 원하는 형태가 되었어. 커밋 & 푸시해줘.
+
+**응답:**
+윈도우 정상 표시 확인 후 커밋 & 푸시 진행.
+- 커밋 메시지: `Replace SwiftUI WindowGroup with AppKit window for reliable launch`
+- `dev` 브랜치에서 `origin/dev`로 푸시 완료
+
+변경 파일: `Sources/App/main.swift`, `Sources/App/AppDelegate.swift`, `Sources/App/MarkAgentApp.swift` (삭제)
