@@ -9,15 +9,15 @@
 
 빈 SwiftUI 앱이 `swift build` → `swift run ma`로 윈도우가 뜨는 것까지 확인.
 
-- [ ] `Package.swift` 생성
+- [x] `Package.swift` 생성
   - executableTarget `ma` 정의
   - `apple/swift-markdown` 의존성 추가
   - macOS 14+ 플랫폼 지정
-- [ ] 디렉토리 구조 생성 (AGENTS.md의 Planned Directory Structure 기준)
+- [x] 디렉토리 구조 생성 (AGENTS.md의 Planned Directory Structure 기준)
   - `Sources/App/`, `Sources/Core/`, `Sources/Rendering/`, `Sources/Views/`
-- [ ] `MarkAgentApp.swift` — `@main` 진입점 (빈 윈도우)
-- [ ] `swift build` 성공 확인
-- [ ] `swift run ma` 실행 시 빈 윈도우 표시 확인
+- [x] `MarkAgentApp.swift` — `@main` 진입점 (빈 윈도우)
+- [x] `swift build` 성공 확인
+- [x] `swift run ma` 실행 시 빈 윈도우 표시 확인
 
 **완료 기준:** `swift run ma`로 빈 macOS 윈도우가 표시된다.
 
@@ -27,18 +27,18 @@
 
 파일 경로를 인자로 받아 마크다운 텍스트를 읽어오는 코어 로직.
 
-- [ ] `Document.swift` — `@Observable` 마크다운 문서 모델
+- [x] `Document.swift` — `@Observable` 마크다운 문서 모델
   - `content: String` (마크다운 원문)
   - `fileURL: URL?`
   - `errorMessage: String?` (에러 상태)
   - `func load(from url: URL) throws` — 파일 읽기
-- [ ] `MarkAgentApp.swift`에서 CLI 인자 파싱
+- [x] `MarkAgentApp.swift`에서 CLI 인자 파싱
   - `CommandLine.arguments[1]`로 파일 경로 추출
   - 상대 경로 → 절대 경로 변환
   - 파일 존재 여부 검증
   - 인자 없을 시 사용법 안내 또는 빈 상태 표시
-- [ ] `ContentView.swift` — Document의 `content`를 `Text`로 임시 표시 (렌더링 전 단계)
-- [ ] 에러 UI — 파일 없음, 읽기 실패 시 인라인 에러 메시지 표시
+- [x] `ContentView.swift` — Document의 `content`를 `Text`로 임시 표시 (렌더링 전 단계)
+- [x] 에러 UI — 파일 없음, 읽기 실패 시 인라인 에러 메시지 표시
 
 **완료 기준:** `swift run ma README.md` 실행 시 파일 원문 텍스트가 윈도우에 표시된다.
 

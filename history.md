@@ -3,6 +3,7 @@
 ## 목차
 
 1. [세션 1: 프로젝트 기획 문서 정리 및 Phase 1 구현 계획 수립](#세션-1-프로젝트-기획-문서-정리-및-phase-1-구현-계획-수립)
+2. [세션 2: Step 1~2 구현 — 프로젝트 스캐폴딩 및 Document 모델](#세션-2-step-12-구현--프로젝트-스캐폴딩-및-document-모델)
 
 ---
 
@@ -14,6 +15,9 @@
 | 2 | Phase 1 세부 구현 계획 수립 | phase1_plan.md — 7 Step 체크리스트 생성 |
 | 3 | AGENTS.md에 히스토리 기록 지침 추가 | Workflow Rules 섹션 추가 |
 | 4 | 히스토리 기록 형식을 opencode-chat-router 스타일로 변경 | 세션+대화 단위 구분, 목차+타임라인 테이블 |
+| 5 | Step 1: 프로젝트 스캐폴딩 | Package.swift, 디렉토리 구조, @main 진입점, swift build 성공 |
+| 6 | Step 2: Document 모델 + CLI 인자 처리 | MarkdownDocument, ContentView, 에러 UI, swift build 성공 |
+| 7 | 로컬라이제이션 설정 | defaultLocalization: "en" 추가 |
 
 ---
 
@@ -80,3 +84,54 @@ AGENTS.md에 Workflow Rules 섹션을 추가. 커밋/푸시 전 history.md에 �
 opencode-chat-router README.md의 히스토리 형식을 참고하여 AGENTS.md의 Workflow Rules를 수정. 세션+대화 단위 구분, 사용자/응답 패턴, 목차 + 타임라인 요약 테이블 형식으로 변경.
 
 변경 파일: `AGENTS.md`
+
+---
+
+## 세션 2: Step 1~2 구현 — 프로젝트 스캐폴딩 및 Document 모델
+
+> 날짜: 2026-03-12
+> 경로: ~/workspace/markAgent
+
+Phase 1 구현 시작. Step 1(프로젝트 스캐폴딩)과 Step 2(Document 모델 + CLI 인자 처리)를 구현.
+
+### 대화 1: Step 1 + Step 2 구현
+
+**사용자:**
+> phase1_plan.md에서 step 1을 먼저 진행하고, 테스트 결과 문제가 없다면 2번까지만 진행해보자. 이후 작업은 다른 세션에서 진행할거야. 2번까지 진행 후 테스트에 문제가 없다면 커밋 & 푸시를 해줘.
+
+**응답:**
+SPM macOS SwiftUI 앱 구성, swift-markdown API 등을 조사 후 구현 진행.
+
+**Step 1 (프로젝트 스캐폴딩):**
+- `Package.swift` 생성 — executableTarget `ma`, swift-markdown 0.5.0+ 의존성, macOS 14+ 플랫폼
+- 디렉토리 구조: `Sources/App/`, `Sources/Core/`, `Sources/Rendering/`, `Sources/Views/`, `Tests/MarkAgentTests/`
+- `MarkAgentApp.swift` — `@main` SwiftUI App 진입점 (빈 윈도우)
+- `ContentView.swift` — 기본 뷰
+- `swift build` 성공 확인 (19초, swift-markdown 0.7.3 + swift-cmark 0.7.1 resolve)
+
+**Step 2 (Document 모델 + CLI 인자 처리):**
+- `Document.swift` — `@Observable @MainActor` 마크다운 문서 모델
+  - `content`, `fileURL`, `errorMessage` 프로퍼티
+  - `load(from:)` — UTF-8 파일 읽기
+  - `resolveFileURL(from:)` — 상대/절대 경로 변환 + 파일 존재 검증 (nonisolated static)
+  - `DocumentError` enum (Equatable, LocalizedError)
+- `MarkAgentApp.swift` — `CommandLine.arguments` 기반 CLI 인자 파싱, Document 연동
+- `ContentView.swift` — 3상태 UI (content 표시 / 빈 상태 / 에러 메시지)
+- `DocumentTests.swift` — XCTest 기반 유닛 테스트 (경로 resolve 테스트)
+- `swift build` 성공
+
+참고: `swift test`는 `xcode-select`가 CommandLineTools를 가리키고 있어 XCTest 모듈을 찾지 못함. Xcode.app은 설치되어 있으나 SDK 전환이 필요.
+
+변경 파일: `Package.swift`, `Sources/App/MarkAgentApp.swift`, `Sources/Core/Document.swift`, `Sources/Views/ContentView.swift`, `Tests/MarkAgentTests/DocumentTests.swift`
+
+---
+
+### 대화 2: 로컬라이제이션 설정
+
+**사용자:**
+> 기본 언어는 US English 설정에 추가 언어로 한국어 텍스트를 처리하도록 해야해.
+
+**응답:**
+Package.swift에 `defaultLocalization: "en"` 추가. 한국어 텍스트는 UTF-8 기반으로 별도 처리 없이 렌더링됨. 추후 UI 문자열 로컬라이제이션 시 `Resources/ko.lproj/` 추가 가능.
+
+변경 파일: `Package.swift`
