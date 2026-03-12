@@ -5,6 +5,7 @@
 1. [세션 1: 프로젝트 기획 문서 정리 및 Phase 1 구현 계획 수립](#세션-1-프로젝트-기획-문서-정리-및-phase-1-구현-계획-수립)
 2. [세션 2: Step 1~2 구현 — 프로젝트 스캐폴딩 및 Document 모델](#세션-2-step-12-구현--프로젝트-스캐폴딩-및-document-모델)
 3. [세션 3: Step 3 구현 — 기본 마크다운 렌더링](#세션-3-step-3-구현--기본-마크다운-렌더링)
+4. [세션 4: Step 4 구현 — GFM 확장 + 코드 하이라이팅](#세션-4-step-4-구현--gfm-확장--코드-하이라이팅)
 
 ---
 
@@ -22,6 +23,7 @@
 | 8 | 윈도우 미표시 문제 진단 및 해결 | WindowGroup → main.swift + AppDelegate + NSWindow 직접 생성으로 전환 |
 | 9 | 윈도우 정상 동작 확인 후 커밋 & 푸시 | dev 브랜치에 반영 완료 |
 | 10 | Step 3: 기본 마크다운 렌더링 | MarkdownRenderer (MarkupVisitor) + InlineTextVisitor 구현, ContentView 연동 |
+| 11 | Step 4: GFM 확장 + 코드 하이라이팅 | HighlightSwift 통합, GFM 테이블/체크리스트/취소선 렌더링 추가 |
 
 ---
 
@@ -220,3 +222,43 @@ swift-markdown API와 MarkupVisitor → SwiftUI 변환 패턴을 조사한 뒤 �
 **빌드/테스트 결과:** `swift build` 성공, `swift test` 2/2 통과
 
 변경 파일: `Sources/Rendering/MarkdownRenderer.swift` (신규), `Sources/Views/ContentView.swift`, `phase1_plan.md`
+
+---
+
+## 세션 4: Step 4 구현 — GFM 확장 + 코드 하이라이팅
+
+> 날짜: 2026-03-12
+> 경로: ~/workspace/markAgent
+
+GFM 확장 요소(테이블, 체크리스트, 취소선) 렌더링 추가 및 HighlightSwift를 활용한 코드 블록 구문 하이라이팅 통합.
+
+### 대화 1: Step 4 구현
+
+**사용자:**
+> Step 4까지만 진행해보자.
+
+**응답:**
+코드 하이라이팅 라이브러리 비교 조사(Splash/HighlightSwift/Highlightr) 및 swift-markdown GFM 노드 타입 조사를 병렬 수행한 뒤 구현 진행.
+
+**라이브러리 선택:**
+- HighlightSwift (appstefan/HighlightSwift) 채택 — highlight.js 기반, 60+ 언어, `AttributedString` 반환, Swift 6 `Sendable` 준수, macOS 13+ 지원, async/await
+
+**GFM 확장 구현:**
+- **Strikethrough**: `InlineTextVisitor`에 `visitStrikethrough` 추가 → `.strikethrough()` 수정자
+- **체크리스트**: `visitListItem`에서 `listItem.checkbox` 분기 → `.checked`일 때 `checkmark.square.fill`, `.unchecked`일 때 `square` SF Symbol
+- **테이블**: `visitTable` + `renderTableRow` / `renderTableCell` static 헬퍼. `Markdown.Table` vs `SwiftUI.Table` 이름 충돌 → 모듈 prefix로 해결. `Table.ColumnAlignment` → `Alignment` / `TextAlignment` 변환 extension 추가
+
+**코드 하이라이팅 구현:**
+- `HighlightedCodeBlock` SwiftUI View (CodeHighlighter.swift) — `@State` + `.task`로 비동기 하이라이팅, 언어 자동 감지 또는 명시적 언어 지정, Xcode 테마 기반 라이트/다크 모드 자동 전환
+- `MarkdownRenderer.visitCodeBlock`에서 `HighlightedCodeBlock` 사용하도록 연동
+
+**빌드 이슈 해결:**
+- `ForEach` escaping closure에서 mutating self 캡처 불가 → static 메서드 전환 (Step 3에서 해결)
+- `Markdown.Table` vs `SwiftUI.Table` 이름 충돌 → `Markdown.Table` 모듈 prefix 사용
+- `.foregroundColor(.link)` 타입 불일치 → `.foregroundColor(.blue)` 사용
+- `.parseMinimalDashes` 옵션 미존재 → 제거
+- 빌드 캐시 링크 에러 → `swift package clean` 후 재빌드
+
+**빌드/테스트 결과:** `swift build` 성공, `swift test` 2/2 통과
+
+변경 파일: `Package.swift`, `Sources/Rendering/MarkdownRenderer.swift`, `Sources/Rendering/CodeHighlighter.swift` (신규), `phase1_plan.md`, `.gitignore`

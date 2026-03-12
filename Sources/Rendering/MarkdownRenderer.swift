@@ -112,7 +112,22 @@ struct MarkdownRenderer: MarkupVisitor {
     }
 
     mutating func visitListItem(_ listItem: ListItem) -> AnyView {
-        AnyView(
+        if let checkbox = listItem.checkbox {
+            return AnyView(
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    SwiftUI.Image(systemName: checkbox == .checked ? "checkmark.square.fill" : "square")
+                        .foregroundStyle(checkbox == .checked ? Color.accentColor : .secondary)
+                        .imageScale(.small)
+                    VStack(alignment: .leading, spacing: 4) {
+                        ForEach(Array(listItem.children.enumerated()), id: \.offset) { _, child in
+                            Self.renderBlock(child)
+                        }
+                    }
+                    .foregroundStyle(checkbox == .checked ? .secondary : .primary)
+                }
+            )
+        }
+        return AnyView(
             HStack(alignment: .firstTextBaseline, spacing: 8) {
                 SwiftUI.Text("•")
                     .foregroundStyle(.secondary)
@@ -133,16 +148,7 @@ struct MarkdownRenderer: MarkupVisitor {
             : codeBlock.code
 
         return AnyView(
-            ScrollView(.horizontal, showsIndicators: false) {
-                SwiftUI.Text(code)
-                    .font(.system(.body, design: .monospaced))
-                    .textSelection(.enabled)
-                    .padding(12)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
-            .background(Color(nsColor: .controlBackgroundColor))
-            .clipShape(RoundedRectangle(cornerRadius: 6))
-            .padding(.bottom, 8)
+            HighlightedCodeBlock(code: code, language: codeBlock.language)
         )
     }
 
@@ -166,6 +172,36 @@ struct MarkdownRenderer: MarkupVisitor {
         )
     }
 
+    // MARK: Table
+
+    mutating func visitTable(_ table: Markdown.Table) -> AnyView {
+        let alignments = table.columnAlignments
+        let headerCells = Array(table.head.cells)
+        let bodyRows = Array(table.body.rows)
+
+        return AnyView(
+            ScrollView(.horizontal, showsIndicators: false) {
+                VStack(alignment: .leading, spacing: 0) {
+                    Self.renderTableRow(
+                        cells: headerCells,
+                        alignments: alignments,
+                        isHeader: true
+                    )
+                    Divider()
+                    ForEach(Array(bodyRows.enumerated()), id: \.offset) { _, row in
+                        Self.renderTableRow(
+                            cells: Array(row.cells),
+                            alignments: alignments,
+                            isHeader: false
+                        )
+                        Divider().opacity(0.5)
+                    }
+                }
+            }
+            .padding(.bottom, 8)
+        )
+    }
+
     // MARK: Static Helpers
 
     static func renderInlineChildren(_ node: some Markup) -> SwiftUI.Text {
@@ -178,6 +214,43 @@ struct MarkdownRenderer: MarkupVisitor {
     static func renderBlock(_ node: Markup) -> AnyView {
         var renderer = MarkdownRenderer()
         return renderer.visit(node)
+    }
+
+    private static func renderTableRow(
+        cells: [Markdown.Table.Cell],
+        alignments: [Markdown.Table.ColumnAlignment?],
+        isHeader: Bool
+    ) -> AnyView {
+        let cellData: [(Int, Markdown.Table.Cell)] = Array(cells.enumerated()).map { ($0.offset, $0.element) }
+        let columnAlignments = alignments
+        return AnyView(
+            HStack(spacing: 0) {
+                ForEach(cellData, id: \.0) { index, cell in
+                    let colAlignment: Markdown.Table.ColumnAlignment? = index < columnAlignments.count ? columnAlignments[index] : nil
+                    Self.renderTableCell(cell, alignment: colAlignment, isHeader: isHeader)
+                        .frame(minWidth: 80, alignment: colAlignment.swiftUIAlignment)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 6)
+                }
+            }
+        )
+    }
+
+    private static func renderTableCell(
+        _ cell: Markdown.Table.Cell,
+        alignment: Markdown.Table.ColumnAlignment?,
+        isHeader: Bool
+    ) -> some View {
+        let text = renderInlineChildren(cell)
+        return Group {
+            if isHeader {
+                text.bold()
+            } else {
+                text
+            }
+        }
+        .font(.body)
+        .multilineTextAlignment(alignment.textAlignment)
     }
 
     private static func renderOrderedListItem(_ node: Markup, number: UInt) -> AnyView {
@@ -284,6 +357,35 @@ struct InlineTextVisitor: MarkupVisitor {
     mutating func visitInlineHTML(_ inlineHTML: InlineHTML) -> SwiftUI.Text {
         SwiftUI.Text(inlineHTML.rawHTML)
             .foregroundColor(.secondary)
+    }
+
+    // MARK: Strikethrough
+
+    mutating func visitStrikethrough(_ strikethrough: Strikethrough) -> SwiftUI.Text {
+        let inner = strikethrough.children.reduce(SwiftUI.Text("")) { result, child in
+            result + visit(child)
+        }
+        return inner.strikethrough()
+    }
+}
+
+// MARK: - Table.ColumnAlignment Helpers
+
+extension Optional where Wrapped == Markdown.Table.ColumnAlignment {
+    var swiftUIAlignment: Alignment {
+        switch self {
+        case .left, .none: return .leading
+        case .center: return .center
+        case .right: return .trailing
+        }
+    }
+
+    var textAlignment: TextAlignment {
+        switch self {
+        case .left, .none: return .leading
+        case .center: return .center
+        case .right: return .trailing
+        }
     }
 }
 

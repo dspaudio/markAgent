@@ -76,17 +76,17 @@
 
 GitHub Flavored Markdown 확장 요소 렌더링 및 코드 블록 구문 하이라이팅.
 
-- [ ] 코드 하이라이팅 라이브러리 통합
+- [x] 코드 하이라이팅 라이브러리 통합
   - `Package.swift`에 하이라이팅 의존성 추가 (후보: Splash, HighlightSwift, Highlightr)
   - `CodeHighlighter.swift` — 언어 식별자 기반 구문 하이라이팅
   - `CodeBlock` 렌더링에 하이라이터 적용
   - 코드 블록 복사 버튼 (선택사항)
-- [ ] GFM 테이블 렌더링
+- [x] GFM 테이블 렌더링
   - `Table`, `TableHead`, `TableBody`, `TableRow`, `TableCell` 처리
   - 정렬(좌/중/우) 지원
-- [ ] GFM 체크리스트 (읽기 전용)
+- [x] GFM 체크리스트 (읽기 전용)
   - `ListItem` 내 체크박스 상태 표시
-- [ ] GFM Strikethrough (취소선)
+- [x] GFM Strikethrough (취소선)
   - `Strikethrough` → `.strikethrough()` 수정자 적용
 
 **완료 기준:** GFM 문법(테이블, 체크리스트, 취소선)이 올바르게 렌더링되고, 코드 블록에 구문 하이라이팅이 적용된다.
