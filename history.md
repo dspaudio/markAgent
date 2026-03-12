@@ -4,6 +4,7 @@
 
 1. [세션 1: 프로젝트 기획 문서 정리 및 Phase 1 구현 계획 수립](#세션-1-프로젝트-기획-문서-정리-및-phase-1-구현-계획-수립)
 2. [세션 2: Step 1~2 구현 — 프로젝트 스캐폴딩 및 Document 모델](#세션-2-step-12-구현--프로젝트-스캐폴딩-및-document-모델)
+3. [세션 3: Step 3 구현 — 기본 마크다운 렌더링](#세션-3-step-3-구현--기본-마크다운-렌더링)
 
 ---
 
@@ -20,6 +21,7 @@
 | 7 | 로컬라이제이션 설정 | defaultLocalization: "en" 추가 |
 | 8 | 윈도우 미표시 문제 진단 및 해결 | WindowGroup → main.swift + AppDelegate + NSWindow 직접 생성으로 전환 |
 | 9 | 윈도우 정상 동작 확인 후 커밋 & 푸시 | dev 브랜치에 반영 완료 |
+| 10 | Step 3: 기본 마크다운 렌더링 | MarkdownRenderer (MarkupVisitor) + InlineTextVisitor 구현, ContentView 연동 |
 
 ---
 
@@ -184,3 +186,37 @@ SwiftUI `WindowGroup`이 SPM executable 환경에서 윈도우를 자동 생성�
 - `dev` 브랜치에서 `origin/dev`로 푸시 완료
 
 변경 파일: `Sources/App/main.swift`, `Sources/App/AppDelegate.swift`, `Sources/App/MarkAgentApp.swift` (삭제)
+
+---
+
+## 세션 3: Step 3 구현 — 기본 마크다운 렌더링
+
+> 날짜: 2026-03-12
+> 경로: ~/workspace/markAgent
+
+`swift-markdown`의 `MarkupVisitor`를 사용하여 마크다운 AST → SwiftUI View 트리 변환 구현.
+
+### 대화 1: Step 3 구현
+
+**사용자:**
+> 3을 진행해보자.
+
+**응답:**
+swift-markdown API와 MarkupVisitor → SwiftUI 변환 패턴을 조사한 뒤 구현 진행.
+
+**설계 결정:**
+- 이원 구조 채택: 블록 요소는 `AnyView` 반환 (`MarkdownRenderer`), 인라인 요소는 `SwiftUI.Text` 반환 (`InlineTextVisitor`)
+- `ForEach` escaping closure에서 mutating self 캡처 불가 문제 → 헬퍼 메서드를 `static`으로 전환하여 해결
+- `Markdown.Text` / `SwiftUI.Text` / `Markdown.Link` / `Markdown.Image` 이름 충돌 → 모듈 prefix로 해결
+
+**구현 내용:**
+- `MarkdownRenderer` — `MarkupVisitor<AnyView>` 블록 렌더러
+  - Document (VStack 컨테이너), Heading (H1~H6 폰트 차등 + H1/H2 하단 Divider), Paragraph, BlockQuote (좌측 바 + 들여쓰기), OrderedList / UnorderedList / ListItem, CodeBlock (모노스페이스 + 배경), ThematicBreak (Divider), HTMLBlock (fallback)
+- `InlineTextVisitor` — `MarkupVisitor<SwiftUI.Text>` 인라인 렌더러
+  - Text, Strong (bold), Emphasis (italic), InlineCode (모노스페이스 + 핑크), Link (파란색 + 밑줄), Image (alt text 표시), SoftBreak / LineBreak, InlineHTML (fallback)
+- `renderMarkdown(_ source:)` — 공개 API 함수
+- `ContentView` 업데이트 — 기존 `Text(document.content)` → `renderMarkdown(document.content)` 연동
+
+**빌드/테스트 결과:** `swift build` 성공, `swift test` 2/2 통과
+
+변경 파일: `Sources/Rendering/MarkdownRenderer.swift` (신규), `Sources/Views/ContentView.swift`, `phase1_plan.md`

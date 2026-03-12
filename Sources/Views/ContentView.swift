@@ -18,11 +18,10 @@ struct ContentView: View {
 
     private var contentView: some View {
         ScrollView {
-            Text(document.content)
-                .font(.system(.body, design: .monospaced))
+            renderMarkdown(document.content)
                 .textSelection(.enabled)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .padding()
+                .padding(20)
         }
     }
 

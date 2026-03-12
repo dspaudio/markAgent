@@ -49,24 +49,24 @@
 `swift-markdown`의 `MarkupVisitor`로 AST를 순회하며 SwiftUI View 트리 생성.
 이 단계에서는 핵심 블록/인라인 요소만 구현.
 
-- [ ] `MarkdownRenderer.swift` — `MarkupVisitor` 프로토콜 구현
+- [x] `MarkdownRenderer.swift` — `MarkupVisitor` 프로토콜 구현
   - `typealias Result` 결정 (`AnyView` 또는 `Text` 분리 전략)
-- [ ] 블록 요소 렌더링
-  - [ ] `Heading` (H1~H6, 폰트 크기 차등)
-  - [ ] `Paragraph`
-  - [ ] `BlockQuote` (들여쓰기 + 좌측 바)
-  - [ ] `ListItem` / `OrderedList` / `UnorderedList`
-  - [ ] `ThematicBreak` (수평선 `---`)
-  - [ ] `CodeBlock` (모노스페이스, 배경색 — 하이라이팅은 Step 4)
-- [ ] 인라인 요소 렌더링
-  - [ ] `Text` (일반 텍스트)
-  - [ ] `Strong` (볼드)
-  - [ ] `Emphasis` (이탤릭)
-  - [ ] `InlineCode` (모노스페이스 배경)
-  - [ ] `Link` (클릭 가능한 하이퍼링크)
-  - [ ] `Image` (AsyncImage로 원격 이미지 / 로컬 이미지 로드)
-- [ ] `ContentView.swift` — `MarkdownRenderer`로 렌더링된 뷰를 `ScrollView`에 표시
-- [ ] 기본 타이포그래피 설정 (시스템 폰트 기반, 적절한 패딩/간격)
+- [x] 블록 요소 렌더링
+  - [x] `Heading` (H1~H6, 폰트 크기 차등)
+  - [x] `Paragraph`
+  - [x] `BlockQuote` (들여쓰기 + 좌측 바)
+  - [x] `ListItem` / `OrderedList` / `UnorderedList`
+  - [x] `ThematicBreak` (수평선 `---`)
+  - [x] `CodeBlock` (모노스페이스, 배경색 — 하이라이팅은 Step 4)
+- [x] 인라인 요소 렌더링
+  - [x] `Text` (일반 텍스트)
+  - [x] `Strong` (볼드)
+  - [x] `Emphasis` (이탤릭)
+  - [x] `InlineCode` (모노스페이스 배경)
+  - [x] `Link` (클릭 가능한 하이퍼링크)
+  - [x] `Image` (AsyncImage로 원격 이미지 / 로컬 이미지 로드)
+- [x] `ContentView.swift` — `MarkdownRenderer`로 렌더링된 뷰를 `ScrollView`에 표시
+- [x] 기본 타이포그래피 설정 (시스템 폰트 기반, 적절한 패딩/간격)
 
 **완료 기준:** 일반적인 마크다운 문서가 서식이 적용되어 읽기 좋게 표시된다. (코드 하이라이팅, GFM 확장은 아직 없음)
 
