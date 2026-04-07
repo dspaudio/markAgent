@@ -7,6 +7,7 @@
 3. [세션 3: Step 3 구현 — 기본 마크다운 렌더링](#세션-3-step-3-구현--기본-마크다운-렌더링)
 4. [세션 4: Step 4 구현 — GFM 확장 + 코드 하이라이팅](#세션-4-step-4-구현--gfm-확장--코드-하이라이팅)
 5. [세션 5: Step 5~7 구현 — FileWatcher, Always-on-Top, 통합 폴리싱](#세션-5-step-57-구현--filewatcher-always-on-top-통합-폴리싱)
+6. [세션 6: Phase 2 전체 구현 — Wait 플래그, 양방향 편집, Diff, 템플릿 엔진](#세션-6-phase-2-전체-구현--wait-플래그-양방향-편집-diff-템플릿-엔진)
 
 ---
 
@@ -30,6 +31,12 @@
 | 14 | Step 7: 통합 폴리싱 — 엣지 케이스 + UI | 빈 파일 구분(isLoaded), LazyVStack 성능 개선, 다크/라이트 모드 확인 |
 | 15 | Step 7: 릴리즈 빌드 및 통합 테스트 | swift build -c release 성공 (경고 0), swift test 2/2 통과, 바이너리 2.3MB |
 | 16 | Phase 1 완료 — 문서 업데이트 | phase1_plan.md 전체 체크박스 완료, history.md 세션 기록 |
+| 17 | Phase 2 설계 및 플랜 수립 | phase2_plan.md 작성 (4 Step, 의존성 그래프, 기술 결정 6건, 파일 영향 매트릭스) |
+| 18 | Phase 2 Step 1: Wait 플래그 | CLIArguments 수동 파싱, -w/--wait/--help, applicationShouldTerminateAfterLastWindowClosed |
+| 19 | Phase 2 Step 4: 템플릿 엔진 | Template 모델, TemplateEngine ({{var}} 치환), BuiltInTemplates 4종, TemplatePicker Sheet UI |
+| 20 | Phase 2 Step 2: 양방향 편집 동기화 | ViewMode, editableContent/isDirty/save(), EditorView, Preview/Edit 전환 (⌘E), 외부 수정 경고 |
+| 21 | Phase 2 Step 3: 인라인 Diff 하이라이트 | DiffEngine (CollectionDifference), DiffHighlighter, DiffOverlayView, ⌘D 토글 |
+| 22 | Phase 2 완료 — 문서 업데이트 및 릴리즈 빌드 | phase2_plan.md 전체 체크박스 완료, swift build -c release 성공 |
 
 ---
 
@@ -339,3 +346,82 @@ Step 5(FileWatcher)와 Step 6(Always-on-Top)을 독립 에이전트 2개로 병�
 - `history.md` 세션 5 기록 및 목차/타임라인 업데이트
 
 변경 파일: `Sources/Core/Document.swift`, `Sources/Views/ContentView.swift`, `Sources/Rendering/MarkdownRenderer.swift`, `phase1_plan.md`, `history.md`
+
+---
+
+## 세션 6: Phase 2 전체 구현 — Wait 플래그, 양방향 편집, Diff, 템플릿 엔진
+
+> 날짜: 2026-04-07
+> 경로: ~/workspace/markAgent
+
+Phase 2 Core Interaction 전체 구현 세션. 멀티에이전트 tmux 팀으로 4개 Step을 진행. Step 1+4 병렬 → Step 2 → Step 3 순서.
+
+### 대화 1: Phase 2 설계 및 플랜 수립
+
+**사용자:**
+> 멀티에이전트&tmux pane 확인을 사용해서 phase 2를 진행하되, 설계 & 플랜을 세우고 각 스텝별로 나눈 뒤 구현을 시작해줘.
+
+**응답:**
+architect 에이전트로 `phase2_plan.md` 작성. 4개 Step, 의존성 그래프, 기술 결정 6건, 파일 영향 매트릭스 포함.
+
+기술 결정 확정: 수동 CLI 파싱, TextEditor, 탭 전환, CollectionDifference, 경고 다이얼로그, Mustache 문법.
+
+변경 파일: `phase2_plan.md` (신규)
+
+---
+
+### 대화 2: Step 1 + Step 4 병렬 구현
+
+**사용자:**
+> (자율 진행)
+
+**응답:**
+`phase2` 팀 구성 후 `cli-builder`(Step 1)와 `template-builder`(Step 4)를 병렬 배치.
+
+**Step 1 (cli-builder):**
+- `CLIArguments.swift` 신규 — `-w`/`--wait`, `-h`/`--help` 수동 파싱
+- `main.swift` 수정 — CLIArguments.parse() 호출, --help 시 exit(0)
+- `AppDelegate.swift` 수정 — `init(cliArguments:)`, `applicationShouldTerminateAfterLastWindowClosed`, 타이틀에 `[wait]` 표시
+
+**Step 4 (template-builder):**
+- `Sources/Templates/` 디렉토리 신규 — Template.swift, TemplateEngine.swift, BuiltInTemplates.swift
+- `TemplatePicker.swift` 신규 — NavigationSplitView Sheet UI, 변수 입력 폼
+- ContentView + AppDelegate 최소 수정 (⌘T 단축키, 메뉴 항목)
+
+변경 파일: `Sources/App/CLIArguments.swift` (신규), `Sources/App/main.swift`, `Sources/App/AppDelegate.swift`, `Sources/Templates/Template.swift` (신규), `Sources/Templates/TemplateEngine.swift` (신규), `Sources/Templates/BuiltInTemplates.swift` (신규), `Sources/Views/TemplatePicker.swift` (신규), `Sources/Views/ContentView.swift`
+
+---
+
+### 대화 3: Step 2 구현
+
+**응답:**
+Step 1 완료 후 `editor-builder` 에이전트로 Step 2 진행.
+
+**구현 내용:**
+- `Document.swift` — ViewMode enum, editableContent, isDirty, save(), loadIfNotRecentlySaved(), 외부 수정 감지/해결
+- `EditorView.swift` 신규 — @Bindable + TextEditor, 모노스페이스 폰트
+- `ContentView.swift` — Preview/Edit 전환 (⌘E), 외부 수정 경고 alert, editableContent 기준 프리뷰 렌더링
+- `AppDelegate.swift` — Save(⌘S), Toggle(⌘E) 메뉴, NSWindowDelegate (윈도우 닫기 확인)
+
+핵심 결정: FileWatcher 일시정지 대신 타임스탬프 기반(1초 윈도우)으로 자기 저장 이벤트 억제.
+
+변경 파일: `Sources/Core/Document.swift`, `Sources/Views/EditorView.swift` (신규), `Sources/Views/ContentView.swift`, `Sources/App/AppDelegate.swift`
+
+---
+
+### 대화 4: Step 3 구현
+
+**응답:**
+Step 2 완료 후 `diff-builder` 에이전트로 Step 3 진행.
+
+**구현 내용:**
+- `DiffEngine.swift` 신규 — CollectionDifference 기반 줄 단위 diff. DiffLineType(.unchanged/.added/.removed), DiffLine, DiffResult
+- `Document.swift` 수정 — previousContent, diffResult, showDiff, clearDiff(). load() 시 이전 content 저장 후 백그라운드 diff 계산
+- `DiffHighlighter.swift` 신규 — 추가: 초록 배경 + "+", 삭제: 빨간 배경 + "-" + 취소선, 줄 번호 거터
+- `DiffOverlayView.swift` 신규 — ScrollView + LazyVStack, diff 요약 헤더, "Diff 닫기" 버튼
+- `ContentView.swift` 수정 — ⌘D 토글 버튼, showDiff 시 DiffOverlayView 표시
+- `AppDelegate.swift` 수정 — View 메뉴에 "Toggle Diff" (⌘D) 항목
+
+**검증:** `swift build` 성공, `swift build -c release` 성공 (경고 0)
+
+변경 파일: `Sources/Core/DiffEngine.swift` (신규), `Sources/Core/Document.swift`, `Sources/Rendering/DiffHighlighter.swift` (신규), `Sources/Views/DiffOverlayView.swift` (신규), `Sources/Views/ContentView.swift`, `Sources/App/AppDelegate.swift`
