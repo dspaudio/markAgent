@@ -2,35 +2,48 @@
 
 ## Project Overview
 
-**MarkAgent**는 CLI 기반 AI 에이전트(Claude Code, Gemini CLI 등)와 연동되는 macOS 네이티브 마크다운 뷰어다.
-터미널 워크플로우에서 마크다운 파일을 실시간으로 미려하게 렌더링하는 **비주얼 브릿지** 역할을 한다.
+**MarkAgent**는 CLI 기반 AI 에이전트(Claude Code, Gemini CLI 등)와 연동되는 macOS 네이티브 마크다운 에디터/뷰어다.
+터미널 워크플로우에서 마크다운 파일을 실시간으로 렌더링하고 편집하는 **비주얼 브릿지** 역할을 한다.
 
 - **슬로건:** "The Professional GUI for your CLI AI Agents."
 - **플랫폼:** macOS (네이티브)
-- **현재 단계:** Phase 1 — MVP (초경량 뷰어)
+- **현재 단계:** Phase 3 — Polishing & Launch
 
 ---
 
-## Current Scope (Phase 1: MVP)
+## Completed Phases
 
-Phase 1은 읽기 전용 마크다운 뷰어다. 편집 기능 없음.
-
-### 핵심 기능
+### Phase 1: MVP (완료)
 
 1. **CLI 실행:** `ma <file>` 명령어로 앱 실행 및 파일 로드
 2. **실시간 파일 감시:** `FSEvents` 기반 파일 변경 감지 → 자동 새로고침
 3. **GFM 렌더링:** GitHub Flavored Markdown 파싱 + 코드 블록 구문 하이라이팅
 4. **플로팅 윈도우:** Always-on-Top 모드로 터미널 옆에 상시 표시
 
-### 범위 외 (Phase 2+)
+### Phase 2: Core Interaction (완료)
 
-- `EDITOR` 환경변수 대응 (`ma -w` wait 플래그)
-- 양방향 편집 동기화
-- Diff 뷰어
-- 프롬프트 템플릿 엔진
-- Mermaid/KaTeX 렌더링
-- 테마 시스템
-- Mac App Store 배포
+1. **Wait 플래그:** `ma -w <file>` — 편집 완료 후 프로세스 종료
+2. **양방향 편집:** Preview/Edit 모드 전환 (⌘E), 파일 저장 (⌘S), 외부 수정 감지
+3. **인라인 Diff:** CollectionDifference 기반 변경사항 하이라이트 (⌘D)
+4. **템플릿 엔진:** Mustache 문법 기반 프롬프트 템플릿 (⌘T)
+
+### .app 번들 전환 (완료)
+
+SPM 순수 바이너리는 macOS Dock/Cmd+Tab/메뉴바에 표시되지 않음.
+`scripts/bundle.sh`로 `.app` 번들을 생성하고, CLI 실행 시 자동으로 번들 경유 재실행.
+
+---
+
+## Current Scope (Phase 3: Polishing & Launch)
+
+### 예정 기능
+
+- Mermaid(다이어그램) 및 KaTeX(수식) 렌더링
+- 개발자 친화적 테마 (Dracula, Nord 등) 및 커스텀 CSS
+- LLM 입력 비용 예측을 위한 토큰 카운터
+- Pipe Support (`cat file.md | ma`)
+- 앱 아이콘
+- Mac App Store 배포 ($0.99) + Homebrew CLI 배포
 
 ---
 
@@ -41,63 +54,92 @@ Phase 1은 읽기 전용 마크다운 뷰어다. 편집 기능 없음.
 | Language | Swift 6.0+ | Strict concurrency |
 | UI Framework | SwiftUI | macOS 14+ 타겟 |
 | Markdown Parser | `apple/swift-markdown` | GFM 지원 |
-| File Watching | FSEvents (DispatchSource / FileSystemWatcher) | 네이티브 API |
-| Build System | Xcode / Swift Package Manager | — |
+| Code Highlighting | `HighlightSwift` | highlight.js 기반, 60+ 언어 |
+| File Watching | FSEvents (DispatchSource) | 네이티브 API |
+| Build System | Swift Package Manager | `scripts/bundle.sh`로 .app 번들 생성 |
 
 ---
 
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────┐
-│                  MarkAgent                   │
-├──────────┬──────────────┬───────────────────┤
-│  CLI     │   Core       │   Rendering       │
-│  Layer   │   Layer      │   Layer           │
-├──────────┼──────────────┼───────────────────┤
-│ Argument │ FileWatcher  │ MarkdownRenderer  │
-│ Parser   │ (FSEvents)   │ (swift-markdown)  │
-│          │              │                   │
-│ App      │ Document     │ CodeHighlighter   │
-│ Launcher │ Model        │                   │
-│          │              │ ContentView       │
-└──────────┴──────────────┴───────────────────┘
+┌──────────────────────────────────────────────────────────┐
+│                       MarkAgent                          │
+├──────────┬───────────────┬───────────────┬──────────────┤
+│  CLI     │   Core        │   Rendering   │  Templates   │
+│  Layer   │   Layer       │   Layer       │  Layer       │
+├──────────┼───────────────┼───────────────┼──────────────┤
+│ main     │ FileWatcher   │ Markdown      │ Template     │
+│ (relaunch│ (FSEvents)    │ Renderer      │ Engine       │
+│  via .app│               │               │              │
+│  bundle) │ Document      │ Code          │ BuiltIn      │
+│          │ Model         │ Highlighter   │ Templates    │
+│ CLI      │               │               │              │
+│ Arguments│ DiffEngine    │ Diff          │ Template     │
+│          │               │ Highlighter   │ Picker       │
+│ App      │               │               │              │
+│ Delegate │               │ ContentView   │              │
+│          │               │ EditorView    │              │
+│          │               │ DiffOverlay   │              │
+└──────────┴───────────────┴───────────────┴──────────────┘
 ```
 
 ### CLI Layer
-- 명령줄 인자 파싱 (`ma <filepath>`)
-- 파일 경로 유효성 검증 후 앱 윈도우 실행
+- `main.swift`: CLI 인자 파싱, .app 번들 외부 실행 시 번들 탐색 → `open` 명령으로 재실행
+- `CLIArguments`: `-w`/`--wait`, `-h`/`--help` 플래그 파싱
+- `AppDelegate`: NSWindow + NSHostingView 생성, 메뉴 구성, 윈도우 라이프사이클
 
 ### Core Layer
-- **FileWatcher:** FSEvents로 대상 파일 변경 감지, 변경 시 Document 모델 갱신
-- **Document Model:** 마크다운 원문 텍스트를 보유하는 ObservableObject
+- **FileWatcher:** `DispatchSource` + `O_EVTONLY`로 파일 변경 감지, 0.2초 디바운싱, 삭제/rename 재오픈
+- **Document Model:** `@Observable @MainActor`, ViewMode (preview/edit), editableContent, isDirty, save/load, 외부 수정 감지
+- **DiffEngine:** `CollectionDifference` 기반 줄 단위 diff 계산
 
 ### Rendering Layer
-- **MarkdownRenderer:** `swift-markdown`으로 AST 파싱 → SwiftUI View 트리 변환
-- **CodeHighlighter:** 코드 블록 언어별 구문 하이라이팅
-- **ContentView:** 메인 윈도우 — 스크롤 가능한 마크다운 렌더링 뷰, Always-on-Top 지원
+- **MarkdownRenderer:** `MarkupVisitor<AnyView>` — AST → SwiftUI View 트리 (GFM 테이블/체크리스트/취소선 포함)
+- **CodeHighlighter:** `HighlightSwift` 기반 비동기 구문 하이라이팅, 다크/라이트 모드 자동 전환
+- **DiffHighlighter:** 추가/삭제 줄 하이라이트 + 줄 번호 거터
+- **ContentView:** Preview/Edit 전환, Diff 오버레이, 에러/빈 문서 상태 표시
+- **EditorView:** TextEditor 기반 마크다운 편집기
+
+### Templates Layer
+- **TemplateEngine:** `{{variable}}` Mustache 치환
+- **BuiltInTemplates:** 프롬프트 템플릿 4종 (Bug Report, Feature Request 등)
+- **TemplatePicker:** NavigationSplitView Sheet UI, 변수 입력 폼
 
 ---
 
-## Planned Directory Structure
+## Directory Structure
 
 ```
 markAgent/
-├── AGENTS.md
-├── concept.md
-├── Package.swift              # SPM 의존성 (swift-markdown 등)
+├── CLAUDE.md                   # 프로젝트 가이드 (이 파일)
+├── concept.md                  # 제품 기획안
+├── Package.swift               # SPM 매니페스트
+├── scripts/
+│   └── bundle.sh               # .app 번들 빌드/설치 스크립트
 ├── Sources/
 │   ├── App/
-│   │   ├── MarkAgentApp.swift # @main, 윈도우 설정, Always-on-Top
-│   │   └── AppDelegate.swift  # CLI 인자 처리, NSApp 설정
+│   │   ├── main.swift          # 진입점, .app 번들 재실행 로직
+│   │   ├── AppDelegate.swift   # NSWindow 생성, 메뉴, 윈도우 델리게이트
+│   │   ├── CLIArguments.swift  # CLI 인자 파싱
+│   │   └── Info.plist          # .app 번들용 (빌드 시 복사)
 │   ├── Core/
-│   │   ├── FileWatcher.swift  # FSEvents 기반 파일 감시
-│   │   └── Document.swift     # 마크다운 문서 모델 (ObservableObject)
+│   │   ├── Document.swift      # 마크다운 문서 모델 (@Observable)
+│   │   ├── FileWatcher.swift   # FSEvents 기반 파일 감시 (actor)
+│   │   └── DiffEngine.swift    # 줄 단위 diff 계산
 │   ├── Rendering/
-│   │   ├── MarkdownRenderer.swift  # swift-markdown AST → SwiftUI 변환
-│   │   └── CodeHighlighter.swift   # 코드 블록 구문 하이라이팅
+│   │   ├── MarkdownRenderer.swift  # AST → SwiftUI (MarkupVisitor)
+│   │   ├── CodeHighlighter.swift   # 코드 블록 구문 하이라이팅
+│   │   └── DiffHighlighter.swift   # Diff 줄 하이라이트
+│   ├── Templates/
+│   │   ├── Template.swift          # 템플릿 모델
+│   │   ├── TemplateEngine.swift    # Mustache 치환 엔진
+│   │   └── BuiltInTemplates.swift  # 내장 템플릿 4종
 │   └── Views/
-│       └── ContentView.swift  # 메인 렌더링 뷰
+│       ├── ContentView.swift       # 메인 뷰 (Preview/Edit/Diff)
+│       ├── EditorView.swift        # 텍스트 편집 뷰
+│       ├── DiffOverlayView.swift   # Diff 오버레이
+│       └── TemplatePicker.swift    # 템플릿 선택 Sheet
 └── Tests/
     └── MarkAgentTests/
 ```
@@ -118,8 +160,8 @@ markAgent/
 - Preview 매크로(`#Preview`) 활용
 
 ### Naming
-- 파일명 = 타입명 (e.g., `FileWatcher.swift` → `struct FileWatcher`)
-- 프로토콜은 `-able`, `-ing` 접미사 지양 — 역할 기반 명명 (e.g., `FileMonitor`)
+- 파일명 = 타입명 (e.g., `FileWatcher.swift` → `actor FileWatcher`)
+- 프로토콜은 `-able`, `-ing` 접미사 지양 — 역할 기반 명명
 
 ### Error Handling
 - `Result` 타입 또는 `throws` — 강제 언래핑(`!`) 금지
@@ -129,10 +171,11 @@ markAgent/
 
 ## Key Decisions
 
-1. **SPM vs Xcode 프로젝트:** SPM 기반으로 시작. Xcode 프로젝트 파일 최소화.
+1. **SPM + .app 번들:** SPM으로 빌드, `scripts/bundle.sh`로 .app 번들 생성. Dock/메뉴/Cmd+Tab 정상 동작에 필수.
 2. **macOS 최소 버전:** macOS 14 (Sonoma) — Observation framework, 최신 SwiftUI API 활용.
-3. **CLI 바이너리:** Phase 1에서는 `swift run` 또는 빌드된 바이너리 직접 실행. Homebrew 배포는 Phase 3.
-4. **렌더링 전략:** `swift-markdown`의 `MarkupWalker`로 AST를 순회하며 SwiftUI View를 직접 생성. WebView 사용하지 않음.
+3. **AppKit 윈도우 직접 생성:** SwiftUI `WindowGroup`은 SPM executable에서 윈도우를 자동 생성하지 않아, `NSWindow` + `NSHostingView` 방식 채택.
+4. **렌더링 전략:** `swift-markdown`의 `MarkupVisitor`로 AST를 순회하며 SwiftUI View를 직접 생성. WebView 미사용.
+5. **CLI 자동 재실행:** `main.swift`에서 `.app/Contents/MacOS/` 경로 밖 실행 감지 시 상위 디렉토리에서 `.app` 번들을 찾아 `open` 명령으로 재실행.
 
 ---
 
@@ -202,8 +245,20 @@ markAgent/
 # 빌드
 swift build
 
-# 실행
-swift run ma <filepath>
+# 번들 생성 (debug)
+scripts/bundle.sh
+
+# 번들 생성 (release)
+scripts/bundle.sh release
+
+# 설치 (~/Applications + /usr/local/bin/ma)
+scripts/bundle.sh install
+
+# 실행 (번들 자동 경유)
+.build/debug/ma <filepath>
+
+# 실행 (직접 번들)
+open .build/MarkAgent.app --args <filepath>
 
 # 테스트
 swift test

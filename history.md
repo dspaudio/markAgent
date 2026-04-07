@@ -8,6 +8,7 @@
 4. [세션 4: Step 4 구현 — GFM 확장 + 코드 하이라이팅](#세션-4-step-4-구현--gfm-확장--코드-하이라이팅)
 5. [세션 5: Step 5~7 구현 — FileWatcher, Always-on-Top, 통합 폴리싱](#세션-5-step-57-구현--filewatcher-always-on-top-통합-폴리싱)
 6. [세션 6: Phase 2 전체 구현 — Wait 플래그, 양방향 편집, Diff, 템플릿 엔진](#세션-6-phase-2-전체-구현--wait-플래그-양방향-편집-diff-템플릿-엔진)
+7. [세션 7: .app 번들 전환 — Dock/메뉴/Cmd+Tab 정상화](#세션-7-app-번들-전환--dockmenu바cmdtab-정상화)
 
 ---
 
@@ -37,6 +38,7 @@
 | 20 | Phase 2 Step 2: 양방향 편집 동기화 | ViewMode, editableContent/isDirty/save(), EditorView, Preview/Edit 전환 (⌘E), 외부 수정 경고 |
 | 21 | Phase 2 Step 3: 인라인 Diff 하이라이트 | DiffEngine (CollectionDifference), DiffHighlighter, DiffOverlayView, ⌘D 토글 |
 | 22 | Phase 2 완료 — 문서 업데이트 및 릴리즈 빌드 | phase2_plan.md 전체 체크박스 완료, swift build -c release 성공 |
+| 23 | .app 번들 전환 — Dock/메뉴/Cmd+Tab 정상화 | SPM 바이너리 → .app 번들 구조 전환, bundle.sh 스크립트 작성, CLI 자동 재실행 |
 
 ---
 
@@ -425,3 +427,94 @@ Step 2 완료 후 `diff-builder` 에이전트로 Step 3 진행.
 **검증:** `swift build` 성공, `swift build -c release` 성공 (경고 0)
 
 변경 파일: `Sources/Core/DiffEngine.swift` (신규), `Sources/Core/Document.swift`, `Sources/Rendering/DiffHighlighter.swift` (신규), `Sources/Views/DiffOverlayView.swift` (신규), `Sources/Views/ContentView.swift`, `Sources/App/AppDelegate.swift`
+
+---
+
+## 세션 7: .app 번들 전환 — Dock/메뉴/Cmd+Tab 정상화
+
+> 날짜: 2026-04-07
+> 경로: ~/workspace/markAgent
+
+Phase 2 완료 후 발견된 근본적 문제 해결 세션. SPM 바이너리가 macOS GUI 앱으로 인식되지 않아 Dock/Cmd+Tab/메뉴바가 동작하지 않던 문제를 .app 번들 구조로 전환하여 해결.
+
+### 대화 1: 메뉴바 미전환 문제 보고
+
+**사용자:**
+> always on top 만 적용되어서인지 해당 창을 클릭하면 이 프로그램의 메뉴로 전환되어야 하는데, 그러지 않아.
+
+**응답:**
+`windowDidBecomeKey` 델리게이트에서 `NSApp.activate(ignoringOtherApps: true)` 호출 추가. 플로팅 윈도우 클릭 시 앱 활성화를 명시적으로 트리거하도록 시도.
+
+→ 결과: 효과 없음
+
+---
+
+### 대화 2: Dock/Cmd+Tab 미표시 문제 확인
+
+**사용자:**
+> 윈도우 닫기 창을 누르면 앱도 종료되어야 해. cmd+tab 전환에도 나오지 않고, dock에도 나오지 않아.
+
+**응답:**
+여러 접근을 순차 시도:
+1. `applicationShouldTerminateAfterLastWindowClosed` → 항상 `true` 반환 (윈도우 닫기 = 앱 종료)
+2. `applicationWillFinishLaunching`에서 `setActivationPolicy(.regular)` 이중 호출
+3. `NSRunningApplication.current.activate()` 사용
+4. main.swift에서 activation policy 토글 트릭 (`.accessory` → `.regular`)
+
+→ 결과: 윈도우 닫기 시 앱 종료는 성공. Dock/Cmd+Tab/메뉴바는 여전히 미표시.
+
+---
+
+### 대화 3: Info.plist 바이너리 임베드 시도
+
+**응답:**
+`-sectcreate __TEXT __info_plist` linker 플래그로 Info.plist를 바이너리에 직접 임베드하는 방식 시도.
+- `Sources/App/Info.plist` 생성 (CFBundleIdentifier: `com.markagent.ma`)
+- `Package.swift`에 `linkerSettings: [.unsafeFlags(["-Xlinker", "-sectcreate", ...])]` 추가
+- `otool -s __TEXT __info_plist`로 임베드 확인
+
+→ 결과: 효과 없음. SPM 바이너리는 `.app` 번들이 아니므로 macOS가 GUI 앱으로 인식하지 않음.
+
+---
+
+### 대화 4: .app 번들 구조 전환 (최종 해결)
+
+**응답:**
+웹 조사 결과, SPM 순수 바이너리는 `.app` 번들 없이는 Dock/Cmd+Tab 표시가 OS 레벨에서 불가능함을 확인. `.app` 번들 생성 스크립트로 전환.
+
+**`scripts/bundle.sh` 작성:**
+```
+MarkAgent.app/Contents/
+├── MacOS/ma (실행 파일)
+├── Info.plist
+└── Resources/
+```
+- `scripts/bundle.sh` — debug 빌드 + 번들
+- `scripts/bundle.sh release` — release 빌드 + 번들
+- `scripts/bundle.sh install` — release 빌드 + `~/Applications` 설치 + `/usr/local/bin/ma` 심볼릭 링크
+
+→ 결과: `open .build/MarkAgent.app --args <file>` 로 Dock, Cmd+Tab, 메뉴바 모두 정상 동작.
+
+---
+
+### 대화 5: 정리 및 CLI 자동 재실행
+
+**사용자:**
+> 정리해줘. 다만 ma 명령어가 자동으로 .app 번들을 통해 실행되도록 되면 좋겠네.
+
+**응답:**
+불필요한 코드 정리 및 CLI 자동 번들 재실행 기능 추가.
+
+**제거:**
+- `Package.swift` — linker settings (`-sectcreate` Info.plist 임베드) 제거
+- `AppDelegate.swift` — 불필요한 `windowDidBecomeKey` activate 호출 제거
+
+**추가 — CLI 자동 번들 재실행:**
+- `main.swift` — 바이너리가 `.app/Contents/MacOS/` 경로 밖에서 실행되면, 상위 3단계 디렉토리에서 `MarkAgent.app`을 탐색하여 `open` 명령으로 자동 재실행
+- `.build/debug/ma test.md` → 자동으로 `.build/MarkAgent.app`을 찾아 번들로 실행
+
+**`bundle.sh` 개선:**
+- `install` 모드 추가: `~/Applications`에 .app 복사 + `/usr/local/bin/ma` 심볼릭 링크 자동 생성
+- 설치 후 터미널에서 `ma <파일>`만으로 .app 번들 경유 실행
+
+변경 파일: `Sources/App/main.swift`, `Sources/App/AppDelegate.swift`, `Sources/App/Info.plist` (신규), `Package.swift`, `scripts/bundle.sh` (신규)

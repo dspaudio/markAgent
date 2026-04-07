@@ -1,0 +1,63 @@
+#!/bin/bash
+# MarkAgent.app 번들 생성 스크립트
+#
+# 사용법:
+#   scripts/bundle.sh              # debug 빌드 + 번들 생성
+#   scripts/bundle.sh release      # release 빌드 + 번들 생성
+#   scripts/bundle.sh install      # release 빌드 + ~/Applications 설치 + CLI 심볼릭 링크
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
+APP_NAME="MarkAgent"
+
+ACTION="${1:-debug}"
+if [ "$ACTION" = "install" ]; then
+    CONFIG="release"
+else
+    CONFIG="$ACTION"
+fi
+
+BUNDLE_DIR="$PROJECT_DIR/.build/${APP_NAME}.app"
+CONTENTS_DIR="$BUNDLE_DIR/Contents"
+MACOS_DIR="$CONTENTS_DIR/MacOS"
+
+# 빌드
+echo "Building ($CONFIG)..."
+swift build -c "$CONFIG" --package-path "$PROJECT_DIR"
+
+# 기존 번들 제거 후 구조 생성
+rm -rf "$BUNDLE_DIR"
+mkdir -p "$MACOS_DIR"
+mkdir -p "$CONTENTS_DIR/Resources"
+
+# 실행 파일 및 Info.plist 복사
+cp "$PROJECT_DIR/.build/$CONFIG/ma" "$MACOS_DIR/ma"
+cp "$PROJECT_DIR/Sources/App/Info.plist" "$CONTENTS_DIR/Info.plist"
+
+echo "✓ $BUNDLE_DIR"
+
+# install 모드: ~/Applications로 복사 + CLI 심볼릭 링크
+if [ "$ACTION" = "install" ]; then
+    INSTALL_DIR="$HOME/Applications"
+    mkdir -p "$INSTALL_DIR"
+    rm -rf "$INSTALL_DIR/${APP_NAME}.app"
+    cp -R "$BUNDLE_DIR" "$INSTALL_DIR/${APP_NAME}.app"
+    echo "✓ $INSTALL_DIR/${APP_NAME}.app"
+
+    BIN_DIR="/usr/local/bin"
+    if [ -d "$BIN_DIR" ] && [ -w "$BIN_DIR" ]; then
+        ln -sf "$INSTALL_DIR/${APP_NAME}.app/Contents/MacOS/ma" "$BIN_DIR/ma"
+        echo "✓ $BIN_DIR/ma → ${APP_NAME}.app"
+        echo ""
+        echo "사용법: ma <filepath>"
+    else
+        echo ""
+        echo "CLI 심볼릭 링크를 수동으로 생성하세요:"
+        echo "  sudo ln -sf $INSTALL_DIR/${APP_NAME}.app/Contents/MacOS/ma $BIN_DIR/ma"
+    fi
+else
+    echo ""
+    echo "실행: open $BUNDLE_DIR --args <filepath>"
+    echo "      .build/$CONFIG/ma <filepath>  (자동 번들 실행)"
+fi

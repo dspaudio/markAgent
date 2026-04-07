@@ -19,7 +19,8 @@ let package = Package(
                 .product(name: "Markdown", package: "swift-markdown"),
                 .product(name: "HighlightSwift", package: "highlightswift"),
             ],
-            path: "Sources"
+            path: "Sources",
+            exclude: ["App/Info.plist"]
         ),
         .testTarget(
             name: "MarkAgentTests",

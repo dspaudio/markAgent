@@ -15,13 +15,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        setupMenu()
         loadFromCLIArguments()
         setupWindow()
-        setupMenu()
+        NSRunningApplication.current.activate()
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
-        cliArguments.waitMode
+        true
     }
 
     private func setupWindow() {
@@ -43,8 +44,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         positionWindowOnRight(window)
         updateWindowTitle()
-
-        NSApp.activate(ignoringOtherApps: true)
     }
 
     private func positionWindowOnRight(_ window: NSWindow) {
@@ -64,18 +63,51 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func setupMenu() {
         let mainMenu = NSMenu()
 
-        // App 메뉴
+        // MARK: App 메뉴
         let appMenuItem = NSMenuItem()
         mainMenu.addItem(appMenuItem)
         let appMenu = NSMenu()
         appMenuItem.submenu = appMenu
+
+        appMenu.addItem(NSMenuItem(
+            title: "About MarkAgent",
+            action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)),
+            keyEquivalent: ""
+        ))
+        appMenu.addItem(.separator())
+
+        let servicesMenuItem = NSMenuItem(title: "Services", action: nil, keyEquivalent: "")
+        let servicesMenu = NSMenu(title: "Services")
+        servicesMenuItem.submenu = servicesMenu
+        NSApp.servicesMenu = servicesMenu
+        appMenu.addItem(servicesMenuItem)
+
+        appMenu.addItem(.separator())
+        appMenu.addItem(NSMenuItem(
+            title: "Hide MarkAgent",
+            action: #selector(NSApplication.hide(_:)),
+            keyEquivalent: "h"
+        ))
+        let hideOthersItem = NSMenuItem(
+            title: "Hide Others",
+            action: #selector(NSApplication.hideOtherApplications(_:)),
+            keyEquivalent: "h"
+        )
+        hideOthersItem.keyEquivalentModifierMask = [.command, .option]
+        appMenu.addItem(hideOthersItem)
+        appMenu.addItem(NSMenuItem(
+            title: "Show All",
+            action: #selector(NSApplication.unhideAllApplications(_:)),
+            keyEquivalent: ""
+        ))
+        appMenu.addItem(.separator())
         appMenu.addItem(NSMenuItem(
             title: "Quit MarkAgent",
             action: #selector(NSApplication.terminate(_:)),
             keyEquivalent: "q"
         ))
 
-        // File 메뉴
+        // MARK: File 메뉴
         let fileMenuItem = NSMenuItem()
         mainMenu.addItem(fileMenuItem)
         let fileMenu = NSMenu(title: "File")
@@ -86,22 +118,45 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             action: #selector(saveDocument),
             keyEquivalent: "s"
         )
-        saveItem.keyEquivalentModifierMask = [.command]
         saveItem.target = self
         fileMenu.addItem(saveItem)
 
         fileMenu.addItem(.separator())
 
         let templateItem = NSMenuItem(
-            title: "Insert Template...",
+            title: "Insert Template…",
             action: #selector(showTemplatePicker),
             keyEquivalent: "t"
         )
-        templateItem.keyEquivalentModifierMask = [.command]
         templateItem.target = self
         fileMenu.addItem(templateItem)
 
-        // View 메뉴
+        fileMenu.addItem(.separator())
+
+        let closeItem = NSMenuItem(
+            title: "Close Window",
+            action: #selector(NSWindow.performClose(_:)),
+            keyEquivalent: "w"
+        )
+        fileMenu.addItem(closeItem)
+
+        // MARK: Edit 메뉴
+        let editMenuItem = NSMenuItem()
+        mainMenu.addItem(editMenuItem)
+        let editMenu = NSMenu(title: "Edit")
+        editMenuItem.submenu = editMenu
+
+        editMenu.addItem(NSMenuItem(title: "Undo", action: Selector(("undo:")), keyEquivalent: "z"))
+        editMenu.addItem(NSMenuItem(title: "Redo", action: Selector(("redo:")), keyEquivalent: "Z"))
+        editMenu.addItem(.separator())
+        editMenu.addItem(NSMenuItem(title: "Cut", action: #selector(NSText.cut(_:)), keyEquivalent: "x"))
+        editMenu.addItem(NSMenuItem(title: "Copy", action: #selector(NSText.copy(_:)), keyEquivalent: "c"))
+        editMenu.addItem(NSMenuItem(title: "Paste", action: #selector(NSText.paste(_:)), keyEquivalent: "v"))
+        editMenu.addItem(NSMenuItem(title: "Delete", action: #selector(NSText.delete(_:)), keyEquivalent: ""))
+        editMenu.addItem(.separator())
+        editMenu.addItem(NSMenuItem(title: "Select All", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a"))
+
+        // MARK: View 메뉴
         let viewMenuItem = NSMenuItem()
         mainMenu.addItem(viewMenuItem)
         let viewMenu = NSMenu(title: "View")
@@ -112,7 +167,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             action: #selector(toggleViewMode),
             keyEquivalent: "e"
         )
-        toggleModeItem.keyEquivalentModifierMask = [.command]
         toggleModeItem.target = self
         viewMenu.addItem(toggleModeItem)
 
@@ -121,7 +175,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             action: #selector(toggleDiff),
             keyEquivalent: "d"
         )
-        toggleDiffItem.keyEquivalentModifierMask = [.command]
         toggleDiffItem.target = self
         viewMenu.addItem(toggleDiffItem)
 
@@ -137,11 +190,54 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         alwaysOnTopItem.state = .on
         viewMenu.addItem(alwaysOnTopItem)
 
-        // Window 메뉴
+        viewMenu.addItem(.separator())
+
+        let enterFullScreenItem = NSMenuItem(
+            title: "Enter Full Screen",
+            action: #selector(NSWindow.toggleFullScreen(_:)),
+            keyEquivalent: "f"
+        )
+        enterFullScreenItem.keyEquivalentModifierMask = [.command, .control]
+        viewMenu.addItem(enterFullScreenItem)
+
+        // MARK: Window 메뉴
         let windowMenuItem = NSMenuItem()
         mainMenu.addItem(windowMenuItem)
         let windowMenu = NSMenu(title: "Window")
         windowMenuItem.submenu = windowMenu
+        NSApp.windowsMenu = windowMenu
+
+        windowMenu.addItem(NSMenuItem(
+            title: "Minimize",
+            action: #selector(NSWindow.performMiniaturize(_:)),
+            keyEquivalent: "m"
+        ))
+        windowMenu.addItem(NSMenuItem(
+            title: "Zoom",
+            action: #selector(NSWindow.performZoom(_:)),
+            keyEquivalent: ""
+        ))
+        windowMenu.addItem(.separator())
+        windowMenu.addItem(NSMenuItem(
+            title: "Bring All to Front",
+            action: #selector(NSApplication.arrangeInFront(_:)),
+            keyEquivalent: ""
+        ))
+
+        // MARK: Help 메뉴
+        let helpMenuItem = NSMenuItem()
+        mainMenu.addItem(helpMenuItem)
+        let helpMenu = NSMenu(title: "Help")
+        helpMenuItem.submenu = helpMenu
+        NSApp.helpMenu = helpMenu
+
+        let helpItem = NSMenuItem(
+            title: "MarkAgent Help",
+            action: #selector(showHelp),
+            keyEquivalent: "?"
+        )
+        helpItem.target = self
+        helpMenu.addItem(helpItem)
 
         NSApp.mainMenu = mainMenu
     }
@@ -186,6 +282,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         picker.view.frame = NSRect(x: 0, y: 0, width: 640, height: 420)
         let sheetWindow = NSWindow(contentViewController: picker)
         window.beginSheet(sheetWindow)
+    }
+
+    @objc private func showHelp() {
+        NSWorkspace.shared.open(URL(string: "https://github.com/user/markAgent")!)
     }
 
     @objc private func toggleAlwaysOnTop() {
