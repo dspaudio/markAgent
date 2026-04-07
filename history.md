@@ -6,6 +6,7 @@
 2. [세션 2: Step 1~2 구현 — 프로젝트 스캐폴딩 및 Document 모델](#세션-2-step-12-구현--프로젝트-스캐폴딩-및-document-모델)
 3. [세션 3: Step 3 구현 — 기본 마크다운 렌더링](#세션-3-step-3-구현--기본-마크다운-렌더링)
 4. [세션 4: Step 4 구현 — GFM 확장 + 코드 하이라이팅](#세션-4-step-4-구현--gfm-확장--코드-하이라이팅)
+5. [세션 5: Step 5~7 구현 — FileWatcher, Always-on-Top, 통합 폴리싱](#세션-5-step-57-구현--filewatcher-always-on-top-통합-폴리싱)
 
 ---
 
@@ -24,6 +25,11 @@
 | 9 | 윈도우 정상 동작 확인 후 커밋 & 푸시 | dev 브랜치에 반영 완료 |
 | 10 | Step 3: 기본 마크다운 렌더링 | MarkdownRenderer (MarkupVisitor) + InlineTextVisitor 구현, ContentView 연동 |
 | 11 | Step 4: GFM 확장 + 코드 하이라이팅 | HighlightSwift 통합, GFM 테이블/체크리스트/취소선 렌더링 추가 |
+| 12 | Step 5: FileWatcher — 실시간 파일 감시 | DispatchSource 기반 FileWatcher actor 구현, 디바운싱 + 삭제/rename 재오픈, swift build 성공 |
+| 13 | Step 6: Always-on-Top 플로팅 윈도우 | window.level = .floating, ⌘⇧T 토글, 메뉴바 항목, 화면 우측 배치, 📌 상태 표시 |
+| 14 | Step 7: 통합 폴리싱 — 엣지 케이스 + UI | 빈 파일 구분(isLoaded), LazyVStack 성능 개선, 다크/라이트 모드 확인 |
+| 15 | Step 7: 릴리즈 빌드 및 통합 테스트 | swift build -c release 성공 (경고 0), swift test 2/2 통과, 바이너리 2.3MB |
+| 16 | Phase 1 완료 — 문서 업데이트 | phase1_plan.md 전체 체크박스 완료, history.md 세션 기록 |
 
 ---
 
@@ -262,3 +268,74 @@ GFM 확장 요소(테이블, 체크리스트, 취소선) 렌더링 추가 및 Hi
 **빌드/테스트 결과:** `swift build` 성공, `swift test` 2/2 통과
 
 변경 파일: `Package.swift`, `Sources/Rendering/MarkdownRenderer.swift`, `Sources/Rendering/CodeHighlighter.swift` (신규), `phase1_plan.md`, `.gitignore`
+
+---
+
+## 세션 5: Step 5~7 구현 — FileWatcher, Always-on-Top, 통합 폴리싱
+
+> 날짜: 2026-04-07
+> 경로: ~/workspace/markAgent
+
+Phase 1 마무리 세션. Step 5(FileWatcher), Step 6(Always-on-Top), Step 7(통합 폴리싱)을 멀티에이전트 병렬 작업으로 완료.
+
+### 대화 1: Step 5 + Step 6 병렬 구현
+
+**사용자:**
+> 5, 6을 진행해야해. 각 에이전트에게 필요한 역할을 할당하고 동시에 진행할 수 있는 것은 동시에 진행해도 돼.
+
+**응답:**
+Step 5(FileWatcher)와 Step 6(Always-on-Top)을 독립 에이전트 2개로 병렬 구현. Step 5는 메인 워크트리, Step 6은 격리 워크트리에서 작업 후 수동 통합.
+
+**Step 5 (FileWatcher):**
+- `Sources/Core/FileWatcher.swift` 신규 생성 — `actor FileWatcher`로 Swift 6 strict concurrency 준수
+- `DispatchSource.makeFileSystemObjectSource` + `O_EVTONLY` 플래그
+- `.write`/`.extend` → 0.2초 디바운싱 후 `onChange` 콜백
+- `.delete`/`.rename` → 소스 취소 + 지연 재오픈 (에디터 atomic save 대응)
+- `@MainActor @Sendable` 콜백으로 Document.load() 직접 호출
+- AppDelegate에서 파일 로드 성공 시 `startWatching(url:)` 호출
+
+**Step 6 (Always-on-Top):**
+- `window.level = .floating` + `collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]`
+- `⌘⇧T` 키보드 단축키 토글 + 메뉴바 "Window > Always on Top" 항목
+- 타이틀바에 📌 아이콘으로 상태 표시
+- `positionWindowOnRight()` — 화면 우측 20pt 여백 기본 배치
+- `setupWindow()` / `setupMenu()` 메서드 분리
+
+두 에이전트 완료 후 AppDelegate.swift를 수동 통합하여 FileWatcher + Always-on-Top 모두 반영.
+
+**빌드 결과:** `swift build` 성공
+
+변경 파일: `Sources/Core/FileWatcher.swift` (신규), `Sources/App/AppDelegate.swift`
+
+---
+
+### 대화 2: Step 7 멀티에이전트 팀 구성 및 폴리싱
+
+**사용자:**
+> 다음 스텝을 진행하자. 멀티에이전트면 tmux 환경에서 각각 pane이 열려서 상황을 확인할 수 있다고 들었는데, 그 부분도 활용해봐
+
+**응답:**
+`step7-polish` 팀을 구성하여 tmux pane 기반 멀티에이전트로 Step 7을 진행.
+
+**팀 구성:**
+- `polisher` — Task #1: 엣지 케이스 처리 및 UI 폴리싱
+- `tester` — Task #2: 릴리즈 빌드 및 통합 테스트
+
+**polisher 작업 결과:**
+- `Document.swift`에 `isLoaded: Bool` 추가 — 빈 파일과 로딩 중 상태 구분
+- `ContentView.swift` — 빈 문서(`isLoaded && content.isEmpty`) 시 "빈 문서입니다." 표시
+- `MarkdownRenderer.swift` — `visitDocument`에서 `VStack` → `LazyVStack` (대용량 파일 성능)
+- 다크/라이트 모드: semantic 색상 전부 시스템 대응 확인 → 수정 불필요
+- 윈도우 리사이즈: 기존 구조 정상 → 수정 불필요
+
+**tester 작업 결과:**
+- `swift build -c release` 성공 — 경고 0개, clean build
+- 릴리즈 바이너리: `.build/release/ma` (2.3MB)
+- `swift test` 2/2 통과
+- 소스 수정 없이 완료 (기존 코드 clean 상태)
+
+**문서 업데이트:**
+- `phase1_plan.md` Step 5, 6, 7 전체 체크박스 완료
+- `history.md` 세션 5 기록 및 목차/타임라인 업데이트
+
+변경 파일: `Sources/Core/Document.swift`, `Sources/Views/ContentView.swift`, `Sources/Rendering/MarkdownRenderer.swift`, `phase1_plan.md`, `history.md`

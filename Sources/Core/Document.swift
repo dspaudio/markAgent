@@ -6,14 +6,17 @@ final class MarkdownDocument {
     var content: String = ""
     var fileURL: URL?
     var errorMessage: String?
+    var isLoaded: Bool = false
 
     func load(from url: URL) {
         do {
             content = try String(contentsOf: url, encoding: .utf8)
             fileURL = url
             errorMessage = nil
+            isLoaded = true
         } catch {
             content = ""
+            isLoaded = false
             errorMessage = "파일을 읽을 수 없습니다: \(error.localizedDescription)"
         }
     }

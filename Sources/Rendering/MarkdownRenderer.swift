@@ -26,7 +26,7 @@ struct MarkdownRenderer: MarkupVisitor {
 
     mutating func visitDocument(_ document: Document) -> AnyView {
         AnyView(
-            VStack(alignment: .leading, spacing: 12) {
+            LazyVStack(alignment: .leading, spacing: 12) {
                 ForEach(Array(document.children.enumerated()), id: \.offset) { _, child in
                     Self.renderBlock(child)
                 }

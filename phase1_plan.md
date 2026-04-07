@@ -97,15 +97,15 @@ GitHub Flavored Markdown 확장 요소 렌더링 및 코드 블록 구문 하이
 
 파일 변경 감지 → Document 자동 갱신 → 뷰 재렌더링 파이프라인.
 
-- [ ] `FileWatcher.swift` — `DispatchSource.makeFileSystemObjectSource` 기반
+- [x] `FileWatcher.swift` — `DispatchSource.makeFileSystemObjectSource` 기반
   - `O_EVTONLY` 플래그로 파일 디스크립터 열기
   - `.write` 이벤트 감시 → `Document.load()` 재호출
   - `.delete` / `.rename` 이벤트 처리 (파일 디스크립터 재오픈)
   - `deinit`에서 리소스 정리 (source cancel, fd close)
-- [ ] Document 모델과 연동
+- [x] Document 모델과 연동
   - `@Observable`의 `content` 갱신 시 뷰 자동 리렌더링 확인
   - 파일 감시 시작/중지 라이프사이클 관리
-- [ ] 엣지 케이스 처리
+- [x] 엣지 케이스 처리
   - 파일이 삭제된 경우 — 에러 메시지 표시 + 감시 재시도 로직
   - 빠른 연속 수정 — 디바운싱 (0.1~0.3초)
   - 대용량 파일 성능 확인
@@ -118,13 +118,13 @@ GitHub Flavored Markdown 확장 요소 렌더링 및 코드 블록 구문 하이
 
 터미널 옆에 상시 표시되는 플로팅 모드.
 
-- [ ] `NSViewRepresentable` 기반 `WindowAccessor` 구현
+- [x] `NSViewRepresentable` 기반 `WindowAccessor` 구현
   - `NSWindow` 접근 → `window.level = .floating`
   - `window.collectionBehavior` 설정 (모든 Space에서 표시)
-- [ ] Always-on-Top 토글 기능
+- [x] Always-on-Top 토글 기능
   - 메뉴바 항목 또는 키보드 단축키 (예: `⌘⇧T`)
   - 현재 상태를 타이틀바 또는 UI에 표시
-- [ ] 윈도우 기본 설정
+- [x] 윈도우 기본 설정
   - 적절한 기본 크기 (예: 500x700)
   - 화면 우측에 기본 위치
   - 타이틀바에 파일명 표시
@@ -137,21 +137,21 @@ GitHub Flavored Markdown 확장 요소 렌더링 및 코드 블록 구문 하이
 
 전체 기능 연결 + 엣지 케이스 + UI 다듬기.
 
-- [ ] 전체 흐름 통합 테스트
+- [x] 전체 흐름 통합 테스트
   - `swift run ma <file>` → 파일 로드 → 렌더링 → 파일 수정 → 자동 갱신
   - 존재하지 않는 파일 경로 → 에러 메시지
   - 인자 없이 실행 → 사용법 안내
-- [ ] 엣지 케이스
+- [x] 엣지 케이스
   - 빈 파일
   - 매우 큰 파일 (1MB+) — 렌더링 성능
   - 깨진/불완전한 마크다운
   - UTF-8 이외 인코딩
-- [ ] UI 폴리싱
+- [x] UI 폴리싱
   - 스크롤 위치 유지 (파일 갱신 시)
   - 적절한 여백, 줄 간격
   - 다크 모드 / 라이트 모드 자동 대응
   - 윈도우 리사이즈 대응
-- [ ] 빌드 및 배포 준비
+- [x] 빌드 및 배포 준비
   - `swift build -c release` 성공 확인
   - 빌드된 바이너리 직접 실행 확인 (`ma <file>`)
   - 간단한 설치 안내 (README 또는 AGENTS.md 업데이트)

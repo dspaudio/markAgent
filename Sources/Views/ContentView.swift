@@ -7,8 +7,10 @@ struct ContentView: View {
         Group {
             if let errorMessage = document.errorMessage {
                 errorView(message: errorMessage)
+            } else if !document.isLoaded {
+                loadingView
             } else if document.content.isEmpty {
-                emptyView
+                emptyDocumentView
             } else {
                 contentView
             }
@@ -25,12 +27,23 @@ struct ContentView: View {
         }
     }
 
-    private var emptyView: some View {
+    private var loadingView: some View {
         VStack(spacing: 12) {
             Image(systemName: "doc.text")
                 .font(.system(size: 48))
                 .foregroundStyle(.secondary)
             Text("파일을 로드하는 중...")
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private var emptyDocumentView: some View {
+        VStack(spacing: 12) {
+            Image(systemName: "doc")
+                .font(.system(size: 48))
+                .foregroundStyle(.secondary)
+            Text("빈 문서입니다.")
                 .foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
