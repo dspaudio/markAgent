@@ -2,7 +2,7 @@ import Foundation
 
 enum ViewMode {
     case preview
-    case edit
+    case rawEdit
 }
 
 @Observable
@@ -14,7 +14,7 @@ final class MarkdownDocument {
     var errorMessage: String?
     var isLoaded: Bool = false
     var isExternalUpdatePending: Bool = false
-    var viewMode: ViewMode = .preview
+    var viewMode: ViewMode = .rawEdit
 
     var previousContent: String?
     var diffResult: DiffResult?
@@ -53,6 +53,18 @@ final class MarkdownDocument {
         diffResult = nil
         showDiff = false
         previousContent = nil
+    }
+
+    func resetToNewDocument() {
+        content = ""
+        editableContent = ""
+        fileURL = nil
+        errorMessage = nil
+        isLoaded = true
+        isExternalUpdatePending = false
+        pendingExternalContent = nil
+        viewMode = .rawEdit
+        clearDiff()
     }
 
     private func computeDiffInBackground(old: String, new: String) {

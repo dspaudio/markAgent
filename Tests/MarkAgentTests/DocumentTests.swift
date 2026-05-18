@@ -2,6 +2,13 @@ import XCTest
 @testable import ma
 
 final class DocumentTests: XCTestCase {
+    @MainActor
+    func testDefaultViewModeIsRawEdit() {
+        let document = MarkdownDocument()
+
+        XCTAssertEqual(document.viewMode, .rawEdit)
+    }
+
     func testResolveValidPath() throws {
         let tempDir = FileManager.default.temporaryDirectory
         let tempFile = tempDir.appendingPathComponent("test_markagent.md")
@@ -25,5 +32,24 @@ final class DocumentTests: XCTestCase {
         case .failure(let error):
             XCTAssertEqual(error, .fileNotFound("/nonexistent/file.md"))
         }
+    }
+
+    @MainActor
+    func testRecentDocumentStoreMovesExistingDocumentToFront() {
+        let suiteName = "RecentDocumentStoreTests-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+
+        let store = RecentDocumentStore(defaults: defaults)
+        let first = URL(fileURLWithPath: "/tmp/first.md")
+        let second = URL(fileURLWithPath: "/tmp/second.md")
+
+        store.record(url: first)
+        store.record(url: second)
+        store.record(url: first)
+
+        XCTAssertEqual(store.documents.map(\.path), [first.path, second.path])
     }
 }

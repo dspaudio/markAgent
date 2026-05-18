@@ -1,10 +1,12 @@
 import AppKit
 import SwiftUI
+import UniformTypeIdentifiers
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var window: NSWindow?
     let document = MarkdownDocument()
+    private let recentStore = RecentDocumentStore()
     private var fileWatcher: FileWatcher?
     private var isAlwaysOnTop = true
     private let cliArguments: CLIArguments
@@ -26,11 +28,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func setupWindow() {
-        let contentView = ContentView(document: document)
+        let contentView = ContentView(
+            document: document,
+            recentStore: recentStore,
+            onNewDocument: { [weak self] in
+                self?.newDocument()
+            },
+            onOpenFile: { [weak self] in
+                self?.openFile()
+            },
+            onOpenRecent: { [weak self] url in
+                self?.openDocumentIfAllowed(url: url)
+            }
+        )
         let hostingView = NSHostingView(rootView: contentView)
 
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 500, height: 700),
+            contentRect: NSRect(x: 0, y: 0, width: 980, height: 700),
             styleMask: [.titled, .closable, .resizable, .miniaturizable],
             backing: .buffered,
             defer: false
@@ -113,6 +127,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let fileMenu = NSMenu(title: "File")
         fileMenuItem.submenu = fileMenu
 
+        let newItem = NSMenuItem(
+            title: "New",
+            action: #selector(newDocument),
+            keyEquivalent: "n"
+        )
+        newItem.target = self
+        fileMenu.addItem(newItem)
+
+        fileMenu.addItem(.separator())
+
+        let openItem = NSMenuItem(
+            title: "Open…",
+            action: #selector(openFile),
+            keyEquivalent: "o"
+        )
+        openItem.target = self
+        fileMenu.addItem(openItem)
+
+        fileMenu.addItem(.separator())
+
         let saveItem = NSMenuItem(
             title: "Save",
             action: #selector(saveDocument),
@@ -120,16 +154,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
         saveItem.target = self
         fileMenu.addItem(saveItem)
-
-        fileMenu.addItem(.separator())
-
-        let templateItem = NSMenuItem(
-            title: "Insert Template…",
-            action: #selector(showTemplatePicker),
-            keyEquivalent: "t"
-        )
-        templateItem.target = self
-        fileMenu.addItem(templateItem)
 
         fileMenu.addItem(.separator())
 
@@ -163,12 +187,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         viewMenuItem.submenu = viewMenu
 
         let toggleModeItem = NSMenuItem(
-            title: "Toggle Preview/Edit",
+            title: "Preview",
             action: #selector(toggleViewMode),
-            keyEquivalent: "e"
+            keyEquivalent: "1"
         )
         toggleModeItem.target = self
         viewMenu.addItem(toggleModeItem)
+
+        let rawViewItem = NSMenuItem(
+            title: "Raw Edit",
+            action: #selector(showRawView),
+            keyEquivalent: "2"
+        )
+        rawViewItem.target = self
+        viewMenu.addItem(rawViewItem)
 
         let toggleDiffItem = NSMenuItem(
             title: "Toggle Diff",
@@ -255,33 +287,59 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    @objc private func newDocument() {
+        guard canReplaceCurrentDocument() else { return }
+
+        Task {
+            await fileWatcher?.stopWatching()
+        }
+        fileWatcher = nil
+        document.resetToNewDocument()
+        updateWindowTitle()
+    }
+
+    @objc private func openFile() {
+        guard canReplaceCurrentDocument() else { return }
+
+        let panel = NSOpenPanel()
+        panel.title = "마크다운 파일 열기"
+        panel.prompt = "열기"
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = false
+        panel.allowsMultipleSelection = false
+        panel.allowedContentTypes = [
+            UTType(filenameExtension: "md"),
+            UTType(filenameExtension: "markdown"),
+            UTType(filenameExtension: "txt"),
+            .plainText
+        ].compactMap { $0 }
+
+        let completion: (NSApplication.ModalResponse) -> Void = { [weak self] response in
+            guard response == .OK, let url = panel.url else { return }
+            self?.openDocument(url: url)
+        }
+
+        if let window {
+            panel.beginSheetModal(for: window, completionHandler: completion)
+        } else {
+            completion(panel.runModal())
+        }
+    }
+
     @objc private func toggleViewMode() {
-        document.viewMode = document.viewMode == .preview ? .edit : .preview
+        document.viewMode = .preview
+        updateViewMenuState()
+    }
+
+    @objc private func showRawView() {
+        document.viewMode = .rawEdit
+        updateViewMenuState()
     }
 
     @objc private func toggleDiff() {
         guard document.diffResult != nil else { return }
         document.showDiff.toggle()
-    }
-
-    @objc private func showTemplatePicker() {
-        guard let window else { return }
-        let picker = NSHostingController(
-            rootView: TemplatePicker(
-                onApply: { [weak self] renderedContent in
-                    self?.document.editableContent = renderedContent
-                    self?.document.isLoaded = true
-                    self?.document.viewMode = .edit
-                    window.sheets.first?.close()
-                },
-                onDismiss: {
-                    window.sheets.first?.close()
-                }
-            )
-        )
-        picker.view.frame = NSRect(x: 0, y: 0, width: 640, height: 420)
-        let sheetWindow = NSWindow(contentViewController: picker)
-        window.beginSheet(sheetWindow)
+        updateViewMenuState()
     }
 
     @objc private func showHelp() {
@@ -292,7 +350,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         isAlwaysOnTop.toggle()
         window?.level = isAlwaysOnTop ? .floating : .normal
         updateWindowTitle()
-        updateToggleMenuItemState()
+        updateViewMenuState()
     }
 
     private func updateWindowTitle() {
@@ -304,23 +362,83 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         window?.isDocumentEdited = document.isDirty
     }
 
-    private func updateToggleMenuItemState() {
+    private func updateViewMenuState() {
         guard let viewMenu = NSApp.mainMenu?.item(withTitle: "View")?.submenu else { return }
+        viewMenu.items.first { $0.action == #selector(toggleViewMode) }?.state = document.viewMode == .preview ? .on : .off
+        viewMenu.items.first { $0.action == #selector(showRawView) }?.state = document.viewMode == .rawEdit ? .on : .off
+        viewMenu.items.first { $0.action == #selector(toggleDiff) }?.isEnabled = document.diffResult != nil
+        viewMenu.items.first { $0.action == #selector(toggleDiff) }?.state = document.showDiff ? .on : .off
         viewMenu.items.first { $0.action == #selector(toggleAlwaysOnTop) }?.state = isAlwaysOnTop ? .on : .off
     }
 
     private func loadFromCLIArguments() {
         guard let path = cliArguments.filePath else {
-            document.errorMessage = DocumentError.noFileSpecified.errorDescription
+            document.isLoaded = true
+            document.errorMessage = nil
             return
         }
 
         switch MarkdownDocument.resolveFileURL(from: path) {
         case .success(let url):
-            document.load(from: url)
-            startWatching(url: url)
+            openDocument(url: url)
         case .failure(let error):
             document.errorMessage = error.errorDescription
+        }
+    }
+
+    private func openDocumentIfAllowed(url: URL) {
+        guard canReplaceCurrentDocument() else { return }
+        openDocument(url: url)
+    }
+
+    private func openDocument(url: URL) {
+        guard FileManager.default.fileExists(atPath: url.path) else {
+            document.errorMessage = DocumentError.fileNotFound(url.path).errorDescription
+            document.isLoaded = false
+            updateWindowTitle()
+            return
+        }
+
+        Task {
+            await fileWatcher?.stopWatching()
+        }
+
+        document.load(from: url)
+        document.viewMode = .rawEdit
+        recentStore.record(url: url)
+        startWatching(url: url)
+        updateWindowTitle()
+    }
+
+    private func canReplaceCurrentDocument() -> Bool {
+        guard document.isDirty, document.fileURL != nil else { return true }
+
+        let alert = NSAlert()
+        alert.messageText = "저장되지 않은 변경사항이 있습니다."
+        alert.informativeText = "다른 파일을 열기 전에 현재 변경사항을 저장하시겠습니까?"
+        alert.addButton(withTitle: "저장")
+        alert.addButton(withTitle: "저장 안 함")
+        alert.addButton(withTitle: "취소")
+        alert.alertStyle = .warning
+
+        switch alert.runModal() {
+        case .alertFirstButtonReturn:
+            do {
+                try document.save()
+                updateWindowTitle()
+                return true
+            } catch {
+                let saveAlert = NSAlert()
+                saveAlert.messageText = "저장 실패"
+                saveAlert.informativeText = error.localizedDescription
+                saveAlert.alertStyle = .warning
+                saveAlert.runModal()
+                return false
+            }
+        case .alertSecondButtonReturn:
+            return true
+        default:
+            return false
         }
     }
 
@@ -358,6 +476,34 @@ extension AppDelegate: NSWindowDelegate {
             return true
         default:
             return false
+        }
+    }
+}
+
+// MARK: - NSMenuItemValidation
+
+extension AppDelegate: NSMenuItemValidation {
+    func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
+        switch menuItem.action {
+        case #selector(newDocument),
+             #selector(openFile),
+             #selector(saveDocument),
+             #selector(showHelp):
+            return true
+        case #selector(toggleViewMode):
+            menuItem.state = document.viewMode == .preview ? .on : .off
+            return true
+        case #selector(showRawView):
+            menuItem.state = document.viewMode == .rawEdit ? .on : .off
+            return true
+        case #selector(toggleDiff):
+            menuItem.state = document.showDiff ? .on : .off
+            return document.diffResult != nil
+        case #selector(toggleAlwaysOnTop):
+            menuItem.state = isAlwaysOnTop ? .on : .off
+            return true
+        default:
+            return true
         }
     }
 }

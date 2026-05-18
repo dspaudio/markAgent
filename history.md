@@ -518,3 +518,33 @@ MarkAgent.app/Contents/
 - 설치 후 터미널에서 `ma <파일>`만으로 .app 번들 경유 실행
 
 변경 파일: `Sources/App/main.swift`, `Sources/App/AppDelegate.swift`, `Sources/App/Info.plist` (신규), `Package.swift`, `scripts/bundle.sh` (신규)
+
+---
+
+## 세션 8: Codex 전환, 편집 UX 정리, v0.1 OSS 릴리스 준비
+
+> 날짜: 2026-05-18
+> 경로: ~/workspace/markAgent
+
+CLAUDE 중심 프로젝트 설정을 Codex/OSS 기준으로 전환하고, MarkAgent의 기본 사용 흐름을 `Preview / Raw Edit` 중심으로 재정리한 세션.
+
+### 작업 요약
+
+- `CLAUDE.md`를 `AGENTS.md`로 전환하고 `.claude` 기반 설정을 제거
+- 기본 모드를 `Raw Edit`로 변경하고 `Preview / Raw Edit` 두 모드로 단순화
+- 최근 문서 사이드바, 파일 열기, 새 문서 흐름 추가
+- 템플릿 기능과 관련 소스 제거
+- Preview 렌더링의 표/코드블록 표시 보강
+- 코드블록 언어 배지 및 hover 복사 버튼 추가
+- macOS 네이티브 메뉴 상태 검증 및 선택 상태 표시 정리
+- 문서의 App Store/$0.99 상용 배포 방향을 OSS 배포 방향으로 변경
+- `[mA]` 앱 아이콘을 생성해 `AppIcon.icns` 리소스로 등록
+- 앱 번들 버전을 `0.1`로 설정하고 release 번들 빌드 준비
+
+### 검증
+
+- `swift test`
+- `scripts/bundle.sh`
+- `scripts/bundle.sh release`
+
+변경 파일: `AGENTS.md`, `Package.swift`, `Package.resolved`, `Sources/App/Info.plist`, `scripts/bundle.sh`, `Sources/App/Resources/AppIcon.*`, `Sources/App/AppDelegate.swift`, `Sources/Core/Document.swift`, `Sources/Core/RecentDocumentStore.swift`, `Sources/Rendering/CodeHighlighter.swift`, `Sources/Rendering/MarkdownRenderer.swift`, `Sources/Views/ContentView.swift`, `Sources/Views/EditorView.swift`, `Sources/Views/RecentDocumentsSidebar.swift`, `Tests/MarkAgentTests/DocumentTests.swift`, `concept.md`, `history.md`

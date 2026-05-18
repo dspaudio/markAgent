@@ -2,12 +2,12 @@
 
 ## Project Overview
 
-**MarkAgent**는 CLI 기반 AI 에이전트(Claude Code, Gemini CLI 등)와 연동되는 macOS 네이티브 마크다운 에디터/뷰어다.
+**MarkAgent**는 CLI 기반 AI 에이전트(Codex CLI, Claude Code, Gemini CLI 등)와 연동되는 macOS 네이티브 마크다운 에디터/뷰어다.
 터미널 워크플로우에서 마크다운 파일을 실시간으로 렌더링하고 편집하는 **비주얼 브릿지** 역할을 한다.
 
 - **슬로건:** "The Professional GUI for your CLI AI Agents."
 - **플랫폼:** macOS (네이티브)
-- **현재 단계:** Phase 3 — Polishing & Launch
+- **현재 단계:** Phase 3 — Polishing & OSS Release
 
 ---
 
@@ -23,9 +23,9 @@
 ### Phase 2: Core Interaction (완료)
 
 1. **Wait 플래그:** `ma -w <file>` — 편집 완료 후 프로세스 종료
-2. **양방향 편집:** Preview/Edit 모드 전환 (⌘E), 파일 저장 (⌘S), 외부 수정 감지
+2. **양방향 편집:** Preview/Raw Edit 모드 전환, 파일 저장 (⌘S), 외부 수정 감지
 3. **인라인 Diff:** CollectionDifference 기반 변경사항 하이라이트 (⌘D)
-4. **템플릿 엔진:** Mustache 문법 기반 프롬프트 템플릿 (⌘T)
+4. **최근 문서:** 사이드바 기반 최근 문서 목록 및 파일 열기 지원
 
 ### .app 번들 전환 (완료)
 
@@ -34,7 +34,7 @@ SPM 순수 바이너리는 macOS Dock/Cmd+Tab/메뉴바에 표시되지 않음.
 
 ---
 
-## Current Scope (Phase 3: Polishing & Launch)
+## Current Scope (Phase 3: Polishing & OSS Release)
 
 ### 예정 기능
 
@@ -43,7 +43,7 @@ SPM 순수 바이너리는 macOS Dock/Cmd+Tab/메뉴바에 표시되지 않음.
 - LLM 입력 비용 예측을 위한 토큰 카운터
 - Pipe Support (`cat file.md | ma`)
 - 앱 아이콘
-- Mac App Store 배포 ($0.99) + Homebrew CLI 배포
+- GitHub Release 및 Homebrew CLI 배포
 
 ---
 
@@ -63,20 +63,20 @@ SPM 순수 바이너리는 macOS Dock/Cmd+Tab/메뉴바에 표시되지 않음.
 ## Architecture
 
 ```
-┌──────────────────────────────────────────────────────────┐
-│                       MarkAgent                          │
+┌─────────────────────────────────────────────────────────┐
+│                       MarkAgent                         │
 ├──────────┬───────────────┬───────────────┬──────────────┤
-│  CLI     │   Core        │   Rendering   │  Templates   │
-│  Layer   │   Layer       │   Layer       │  Layer       │
+│  CLI     │   Core        │   Rendering   │   Views      │
+│  Layer   │   Layer       │   Layer       │   Layer      │
 ├──────────┼───────────────┼───────────────┼──────────────┤
-│ main     │ FileWatcher   │ Markdown      │ Template     │
-│ (relaunch│ (FSEvents)    │ Renderer      │ Engine       │
+│ main     │ FileWatcher   │ Markdown      │ ContentView  │
+│ (relaunch│ (FSEvents)    │ Renderer      │              │
 │  via .app│               │               │              │
-│  bundle) │ Document      │ Code          │ BuiltIn      │
-│          │ Model         │ Highlighter   │ Templates    │
+│  bundle) │ Document      │ Code          │ EditorView   │
+│          │ Model         │ Highlighter   │              │
 │ CLI      │               │               │              │
-│ Arguments│ DiffEngine    │ Diff          │ Template     │
-│          │               │ Highlighter   │ Picker       │
+│ Arguments│ DiffEngine    │ Diff          │ Recent Docs  │
+│          │               │ Highlighter   │ Sidebar      │
 │ App      │               │               │              │
 │ Delegate │               │ ContentView   │              │
 │          │               │ EditorView    │              │
@@ -91,20 +91,17 @@ SPM 순수 바이너리는 macOS Dock/Cmd+Tab/메뉴바에 표시되지 않음.
 
 ### Core Layer
 - **FileWatcher:** `DispatchSource` + `O_EVTONLY`로 파일 변경 감지, 0.2초 디바운싱, 삭제/rename 재오픈
-- **Document Model:** `@Observable @MainActor`, ViewMode (preview/edit), editableContent, isDirty, save/load, 외부 수정 감지
+- **Document Model:** `@Observable @MainActor`, ViewMode (preview/rawEdit), editableContent, isDirty, save/load, 외부 수정 감지
+- **RecentDocumentStore:** 최근 문서 목록을 UserDefaults에 저장하고 중복 항목을 최신순으로 정리
 - **DiffEngine:** `CollectionDifference` 기반 줄 단위 diff 계산
 
 ### Rendering Layer
 - **MarkdownRenderer:** `MarkupVisitor<AnyView>` — AST → SwiftUI View 트리 (GFM 테이블/체크리스트/취소선 포함)
 - **CodeHighlighter:** `HighlightSwift` 기반 비동기 구문 하이라이팅, 다크/라이트 모드 자동 전환
 - **DiffHighlighter:** 추가/삭제 줄 하이라이트 + 줄 번호 거터
-- **ContentView:** Preview/Edit 전환, Diff 오버레이, 에러/빈 문서 상태 표시
+- **ContentView:** Preview/Raw Edit 전환, Diff 오버레이, 에러/빈 문서 상태 표시
 - **EditorView:** TextEditor 기반 마크다운 편집기
-
-### Templates Layer
-- **TemplateEngine:** `{{variable}}` Mustache 치환
-- **BuiltInTemplates:** 프롬프트 템플릿 4종 (Bug Report, Feature Request 등)
-- **TemplatePicker:** NavigationSplitView Sheet UI, 변수 입력 폼
+- **RecentDocumentsSidebar:** 최근 문서 목록, 파일 열기 버튼, 최근 항목 제거 UI
 
 ---
 
@@ -112,7 +109,7 @@ SPM 순수 바이너리는 macOS Dock/Cmd+Tab/메뉴바에 표시되지 않음.
 
 ```
 markAgent/
-├── CLAUDE.md                   # 프로젝트 가이드 (이 파일)
+├── AGENTS.md                   # Codex 프로젝트 가이드 (이 파일)
 ├── concept.md                  # 제품 기획안
 ├── Package.swift               # SPM 매니페스트
 ├── scripts/
@@ -126,20 +123,17 @@ markAgent/
 │   ├── Core/
 │   │   ├── Document.swift      # 마크다운 문서 모델 (@Observable)
 │   │   ├── FileWatcher.swift   # FSEvents 기반 파일 감시 (actor)
+│   │   ├── RecentDocumentStore.swift # 최근 문서 저장소
 │   │   └── DiffEngine.swift    # 줄 단위 diff 계산
 │   ├── Rendering/
 │   │   ├── MarkdownRenderer.swift  # AST → SwiftUI (MarkupVisitor)
 │   │   ├── CodeHighlighter.swift   # 코드 블록 구문 하이라이팅
 │   │   └── DiffHighlighter.swift   # Diff 줄 하이라이트
-│   ├── Templates/
-│   │   ├── Template.swift          # 템플릿 모델
-│   │   ├── TemplateEngine.swift    # Mustache 치환 엔진
-│   │   └── BuiltInTemplates.swift  # 내장 템플릿 4종
 │   └── Views/
-│       ├── ContentView.swift       # 메인 뷰 (Preview/Edit/Diff)
+│       ├── ContentView.swift       # 메인 뷰 (Preview/Raw Edit/Diff)
 │       ├── EditorView.swift        # 텍스트 편집 뷰
 │       ├── DiffOverlayView.swift   # Diff 오버레이
-│       └── TemplatePicker.swift    # 템플릿 선택 Sheet
+│       └── RecentDocumentsSidebar.swift # 최근 문서 사이드바
 └── Tests/
     └── MarkAgentTests/
 ```

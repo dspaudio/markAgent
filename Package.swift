@@ -20,7 +20,7 @@ let package = Package(
                 .product(name: "HighlightSwift", package: "highlightswift"),
             ],
             path: "Sources",
-            exclude: ["App/Info.plist"]
+            exclude: ["App/Info.plist", "App/Resources"]
         ),
         .testTarget(
             name: "MarkAgentTests",

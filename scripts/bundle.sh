@@ -34,6 +34,9 @@ mkdir -p "$CONTENTS_DIR/Resources"
 # 실행 파일 및 Info.plist 복사
 cp "$PROJECT_DIR/.build/$CONFIG/ma" "$MACOS_DIR/ma"
 cp "$PROJECT_DIR/Sources/App/Info.plist" "$CONTENTS_DIR/Info.plist"
+if [ -d "$PROJECT_DIR/Sources/App/Resources" ]; then
+    cp -R "$PROJECT_DIR/Sources/App/Resources/." "$CONTENTS_DIR/Resources/"
+fi
 
 echo "✓ $BUNDLE_DIR"
 

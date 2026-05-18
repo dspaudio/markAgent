@@ -389,10 +389,271 @@ extension Optional where Wrapped == Markdown.Table.ColumnAlignment {
     }
 }
 
+// MARK: - Manual Table Rendering
+
+private enum PreviewBlock {
+    case markdown(String)
+    case table(ParsedMarkdownTable)
+}
+
+private struct ParsedMarkdownTable {
+    let headers: [String]
+    let alignments: [Markdown.Table.ColumnAlignment?]
+    let rows: [[String]]
+}
+
+private struct ManualMarkdownTableView: View {
+    let table: ParsedMarkdownTable
+
+    var body: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            VStack(alignment: .leading, spacing: 0) {
+                row(table.headers, isHeader: true)
+                Divider()
+                ForEach(Array(table.rows.enumerated()), id: \.offset) { _, cells in
+                    row(cells, isHeader: false)
+                    Divider().opacity(0.5)
+                }
+            }
+            .fixedSize(horizontal: true, vertical: false)
+        }
+        .padding(.bottom, 8)
+    }
+
+    private func row(_ cells: [String], isHeader: Bool) -> some View {
+        HStack(spacing: 0) {
+            ForEach(0..<columnCount, id: \.self) { index in
+                cellText(cells[safe: index] ?? "", isHeader: isHeader)
+                    .font(.body)
+                    .multilineTextAlignment(alignment(at: index).textAlignment)
+                    .frame(minWidth: 80, alignment: alignment(at: index).swiftUIAlignment)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 6)
+            }
+        }
+    }
+
+    private var columnCount: Int {
+        max(table.headers.count, table.rows.map(\.count).max() ?? 0)
+    }
+
+    private func cellText(_ source: String, isHeader: Bool) -> SwiftUI.Text {
+        let document = Document(parsing: source, options: [.parseBlockDirectives, .disableSmartOpts])
+        var visitor = InlineOnlyMarkdownVisitor()
+        let text = document.children.reduce(SwiftUI.Text("")) { result, child in
+            result + visitor.visit(child)
+        }
+        return isHeader ? text.bold() : text
+    }
+
+    private func alignment(at index: Int) -> Markdown.Table.ColumnAlignment? {
+        index < table.alignments.count ? table.alignments[index] : nil
+    }
+}
+
+private struct InlineOnlyMarkdownVisitor: MarkupVisitor {
+    typealias Result = SwiftUI.Text
+
+    mutating func defaultVisit(_ markup: Markup) -> SwiftUI.Text {
+        markup.children.reduce(SwiftUI.Text("")) { result, child in
+            result + visit(child)
+        }
+    }
+
+    mutating func visitText(_ text: Markdown.Text) -> SwiftUI.Text {
+        SwiftUI.Text(text.string)
+    }
+
+    mutating func visitParagraph(_ paragraph: Paragraph) -> SwiftUI.Text {
+        defaultVisit(paragraph)
+    }
+
+    mutating func visitStrong(_ strong: Strong) -> SwiftUI.Text {
+        defaultVisit(strong).bold()
+    }
+
+    mutating func visitEmphasis(_ emphasis: Emphasis) -> SwiftUI.Text {
+        defaultVisit(emphasis).italic()
+    }
+
+    mutating func visitInlineCode(_ inlineCode: InlineCode) -> SwiftUI.Text {
+        SwiftUI.Text(inlineCode.code)
+            .font(.system(.body, design: .monospaced))
+            .foregroundColor(Color(nsColor: .systemPink))
+    }
+
+    mutating func visitSoftBreak(_ softBreak: SoftBreak) -> SwiftUI.Text {
+        SwiftUI.Text(" ")
+    }
+
+    mutating func visitLineBreak(_ lineBreak: LineBreak) -> SwiftUI.Text {
+        SwiftUI.Text("\n")
+    }
+}
+
+private extension Collection {
+    subscript(safe index: Index) -> Element? {
+        indices.contains(index) ? self[index] : nil
+    }
+}
+
+private func parsePreviewBlocks(from source: String) -> [PreviewBlock] {
+    let lines = source.components(separatedBy: .newlines)
+    var blocks: [PreviewBlock] = []
+    var markdownLines: [String] = []
+    var index = 0
+    var isInFence = false
+    var fenceMarker: String?
+
+    func flushMarkdown() {
+        guard !markdownLines.isEmpty else { return }
+        let markdown = markdownLines.joined(separator: "\n")
+        if !markdown.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            blocks.append(.markdown(markdown))
+        }
+        markdownLines.removeAll()
+    }
+
+    while index < lines.count {
+        let line = lines[index]
+        let trimmed = line.trimmingCharacters(in: .whitespaces)
+
+        if isInFence {
+            if let marker = fenceMarker, trimmed.hasPrefix(marker) {
+                isInFence = false
+                fenceMarker = nil
+            }
+            markdownLines.append(line)
+            index += 1
+            continue
+        }
+
+        if isFenceStart(trimmed) {
+            isInFence = true
+            fenceMarker = String(trimmed.prefix(3))
+            markdownLines.append(line)
+            index += 1
+            continue
+        }
+
+        if let table = parseTable(lines: lines, start: index) {
+            flushMarkdown()
+            blocks.append(.table(table.value))
+            index = table.nextIndex
+            continue
+        }
+
+        markdownLines.append(line)
+        index += 1
+    }
+
+    flushMarkdown()
+    return blocks
+}
+
+private func isFenceStart(_ trimmedLine: String) -> Bool {
+    trimmedLine.hasPrefix("```") || trimmedLine.hasPrefix("~~~")
+}
+
+private func parseTable(lines: [String], start: Int) -> (value: ParsedMarkdownTable, nextIndex: Int)? {
+    guard start + 1 < lines.count else { return nil }
+    guard isTableCandidate(lines[start]), isTableSeparator(lines[start + 1]) else { return nil }
+
+    let headers = splitTableRow(lines[start])
+    let alignments = splitTableRow(lines[start + 1]).map(tableAlignment)
+    guard headers.count >= 2, alignments.count >= 2 else { return nil }
+
+    var rows: [[String]] = []
+    var index = start + 2
+    while index < lines.count {
+        let line = lines[index]
+        guard isTableCandidate(line), !isTableSeparator(line) else { break }
+        rows.append(splitTableRow(line))
+        index += 1
+    }
+
+    return (ParsedMarkdownTable(headers: headers, alignments: alignments, rows: rows), index)
+}
+
+private func isTableCandidate(_ line: String) -> Bool {
+    splitTableRow(line).count >= 2
+}
+
+private func isTableSeparator(_ line: String) -> Bool {
+    let cells = splitTableRow(line)
+    guard cells.count >= 2 else { return false }
+    return cells.allSatisfy { cell in
+        let trimmed = cell.trimmingCharacters(in: .whitespaces)
+        guard trimmed.count >= 3 else { return false }
+        let stripped = trimmed.trimmingCharacters(in: CharacterSet(charactersIn: ":"))
+        return !stripped.isEmpty && stripped.allSatisfy { $0 == "-" }
+    }
+}
+
+private func splitTableRow(_ line: String) -> [String] {
+    var trimmed = line.trimmingCharacters(in: .whitespaces)
+    if trimmed.hasPrefix("|") { trimmed.removeFirst() }
+    if trimmed.hasSuffix("|") { trimmed.removeLast() }
+
+    var cells: [String] = []
+    var current = ""
+    var isEscaped = false
+
+    for character in trimmed {
+        if isEscaped {
+            current.append(character)
+            isEscaped = false
+        } else if character == "\\" {
+            isEscaped = true
+        } else if character == "|" {
+            cells.append(current.trimmingCharacters(in: .whitespaces))
+            current = ""
+        } else {
+            current.append(character)
+        }
+    }
+
+    cells.append(current.trimmingCharacters(in: .whitespaces))
+    return cells
+}
+
+private func tableAlignment(_ source: String) -> Markdown.Table.ColumnAlignment? {
+    let trimmed = source.trimmingCharacters(in: .whitespaces)
+    if trimmed.hasPrefix(":"), trimmed.hasSuffix(":") {
+        return .center
+    }
+    if trimmed.hasSuffix(":") {
+        return .right
+    }
+    return .left
+}
+
 // MARK: - Public API
 
+@MainActor
 func renderMarkdown(_ source: String) -> AnyView {
-    let document = Document(parsing: source, options: [.parseBlockDirectives])
+    let blocks = parsePreviewBlocks(from: source)
+    if blocks.count == 1, case .markdown(let markdown) = blocks[0] {
+        return renderMarkdownDocument(markdown)
+    }
+
+    return AnyView(
+        LazyVStack(alignment: .leading, spacing: 12) {
+            ForEach(Array(blocks.enumerated()), id: \.offset) { _, block in
+                switch block {
+                case .markdown(let markdown):
+                    renderMarkdownDocument(markdown)
+                case .table(let table):
+                    ManualMarkdownTableView(table: table)
+                }
+            }
+        }
+    )
+}
+
+@MainActor
+private func renderMarkdownDocument(_ source: String) -> AnyView {
+    let document = Document(parsing: source, options: [.parseBlockDirectives, .disableSmartOpts])
     var renderer = MarkdownRenderer()
     return renderer.visit(document)
 }
