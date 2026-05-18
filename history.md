@@ -548,3 +548,29 @@ CLAUDE 중심 프로젝트 설정을 Codex/OSS 기준으로 전환하고, MarkAg
 - `scripts/bundle.sh release`
 
 변경 파일: `AGENTS.md`, `Package.swift`, `Package.resolved`, `Sources/App/Info.plist`, `scripts/bundle.sh`, `Sources/App/Resources/AppIcon.*`, `Sources/App/AppDelegate.swift`, `Sources/Core/Document.swift`, `Sources/Core/RecentDocumentStore.swift`, `Sources/Rendering/CodeHighlighter.swift`, `Sources/Rendering/MarkdownRenderer.swift`, `Sources/Views/ContentView.swift`, `Sources/Views/EditorView.swift`, `Sources/Views/RecentDocumentsSidebar.swift`, `Tests/MarkAgentTests/DocumentTests.swift`, `concept.md`, `history.md`
+
+---
+
+## 세션 9: v0.1.1 저장 UX 패치
+
+> 날짜: 2026-05-18
+> 경로: ~/workspace/markAgent
+
+새 문서를 편집한 뒤 저장할 때 표준 macOS 저장 패널을 사용하도록 수정하고, 문서 변경 상태가 윈도우 제목에 즉시 드러나도록 한 패치 릴리스.
+
+### 작업 요약
+
+- `fileURL`이 없는 새 문서 저장 시 `NSSavePanel` 표시
+- 새 문서 저장 후 파일 경로 등록, 최근 문서 반영, 파일 감시 시작
+- 저장되지 않은 새 문서를 열기/새 문서/닫기로 교체할 때도 저장 패널 경로를 사용
+- 편집 내용 변경 시 윈도우 제목을 즉시 갱신
+- dirty 상태면 파일명 뒤에 `*` 표시, 저장하면 `*` 제거
+- 앱 번들 버전을 `0.1.1`로 변경
+
+### 검증
+
+- `swift test`
+- `scripts/bundle.sh`
+- `scripts/bundle.sh release`
+
+변경 파일: `Sources/App/AppDelegate.swift`, `Sources/Core/Document.swift`, `Sources/Views/ContentView.swift`, `Sources/App/Info.plist`, `history.md`

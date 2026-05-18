@@ -6,6 +6,7 @@ struct ContentView: View {
     var onNewDocument: () -> Void
     var onOpenFile: () -> Void
     var onOpenRecent: (URL) -> Void
+    var onDocumentChanged: () -> Void
 
     var body: some View {
         HStack(alignment: .top, spacing: 0) {
@@ -71,6 +72,9 @@ struct ContentView: View {
             Button("취소", role: .cancel) { document.rejectExternalUpdate() }
         } message: {
             Text("편집 중인 내용과 파일의 내용이 다릅니다. 어떻게 하시겠습니까?")
+        }
+        .onChange(of: document.editableContent) { _, _ in
+            onDocumentChanged()
         }
     }
 

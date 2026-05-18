@@ -39,6 +39,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             },
             onOpenRecent: { [weak self] url in
                 self?.openDocumentIfAllowed(url: url)
+            },
+            onDocumentChanged: { [weak self] in
+                self?.updateWindowTitle()
             }
         )
         let hostingView = NSHostingView(rootView: contentView)
@@ -275,16 +278,61 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func saveDocument() {
+        _ = saveDocumentInteractively()
+    }
+
+    @discardableResult
+    private func saveDocumentInteractively() -> Bool {
         do {
-            try document.save()
+            if document.fileURL == nil {
+                guard let url = chooseSaveURL() else { return false }
+                try saveDocumentAt(url)
+            } else {
+                try document.save()
+            }
             updateWindowTitle()
+            return true
         } catch {
-            let alert = NSAlert()
-            alert.messageText = "저장 실패"
-            alert.informativeText = error.localizedDescription
-            alert.alertStyle = .warning
-            alert.runModal()
+            showSaveError(error)
+            return false
         }
+    }
+
+    private func saveDocumentAt(_ url: URL) throws {
+        Task {
+            await fileWatcher?.stopWatching()
+        }
+        try document.save(to: url)
+        recentStore.record(url: url)
+        startWatching(url: url)
+    }
+
+    private func chooseSaveURL() -> URL? {
+        let panel = NSSavePanel()
+        panel.title = "마크다운 문서 저장"
+        panel.prompt = "저장"
+        panel.nameFieldStringValue = suggestedSaveFileName
+        panel.allowedContentTypes = [
+            UTType(filenameExtension: "md"),
+            UTType(filenameExtension: "markdown"),
+            .plainText
+        ].compactMap { $0 }
+        panel.canCreateDirectories = true
+        panel.isExtensionHidden = false
+
+        return panel.runModal() == .OK ? panel.url : nil
+    }
+
+    private var suggestedSaveFileName: String {
+        document.fileURL?.lastPathComponent ?? "Untitled.md"
+    }
+
+    private func showSaveError(_ error: Error) {
+        let alert = NSAlert()
+        alert.messageText = "저장 실패"
+        alert.informativeText = error.localizedDescription
+        alert.alertStyle = .warning
+        alert.runModal()
     }
 
     @objc private func newDocument() {
@@ -356,6 +404,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func updateWindowTitle() {
         let fileName = document.fileURL?.lastPathComponent ?? "MarkAgent"
         var title = fileName
+        if document.isDirty { title += " *" }
         if isAlwaysOnTop { title += " 📌" }
         if cliArguments.waitMode { title += " [wait]" }
         window?.title = title
@@ -411,7 +460,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func canReplaceCurrentDocument() -> Bool {
-        guard document.isDirty, document.fileURL != nil else { return true }
+        guard document.isDirty else { return true }
 
         let alert = NSAlert()
         alert.messageText = "저장되지 않은 변경사항이 있습니다."
@@ -423,18 +472,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         switch alert.runModal() {
         case .alertFirstButtonReturn:
-            do {
-                try document.save()
-                updateWindowTitle()
-                return true
-            } catch {
-                let saveAlert = NSAlert()
-                saveAlert.messageText = "저장 실패"
-                saveAlert.informativeText = error.localizedDescription
-                saveAlert.alertStyle = .warning
-                saveAlert.runModal()
-                return false
-            }
+            return saveDocumentInteractively()
         case .alertSecondButtonReturn:
             return true
         default:
@@ -458,7 +496,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
 extension AppDelegate: NSWindowDelegate {
     func windowShouldClose(_ sender: NSWindow) -> Bool {
-        guard document.isDirty, document.fileURL != nil else { return true }
+        guard document.isDirty else { return true }
 
         let alert = NSAlert()
         alert.messageText = "저장되지 않은 변경사항이 있습니다."
@@ -470,8 +508,7 @@ extension AppDelegate: NSWindowDelegate {
 
         switch alert.runModal() {
         case .alertFirstButtonReturn:
-            try? document.save()
-            return true
+            return saveDocumentInteractively()
         case .alertSecondButtonReturn:
             return true
         default:

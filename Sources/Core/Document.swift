@@ -93,6 +93,15 @@ final class MarkdownDocument {
         content = editableContent
     }
 
+    func save(to url: URL) throws {
+        lastSaveTime = Date()
+        try editableContent.write(to: url, atomically: true, encoding: .utf8)
+        fileURL = url
+        content = editableContent
+        errorMessage = nil
+        isLoaded = true
+    }
+
     func acceptExternalUpdate() {
         if let pending = pendingExternalContent {
             content = pending
