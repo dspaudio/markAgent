@@ -9,6 +9,8 @@
 5. [세션 5: Step 5~7 구현 — FileWatcher, Always-on-Top, 통합 폴리싱](#세션-5-step-57-구현--filewatcher-always-on-top-통합-폴리싱)
 6. [세션 6: Phase 2 전체 구현 — Wait 플래그, 양방향 편집, Diff, 템플릿 엔진](#세션-6-phase-2-전체-구현--wait-플래그-양방향-편집-diff-템플릿-엔진)
 7. [세션 7: .app 번들 전환 — Dock/메뉴/Cmd+Tab 정상화](#세션-7-app-번들-전환--dockmenu바cmdtab-정상화)
+8. [세션 8: libghostty-spm 통합 및 터미널 중심 탭 앱 전환](#세션-8-libghostty-spm-통합-및-터미널-중심-탭-앱-전환)
+9. [세션 9: Ghostty 사용자 설정 보존 및 v0.2.0 릴리즈 갱신](#세션-9-ghostty-사용자-설정-보존-및-v020-릴리즈-갱신)
 
 ---
 
@@ -39,6 +41,8 @@
 | 21 | Phase 2 Step 3: 인라인 Diff 하이라이트 | DiffEngine (CollectionDifference), DiffHighlighter, DiffOverlayView, ⌘D 토글 |
 | 22 | Phase 2 완료 — 문서 업데이트 및 릴리즈 빌드 | phase2_plan.md 전체 체크박스 완료, swift build -c release 성공 |
 | 23 | .app 번들 전환 — Dock/메뉴/Cmd+Tab 정상화 | SPM 바이너리 → .app 번들 구조 전환, bundle.sh 스크립트 작성, CLI 자동 재실행 |
+| 24 | libghostty-spm 통합 및 터미널 중심 탭 앱 전환 | 터미널 탭, 파일 브라우저 사이드바, Ghostty 테마 연동, 디렉토리 동기화 구현 |
+| 25 | Ghostty 사용자 config 보존 및 v0.2.0 릴리즈 asset 갱신 | `~/.config/ghostty/config` 폰트 설정 보존, 릴리즈 바이너리 재빌드 및 업로드 완료 |
 
 ---
 
@@ -621,3 +625,54 @@ Package.swift에 libghostty-spm 의존성 추가 (GhosttyTerminal, GhosttyTheme)
 - `scripts/bundle.sh` 성공
 - `scripts/bundle.sh release` 성공
 
+---
+
+## 세션 9: Ghostty 사용자 설정 보존 및 v0.2.0 릴리즈 갱신
+
+> 날짜: 2026-05-19
+> 경로: ~/workspace/markAgent
+
+Ghostty 설정 파일의 `font-family`, `font-size`가 MarkAgent 내장 터미널에 기대대로 반영되지 않는 문제를 조사하고, 사용자 config를 앱 기본 테마 병합 없이 원본 설정으로 사용하도록 수정. 수정된 빌드 산출물을 GitHub Release `v0.2.0` asset으로 다시 업로드.
+
+### 대화 1: Ghostty config 폰트 설정 미적용 원인 분석 및 수정
+
+**사용자:**
+> .config/ghostty/config 에서 폰트 설정이 제대로 안먹히는데?
+
+**응답:**
+MarkAgent의 `TerminalTabState`와 `libghostty-spm`의 `TerminalController.resolveEffectiveConfig()` 흐름을 분석. 기존 구현은 `~/.config/ghostty/config`가 존재해도 `theme` 값을 별도로 파싱해 `TerminalTheme`를 다시 주입했고, 이로 인해 libghostty-spm의 generated config 병합 경로를 타면서 사용자 config가 원본 source of truth로 유지되지 않을 수 있음을 확인.
+
+수정 내용:
+- `GhosttyTheme` import 제거
+- `extractThemeName(from:)` 제거
+- config 파일이 존재하면 `configSource: .file(configPath)`와 빈 `TerminalTheme()`를 사용
+- config 파일이 없을 때만 기존 `.default` 테마 사용
+
+검증:
+- `swift test` 성공 (4 tests, 0 failures)
+- `swift build -c release` 성공
+- Oracle 리뷰 PASS
+
+변경 파일: `Sources/Core/Tabs/TerminalTabState.swift`
+
+---
+
+### 대화 2: v0.2.0 릴리즈 바이너리 재생성 및 Release asset 갱신
+
+**사용자:**
+> 다시 릴리즈 바이너리를 만들어서 Release 페이지에 넣어줘.
+
+**응답:**
+Ghostty config fix가 포함된 워킹트리 기준으로 테스트와 릴리즈 번들을 다시 생성하고, GitHub Release `v0.2.0`의 기존 asset을 `--clobber`로 갱신.
+
+업로드 asset:
+- `MarkAgent-v0.2.0-macos-arm64.app.zip`
+- `ma-v0.2.0-macos-arm64`
+- `SHA256SUMS.txt`
+
+검증:
+- `swift test` 성공 (4 tests, 0 failures)
+- `scripts/bundle.sh release` 성공
+- GitHub Release asset 상태 `uploaded` 확인
+
+변경 파일: `history.md`
