@@ -1,0 +1,6 @@
+import Foundation
+
+enum TabKind: Equatable {
+    case terminal
+    case markdown
+}

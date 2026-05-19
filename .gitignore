@@ -30,6 +30,13 @@ playground.xcworkspace
 # .swiftpm
 
 .build/
+.serena/
+
+# Build artifacts
+*.o
+*.d
+*.dia
+*.swiftdeps
 
 # CocoaPods
 #
