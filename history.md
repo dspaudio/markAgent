@@ -11,6 +11,7 @@
 7. [세션 7: .app 번들 전환 — Dock/메뉴/Cmd+Tab 정상화](#세션-7-app-번들-전환--dockmenu바cmdtab-정상화)
 8. [세션 8: libghostty-spm 통합 및 터미널 중심 탭 앱 전환](#세션-8-libghostty-spm-통합-및-터미널-중심-탭-앱-전환)
 9. [세션 9: Ghostty 사용자 설정 보존 및 v0.2.0 릴리즈 갱신](#세션-9-ghostty-사용자-설정-보존-및-v020-릴리즈-갱신)
+10. [세션 10: Ghostty 폰트 설정 보강 및 v0.2.1 릴리즈](#세션-10-ghostty-폰트-설정-보강-및-v021-릴리즈)
 
 ---
 
@@ -43,6 +44,7 @@
 | 23 | .app 번들 전환 — Dock/메뉴/Cmd+Tab 정상화 | SPM 바이너리 → .app 번들 구조 전환, bundle.sh 스크립트 작성, CLI 자동 재실행 |
 | 24 | libghostty-spm 통합 및 터미널 중심 탭 앱 전환 | 터미널 탭, 파일 브라우저 사이드바, Ghostty 테마 연동, 디렉토리 동기화 구현 |
 | 25 | Ghostty 사용자 config 보존 및 v0.2.0 릴리즈 asset 갱신 | `~/.config/ghostty/config` 폰트 설정 보존, 릴리즈 바이너리 재빌드 및 업로드 완료 |
+| 26 | Ghostty 폰트 설정 보강 및 v0.2.1 릴리즈 | `font-size` surface 전달 보강, `font-family` config 보존 테스트, Gatekeeper 노트 포함 릴리즈 준비 |
 
 ---
 
@@ -676,3 +678,53 @@ Ghostty config fix가 포함된 워킹트리 기준으로 테스트와 릴리즈
 - GitHub Release asset 상태 `uploaded` 확인
 
 변경 파일: `history.md`
+
+---
+
+## 세션 10: Ghostty 폰트 설정 보강 및 v0.2.1 릴리즈
+
+> 날짜: 2026-05-19
+> 경로: ~/workspace/markAgent
+
+Ghostty 사용자 설정의 폰트 관련 옵션이 MarkAgent 내장 터미널에 더 확실히 반영되도록 보강하고, macOS Gatekeeper 안내를 포함한 `v0.2.1` 릴리즈를 준비.
+
+### 대화 1: Ghostty font-size/font-family 반영 보강
+
+**사용자:**
+> .config/ghostty/config 에 설정된 폰트를 제대로 반영하지 못하는데?
+
+**응답:**
+`TerminalTabState`가 사용자 config를 `.file(...)`로 넘기는 흐름을 유지하면서, libghostty의 surface 생성 옵션에 별도 `fontSize` 필드가 있음을 확인. `GhosttyConfig`를 추가해 `~/.config/ghostty/config`를 우선 탐색하고, 없으면 macOS Ghostty 기본 Application Support 경로를 fallback으로 사용하도록 구성. config의 마지막 활성 `font-size` 값을 파싱해 `TerminalSurfaceOptions(fontSize:)`로 명시 전달.
+
+변경 파일: `Sources/Core/Tabs/GhosttyConfig.swift`, `Sources/Core/Tabs/TerminalTabState.swift`, `Tests/MarkAgentTests/GhosttyConfigTests.swift`
+
+---
+
+### 대화 2: font-family 보존 검증 및 v0.2.1 릴리즈 요청
+
+**사용자:**
+> font family도 중요해
+
+**응답:**
+libghostty surface API에는 font family 전용 필드가 없으므로 사용자 config 전체를 controller에 그대로 전달하는 경로를 유지. `GhosttyConfig`가 config 원문을 보존하도록 하고, `font-family = "JetBrains Mono"` 및 `font-family = "Noto Sans CJK KR"` 라인이 보존되는 테스트를 추가.
+
+검증:
+- `swift test` 성공 (8 tests, 0 failures)
+- `scripts/bundle.sh` 성공
+
+변경 파일: `Sources/Core/Tabs/GhosttyConfig.swift`, `Tests/MarkAgentTests/GhosttyConfigTests.swift`
+
+---
+
+### 대화 3: v0.2.1 릴리즈 빌드, GitHub Release, 커밋 및 푸시
+
+**사용자:**
+> 이제 제대로 나오는 것 같아. 릴리즈 빌드하고 깃헙 Release에 0.2.1로 올려줘. 또한 macOS Gatekeeper note:
+>
+> This release is not Developer ID signed/notarized yet. If macOS says the app is damaged, remove the quarantine attribute from the app you downloaded:
+> xattr -dr com.apple.quarantine /Applications/MarkAgent.app 도 추가해줘. 커밋 & 푸시도 해줘.
+
+**응답:**
+앱 번들 버전을 `0.2.1`로 갱신하고, 릴리즈 빌드 산출물과 체크섬을 생성해 GitHub Release `v0.2.1`에 업로드. Release notes에는 요청된 macOS Gatekeeper 안내를 포함.
+
+변경 파일: `Sources/App/Info.plist`, `history.md`

@@ -9,6 +9,7 @@ final class TerminalTabState {
     let terminalViewState: TerminalViewState
 
     var title: String
+    private let configFontSize: Float?
     var didStart: Bool = false
     var onCloseRequested: (() -> Void)?
     var onDirectoryChanged: ((URL) -> Void)?
@@ -19,15 +20,15 @@ final class TerminalTabState {
         self.workingDirectory = workingDirectory
         self.title = workingDirectory.lastPathComponent
 
-        let configPath = FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent(".config/ghostty/config")
-            .path
-        let configExists = FileManager.default.fileExists(atPath: configPath)
+        let userConfig = GhosttyConfig.userConfig()
+        self.configFontSize = userConfig?.fontSize
 
-        let configSource: TerminalController.ConfigSource = configExists
-            ? .file(configPath)
-            : .none
-        let theme: TerminalTheme = configExists ? TerminalTheme() : .default
+        let configSource: TerminalController.ConfigSource = if let userConfig {
+            .file(userConfig.url.path)
+        } else {
+            .none
+        }
+        let theme: TerminalTheme = userConfig != nil ? TerminalTheme() : .default
 
         self.terminalViewState = TerminalViewState(
             configSource: configSource,
@@ -44,6 +45,7 @@ final class TerminalTabState {
         didStart = true
         terminalViewState.configuration = TerminalSurfaceOptions(
             backend: .exec,
+            fontSize: configFontSize,
             workingDirectory: workingDirectory.path
         )
 
