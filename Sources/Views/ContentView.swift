@@ -95,7 +95,7 @@ struct ContentView: View {
                 if document.editableContent.isEmpty {
                     emptyDocumentView
                 } else if document.showDiff, let diffResult = document.diffResult {
-                    DiffOverlayView(diffResult: diffResult) {
+                    DiffOverlayView(diffResult: diffResult, baseURL: documentImageBaseURL) {
                         document.showDiff = false
                     }
                 } else {
@@ -131,11 +131,15 @@ struct ContentView: View {
 
     private var previewContent: some View {
         ScrollView {
-            renderMarkdown(document.editableContent)
+            renderMarkdown(document.editableContent, baseURL: documentImageBaseURL)
                 .textSelection(.enabled)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(20)
         }
+    }
+
+    private var documentImageBaseURL: URL? {
+        document.fileURL?.deletingLastPathComponent()
     }
 
     private var loadingView: some View {

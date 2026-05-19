@@ -40,6 +40,7 @@ struct FileEntryRow: View {
         switch entry.kind {
         case .directory: return "folder.fill"
         case .markdown: return "doc.text"
+        case .image: return "photo"
         case .file: return "doc"
         }
     }
@@ -48,6 +49,7 @@ struct FileEntryRow: View {
         switch entry.kind {
         case .directory: return .accentColor
         case .markdown: return .primary
+        case .image: return .purple
         case .file: return .secondary
         }
     }

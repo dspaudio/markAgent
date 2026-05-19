@@ -8,6 +8,7 @@ struct FileBrowserSidebar: View {
     var onOpenOtherFile: (URL) -> Void
     
     @State private var selectedEntryID: String?
+    @State private var previewImage: SidebarImageSelection?
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.terminalAppTheme) private var terminalAppTheme
     
@@ -88,6 +89,9 @@ struct FileBrowserSidebar: View {
         .frame(maxHeight: .infinity)
         .background(appColors?.panel ?? Color(NSColor.controlBackgroundColor))
         .foregroundStyle(appColors?.foreground ?? Color.primary)
+        .sheet(item: $previewImage) { selection in
+            SidebarImageViewer(url: selection.url)
+        }
     }
 
     private var appColors: TerminalAppColors? {
@@ -100,8 +104,99 @@ struct FileBrowserSidebar: View {
             scanner.enterDirectory(entry.url)
         case .markdown:
             onOpenMarkdown(entry.url)
+        case .image:
+            previewImage = SidebarImageSelection(url: entry.url)
         case .file:
             onOpenOtherFile(entry.url)
+        }
+    }
+}
+
+private struct SidebarImageSelection: Identifiable {
+    let url: URL
+
+    var id: String { url.path }
+}
+
+private struct SidebarImageViewer: View {
+    let url: URL
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var image: NSImage?
+
+    var body: some View {
+        VStack(spacing: 0) {
+            header
+            Divider()
+            content
+        }
+        .frame(minWidth: 720, minHeight: 520)
+        .onAppear {
+            image = NSImage(contentsOf: url)
+        }
+    }
+
+    private var header: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "photo")
+                .foregroundStyle(.secondary)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(url.lastPathComponent)
+                    .font(.system(size: 13, weight: .bold))
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                Text(url.path)
+                    .font(.caption.monospaced())
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                    .textSelection(.enabled)
+            }
+
+            Spacer()
+
+            Button {
+                dismiss()
+            } label: {
+                Label("닫기", systemImage: "xmark")
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+            .keyboardShortcut(.cancelAction)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .background(.regularMaterial)
+    }
+
+    @ViewBuilder
+    private var content: some View {
+        if let image {
+            ScrollView([.horizontal, .vertical]) {
+                Image(nsImage: image)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(maxWidth: 1400, maxHeight: 1000)
+                    .padding(18)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(Color(nsColor: .textBackgroundColor))
+        } else {
+            VStack(spacing: 10) {
+                Image(systemName: "photo.badge.exclamationmark")
+                    .font(.system(size: 42))
+                    .foregroundStyle(.red)
+                Text("이미지를 열 수 없습니다.")
+                    .font(.headline)
+                Text(url.path)
+                    .font(.caption.monospaced())
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .textSelection(.enabled)
+            }
+            .padding()
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
     }
 }

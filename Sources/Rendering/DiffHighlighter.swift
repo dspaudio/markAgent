@@ -2,6 +2,7 @@ import SwiftUI
 
 struct DiffHighlighter: View {
     let line: DiffLine
+    var baseURL: URL?
 
     var body: some View {
         HStack(spacing: 0) {
@@ -46,13 +47,27 @@ struct DiffHighlighter: View {
     }
 
     private var contentView: some View {
-        Text(line.content)
-            .font(.system(size: 13, design: .monospaced))
-            .strikethrough(line.type == .removed, color: .secondary)
-            .foregroundStyle(line.type == .removed ? Color.secondary : Color.primary)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.leading, 4)
-            .textSelection(.enabled)
+        Group {
+            if let image = MarkdownImageLineParser.firstImage(in: line.content, baseURL: baseURL) {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(line.content)
+                        .font(.system(size: 13, design: .monospaced))
+                        .strikethrough(line.type == .removed, color: .secondary)
+                        .foregroundStyle(line.type == .removed ? Color.secondary : Color.primary)
+                        .textSelection(.enabled)
+                    MarkdownImagePreview(reference: image, compact: true)
+                }
+            } else {
+                Text(line.content)
+                    .font(.system(size: 13, design: .monospaced))
+                    .strikethrough(line.type == .removed, color: .secondary)
+                    .foregroundStyle(line.type == .removed ? Color.secondary : Color.primary)
+                    .textSelection(.enabled)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.leading, 4)
+        .padding(.vertical, MarkdownImageLineParser.firstImage(in: line.content, baseURL: baseURL) == nil ? 0 : 6)
     }
 
     // MARK: - 헬퍼

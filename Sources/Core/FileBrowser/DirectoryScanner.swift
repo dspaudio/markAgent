@@ -72,6 +72,8 @@ final class DirectoryScanner {
                 kind = .directory
             } else if url.pathExtension.lowercased() == "md" || url.pathExtension.lowercased() == "markdown" {
                 kind = .markdown
+            } else if FileEntry.isImageURL(url) {
+                kind = .image
             } else {
                 kind = .file
             }
