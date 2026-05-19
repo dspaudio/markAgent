@@ -13,6 +13,7 @@
 9. [세션 9: Ghostty 사용자 설정 보존 및 v0.2.0 릴리즈 갱신](#세션-9-ghostty-사용자-설정-보존-및-v020-릴리즈-갱신)
 10. [세션 10: Ghostty 폰트 설정 보강 및 v0.2.1 릴리즈](#세션-10-ghostty-폰트-설정-보강-및-v021-릴리즈)
 11. [세션 11: Raw Editor 확장 및 v0.2.2 릴리즈](#세션-11-raw-editor-확장-및-v022-릴리즈)
+12. [세션 12: Ghostty 테마 연동 및 v0.2.3 릴리즈](#세션-12-ghostty-테마-연동-및-v023-릴리즈)
 
 ---
 
@@ -48,6 +49,7 @@
 | 26 | Ghostty 폰트 설정 보강 및 v0.2.1 릴리즈 | `font-size` surface 전달 보강, `font-family` config 보존 테스트, Gatekeeper 노트 포함 릴리즈 준비 |
 | 27 | Raw Editor와 Diff 사이드바 확장 | 비마크다운 파일 raw editor 열기, line number, git 변경 파일 Diff 사이드바 구현 |
 | 28 | v0.2.2 릴리즈 빌드 및 배포 | 앱 번들 버전 0.2.2 갱신, 릴리즈 빌드와 GitHub Release 업로드 준비 |
+| 29 | Ghostty 테마 연동 및 v0.2.3 릴리즈 | 앱 UI에 Ghostty 색상 테마 적용, 창 위치/전체화면 동작 보강, 릴리즈 빌드와 GitHub Release 준비 |
 
 ---
 
@@ -825,3 +827,22 @@ Diff 버튼은 탭 내부 toolbar에서 전체 윈도우 우측 상단으로 이
 또한 앱 메뉴에 등록된 command shortcut이 비활성/미처리 상태로 터미널까지 내려가 문자로 입력되는 경로를 막기 위해 `MarkAgentWindow`의 key equivalent 처리를 보강. 현재 소스에서 `sendText`, `cd`, `NSEvent.keyEvent` 기반 터미널 입력 경로가 제거된 것도 확인.
 
 변경 파일: `Sources/App/MarkAgentWindow.swift`, `Sources/Views/EditorView.swift`, `Sources/Views/Main/ActiveTabContentView.swift`, `Sources/Views/Tabs/MarkdownTabView.swift`, `Sources/Views/Tabs/TerminalTabView.swift`, `history.md`
+
+---
+
+## 세션 12: Ghostty 테마 연동 및 v0.2.3 릴리즈
+
+> 날짜: 2026-05-19
+> 경로: ~/workspace/markAgent
+
+Ghostty 설정의 색상 테마를 MarkAgent 앱 UI에 반영하고, 창 위치 저장 및 전체화면 동작을 보강한 현재 상태를 `v0.2.3` 릴리즈로 준비.
+
+### 대화 1: 릴리즈 빌드, GitHub Release, 커밋 및 푸시
+
+**사용자:**
+> 릴리즈 빌드를 만들고 버전을 0.0.1 올려줘. 깃헙 릴리즈에 등록하고 커밋&푸시해줘
+
+**응답:**
+앱 번들 버전을 `0.2.2`에서 `0.2.3`으로 갱신하고, 릴리즈 빌드 산출물 `MarkAgent.app`과 GitHub Release 업로드용 `MarkAgent-v0.2.3.zip`을 생성. `swift test`와 `scripts/bundle.sh release`로 검증한 뒤 GitHub Release `v0.2.3`, git 태그, 커밋 및 푸시를 진행.
+
+변경 파일: `.gitignore`, `Sources/App/AppDelegate.swift`, `Sources/App/Info.plist`, `Sources/Core/Tabs/GhosttyConfig.swift`, `Sources/Core/Tabs/TerminalAppTheme.swift`, `Sources/Views/ContentView.swift`, `Sources/Views/EditorView.swift`, `Sources/Views/Main/ActiveTabContentView.swift`, `Sources/Views/Main/MainContainerView.swift`, `Sources/Views/Main/NewTabChooserView.swift`, `Sources/Views/Main/TabBarView.swift`, `Sources/Views/Main/TabItemView.swift`, `Sources/Views/Sidebar/FileBrowserSidebar.swift`, `Sources/Views/Sidebar/GitChangesSidebar.swift`, `Sources/Views/Tabs/MarkdownTabView.swift`, `Tests/MarkAgentTests/GhosttyConfigTests.swift`, `history.md`

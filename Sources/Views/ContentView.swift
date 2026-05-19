@@ -8,6 +8,9 @@ struct ContentView: View {
     var onOpenRecent: (URL) -> Void
     var onDocumentChanged: () -> Void
 
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.terminalAppTheme) private var terminalAppTheme
+
     var body: some View {
         HStack(alignment: .top, spacing: 0) {
             RecentDocumentsSidebar(
@@ -23,6 +26,8 @@ struct ContentView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .frame(minWidth: 760, minHeight: 420)
+        .background(appColors?.background ?? Color(nsColor: .windowBackgroundColor))
+        .foregroundStyle(appColors?.foreground ?? Color.primary)
         .toolbar {
             ToolbarItem(placement: .automatic) {
                 Button(action: onNewDocument) {
@@ -118,7 +123,7 @@ struct ContentView: View {
             document.viewMode = mode
         } label: {
             Label(title, systemImage: systemImage)
-                .foregroundStyle(isSelected ? Color.accentColor : Color.primary)
+                .foregroundStyle(isSelected ? (appColors?.accent ?? Color.accentColor) : (appColors?.foreground ?? Color.primary))
         }
         .help("\(title) 보기")
         .keyboardShortcut(shortcut, modifiers: .command)
@@ -171,5 +176,9 @@ struct ContentView: View {
         }
         .padding()
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private var appColors: TerminalAppColors? {
+        terminalAppTheme?.colors(for: colorScheme)
     }
 }

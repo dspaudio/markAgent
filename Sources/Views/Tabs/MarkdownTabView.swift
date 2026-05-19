@@ -6,6 +6,9 @@ struct MarkdownTabView: View {
     var onOpenFile: () -> Void
     var onDocumentChanged: () -> Void
 
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.terminalAppTheme) private var terminalAppTheme
+
     var body: some View {
         detailContent
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -35,6 +38,8 @@ struct MarkdownTabView: View {
             .onChange(of: state.document.editableContent) { _, _ in
                 onDocumentChanged()
             }
+            .background(appColors?.background ?? Color(nsColor: .windowBackgroundColor))
+            .foregroundStyle(appColors?.foreground ?? Color.primary)
     }
 
     @ViewBuilder
@@ -83,7 +88,7 @@ struct MarkdownTabView: View {
             state.document.viewMode = mode
         } label: {
             Label(title, systemImage: systemImage)
-                .foregroundStyle(isSelected ? Color.accentColor : Color.primary)
+                .foregroundStyle(isSelected ? (appColors?.accent ?? Color.accentColor) : (appColors?.foreground ?? Color.primary))
         }
         .help("\(title) 보기")
     }
@@ -135,5 +140,9 @@ struct MarkdownTabView: View {
         }
         .padding()
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private var appColors: TerminalAppColors? {
+        terminalAppTheme?.colors(for: colorScheme)
     }
 }

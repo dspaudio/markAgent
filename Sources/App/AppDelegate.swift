@@ -12,6 +12,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var window: NSWindow?
 
     private var isClosingAfterDirtyConfirmation = false
+    private let windowFrameDefaultsKey = "MarkAgent.windowFrame"
 
     override init() {
         let homeURL = URL(fileURLWithPath: NSHomeDirectory())
@@ -34,6 +35,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func setupWindow() {
+        let appTheme = GhosttyConfig.userConfig()?.colorTheme
         let contentView = MainContainerView(
             tabs: tabs,
             scanner: directoryScanner,
@@ -45,6 +47,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 self?.updateWindowTitle()
             }
         )
+        .environment(\.terminalAppTheme, appTheme)
+        .preferredColorScheme(appTheme?.preferredColorScheme)
         let hostingView = NSHostingView(rootView: contentView)
 
         let window = MarkAgentWindow(
@@ -54,15 +58,45 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             defer: false
         )
         window.contentView = hostingView
-        window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+        window.collectionBehavior = [.fullScreenPrimary]
         window.level = .floating
         window.delegate = self
-        window.makeKeyAndOrderFront(nil)
         self.window = window
         dirtyPrompter.window = window
 
-        positionWindowOnRight(window)
+        restoreWindowFrame(window)
+        window.makeKeyAndOrderFront(nil)
         updateWindowTitle()
+    }
+
+    private func restoreWindowFrame(_ window: NSWindow) {
+        if let savedFrame = savedWindowFrame(), isFrameVisible(savedFrame) {
+            window.setFrame(savedFrame, display: true)
+            return
+        }
+
+        positionWindowOnRight(window)
+    }
+
+    private func savedWindowFrame() -> NSRect? {
+        let value = UserDefaults.standard.string(forKey: windowFrameDefaultsKey)
+        guard let value else { return nil }
+
+        let frame = NSRectFromString(value)
+        guard !frame.isEmpty, frame.width >= 480, frame.height >= 320 else { return nil }
+        return frame
+    }
+
+    private func isFrameVisible(_ frame: NSRect) -> Bool {
+        NSScreen.screens.contains { screen in
+            screen.visibleFrame.intersection(frame).width >= 160
+                && screen.visibleFrame.intersection(frame).height >= 120
+        }
+    }
+
+    private func saveWindowFrame(_ window: NSWindow?) {
+        guard let window, !window.styleMask.contains(.fullScreen) else { return }
+        UserDefaults.standard.set(NSStringFromRect(window.frame), forKey: windowFrameDefaultsKey)
     }
 
     private func positionWindowOnRight(_ window: NSWindow) {
@@ -202,8 +236,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         viewMenu.addItem(alwaysOnTopItem)
 
         viewMenu.addItem(.separator())
-        let enterFullScreenItem = NSMenuItem(title: "Enter Full Screen", action: #selector(NSWindow.toggleFullScreen(_:)), keyEquivalent: "f")
+        let enterFullScreenItem = NSMenuItem(title: "Enter Full Screen", action: #selector(toggleFullScreen), keyEquivalent: "f")
         enterFullScreenItem.keyEquivalentModifierMask = [.command, .control]
+        enterFullScreenItem.target = self
         viewMenu.addItem(enterFullScreenItem)
 
         let windowMenuItem = NSMenuItem()
@@ -407,6 +442,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         updateViewMenuState()
     }
 
+    @objc private func toggleFullScreen() {
+        saveWindowFrame(window)
+        window?.toggleFullScreen(nil)
+    }
+
     @objc private func showHelp() {
         guard let url = URL(string: "https://github.com/user/markAgent") else { return }
         NSWorkspace.shared.open(url)
@@ -429,6 +469,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         viewMenu.items.first { $0.action == #selector(toggleDiff) }?.isEnabled = document?.diffResult != nil
         viewMenu.items.first { $0.action == #selector(toggleDiff) }?.state = document?.showDiff == true ? .on : .off
         viewMenu.items.first { $0.action == #selector(toggleAlwaysOnTop) }?.state = isAlwaysOnTop ? .on : .off
+        updateFullScreenMenuItem(viewMenu.items.first { $0.action == #selector(toggleFullScreen) })
+    }
+
+    private func updateFullScreenMenuItem(_ menuItem: NSMenuItem?) {
+        let isFullScreen = window?.styleMask.contains(.fullScreen) == true
+        menuItem?.title = isFullScreen ? "Exit Full Screen" : "Enter Full Screen"
+        menuItem?.state = isFullScreen ? .on : .off
     }
 
     private func confirmCloseAllDirtyMarkdownTabs() async -> Bool {
@@ -443,6 +490,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 // MARK: - NSWindowDelegate
 
 extension AppDelegate: NSWindowDelegate {
+    func windowDidMove(_ notification: Notification) {
+        saveWindowFrame(notification.object as? NSWindow)
+    }
+
+    func windowDidResize(_ notification: Notification) {
+        saveWindowFrame(notification.object as? NSWindow)
+    }
+
+    func windowWillEnterFullScreen(_ notification: Notification) {
+        saveWindowFrame(notification.object as? NSWindow)
+        window?.level = .normal
+        updateViewMenuState()
+    }
+
+    func windowDidExitFullScreen(_ notification: Notification) {
+        window?.level = isAlwaysOnTop ? .floating : .normal
+        saveWindowFrame(notification.object as? NSWindow)
+        updateViewMenuState()
+    }
+
+    func windowWillClose(_ notification: Notification) {
+        saveWindowFrame(notification.object as? NSWindow)
+    }
+
     func windowShouldClose(_ sender: NSWindow) -> Bool {
         if isClosingAfterDirtyConfirmation { return true }
         guard tabs.tabs.contains(where: { $0 is MarkdownTab && $0.isDirty }) else { return true }
@@ -470,6 +541,9 @@ extension AppDelegate: NSMenuItemValidation {
              #selector(toggleAlwaysOnTop),
              #selector(showHelp):
             return true
+        case #selector(toggleFullScreen):
+            updateFullScreenMenuItem(menuItem)
+            return window != nil
         case #selector(gotoTab1):
             return tabs.tabs.count >= 1
         case #selector(gotoTab2):

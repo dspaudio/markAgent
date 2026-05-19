@@ -128,6 +128,9 @@ private struct EditorStatusBar: View {
     let fileURL: URL?
     let cursorPosition: CursorPosition
 
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.terminalAppTheme) private var terminalAppTheme
+
     var body: some View {
         HStack {
             Spacer()
@@ -139,10 +142,14 @@ private struct EditorStatusBar: View {
                 .padding(.horizontal, 10)
         }
         .frame(height: 24)
-        .background(Color(NSColor.controlBackgroundColor))
+        .background(appColors?.panel ?? Color(NSColor.controlBackgroundColor))
         .overlay(alignment: .top) {
-            Divider()
+            Divider().overlay(appColors?.border ?? Color.clear)
         }
+    }
+
+    private var appColors: TerminalAppColors? {
+        terminalAppTheme?.colors(for: colorScheme)
     }
 
     private var displayPath: String {
@@ -219,6 +226,9 @@ private struct MarkdownTextEditor: NSViewRepresentable {
     let rendersMarkdownStyle: Bool
     let isActive: Bool
 
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.terminalAppTheme) private var terminalAppTheme
+
     func makeCoordinator() -> Coordinator {
         Coordinator(
             text: $text,
@@ -235,7 +245,7 @@ private struct MarkdownTextEditor: NSViewRepresentable {
         scrollView.autohidesScrollers = true
         scrollView.borderType = .noBorder
         scrollView.drawsBackground = true
-        scrollView.backgroundColor = .textBackgroundColor
+        scrollView.backgroundColor = appColors?.textBackground ?? .textBackgroundColor
 
         let textStorage = NSTextStorage()
         let layoutManager = NSLayoutManager()
@@ -253,9 +263,9 @@ private struct MarkdownTextEditor: NSViewRepresentable {
         textView.font = rendersMarkdownStyle
             ? .systemFont(ofSize: 18)
             : .monospacedSystemFont(ofSize: NSFont.systemFontSize, weight: .regular)
-        textView.textColor = .textColor
-        textView.backgroundColor = .textBackgroundColor
-        textView.insertionPointColor = .controlAccentColor
+        textView.textColor = appColors?.textForeground ?? .textColor
+        textView.backgroundColor = appColors?.textBackground ?? .textBackgroundColor
+        textView.insertionPointColor = appColors?.insertionPoint ?? .controlAccentColor
         textView.isRichText = false
         textView.isAutomaticQuoteSubstitutionEnabled = false
         textView.isAutomaticDashSubstitutionEnabled = false
@@ -271,12 +281,18 @@ private struct MarkdownTextEditor: NSViewRepresentable {
         configureTextContainer(for: textView, in: scrollView)
 
         scrollView.documentView = textView
+        context.coordinator.appColors = appColors
         context.coordinator.applyMarkdownStyle(to: textView)
         return scrollView
     }
 
     func updateNSView(_ scrollView: NSScrollView, context: Context) {
         guard let textView = scrollView.documentView as? NSTextView else { return }
+        context.coordinator.appColors = appColors
+        scrollView.backgroundColor = appColors?.textBackground ?? .textBackgroundColor
+        textView.textColor = appColors?.textForeground ?? .textColor
+        textView.backgroundColor = appColors?.textBackground ?? .textBackgroundColor
+        textView.insertionPointColor = appColors?.insertionPoint ?? .controlAccentColor
 
         if textView.string != text {
             textView.string = text
@@ -306,6 +322,10 @@ private struct MarkdownTextEditor: NSViewRepresentable {
         }
     }
 
+    private var appColors: TerminalAppColors? {
+        terminalAppTheme?.colors(for: colorScheme)
+    }
+
     private func configureTextContainer(for textView: NSTextView, in scrollView: NSScrollView) {
         let availableWidth = max(scrollView.contentSize.width, scrollView.bounds.width - 1, 120)
         textView.textContainer?.containerSize = NSSize(
@@ -319,6 +339,7 @@ private struct MarkdownTextEditor: NSViewRepresentable {
         @Binding var selectedRange: NSRange
         @Binding var cursorPosition: CursorPosition
         var rendersMarkdownStyle: Bool
+        var appColors: TerminalAppColors?
 
         init(
             text: Binding<String>,
@@ -375,7 +396,7 @@ private struct MarkdownTextEditor: NSViewRepresentable {
             textView.textStorage?.setAttributes(
                 [
                     .font: baseFont,
-                    .foregroundColor: NSColor.textColor,
+                    .foregroundColor: appColors?.textForeground ?? NSColor.textColor,
                     .paragraphStyle: paragraphStyle(lineSpacing: rendersMarkdownStyle ? 7 : 2)
                 ],
                 range: fullRange

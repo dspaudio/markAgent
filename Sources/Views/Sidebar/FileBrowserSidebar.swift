@@ -8,6 +8,8 @@ struct FileBrowserSidebar: View {
     var onOpenOtherFile: (URL) -> Void
     
     @State private var selectedEntryID: String?
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.terminalAppTheme) private var terminalAppTheme
     
     var body: some View {
         VStack(spacing: 0) {
@@ -84,7 +86,12 @@ struct FileBrowserSidebar: View {
         }
         .frame(width: 260)
         .frame(maxHeight: .infinity)
-        .background(Color(NSColor.controlBackgroundColor))
+        .background(appColors?.panel ?? Color(NSColor.controlBackgroundColor))
+        .foregroundStyle(appColors?.foreground ?? Color.primary)
+    }
+
+    private var appColors: TerminalAppColors? {
+        terminalAppTheme?.colors(for: colorScheme)
     }
     
     private func handleDoubleClick(_ entry: FileEntry) {

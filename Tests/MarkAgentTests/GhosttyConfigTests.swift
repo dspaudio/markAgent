@@ -83,4 +83,42 @@ final class GhosttyConfigTests: XCTestCase {
             ["\"JetBrains Mono\"", "\"Noto Sans CJK KR\""]
         )
     }
+
+    func testParseColorThemeUsesInlineColorCommands() {
+        let contents = """
+        background = #101010
+        foreground = #eeeeee
+        cursor-color = #88c0d0
+        palette = 4=#5e81ac
+        """
+
+        let theme = GhosttyConfig.parseColorTheme(from: contents)
+        let colorTheme = theme?.theme(for: .dark)
+
+        XCTAssertEqual(colorTheme?.background, "#101010")
+        XCTAssertEqual(colorTheme?.foreground, "#eeeeee")
+        XCTAssertEqual(colorTheme?.cursorColor, "#88c0d0")
+        XCTAssertEqual(colorTheme?.palette[4], "#5e81ac")
+    }
+
+    func testParseColorThemeUsesNamedGhosttyTheme() {
+        let contents = """
+        theme = Dracula
+        """
+
+        let colorTheme = GhosttyConfig.parseColorTheme(from: contents)?.theme(for: .dark)
+
+        XCTAssertEqual(colorTheme?.name, "Dracula")
+    }
+
+    func testParseColorThemeSupportsLightDarkThemePair() {
+        let contents = """
+        theme = light:Catppuccin Latte,dark:Catppuccin Mocha
+        """
+
+        let theme = GhosttyConfig.parseColorTheme(from: contents)
+
+        XCTAssertEqual(theme?.theme(for: .light)?.name, "Catppuccin Latte")
+        XCTAssertEqual(theme?.theme(for: .dark)?.name, "Catppuccin Mocha")
+    }
 }

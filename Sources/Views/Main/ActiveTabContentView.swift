@@ -6,6 +6,9 @@ struct ActiveTabContentView: View {
     var onNewTab: () -> Void
     var onDocumentChanged: () -> Void
 
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.terminalAppTheme) private var terminalAppTheme
+
     var body: some View {
         ZStack {
             ForEach(tabs.tabs, id: \.id) { tab in
@@ -17,6 +20,7 @@ struct ActiveTabContentView: View {
                 emptyStateView
             }
         }
+        .background(appColors?.background ?? Color(nsColor: .windowBackgroundColor))
     }
 
     @ViewBuilder
@@ -53,5 +57,9 @@ struct ActiveTabContentView: View {
                 .buttonStyle(.borderedProminent)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private var appColors: TerminalAppColors? {
+        terminalAppTheme?.colors(for: colorScheme)
     }
 }

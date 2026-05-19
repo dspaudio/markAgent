@@ -6,6 +6,9 @@ struct TabBarView: View {
     var isDiffEnabled = false
     var isDiffVisible = false
     var onToggleDiff: () -> Void = {}
+
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.terminalAppTheme) private var terminalAppTheme
     
     var body: some View {
         HStack(spacing: 0) {
@@ -53,10 +56,14 @@ struct TabBarView: View {
             .disabled(!isDiffEnabled)
             .help(isDiffEnabled ? "Git 변경 파일 보기" : "Git 저장소에서만 사용할 수 있습니다")
         }
-        .background(Color(nsColor: .windowBackgroundColor))
+        .background(appColors?.background ?? Color(nsColor: .windowBackgroundColor))
         .overlay(
-            Divider(),
+            Divider().overlay(appColors?.border ?? Color.clear),
             alignment: .bottom
         )
+    }
+
+    private var appColors: TerminalAppColors? {
+        terminalAppTheme?.colors(for: colorScheme)
     }
 }

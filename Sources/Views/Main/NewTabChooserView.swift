@@ -4,6 +4,9 @@ struct NewTabChooserView: View {
     var onCreateTerminal: () -> Void
     var onCreateMarkdown: () -> Void
     var onCancel: () -> Void
+
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.terminalAppTheme) private var terminalAppTheme
     
     var body: some View {
         VStack(spacing: 20) {
@@ -19,7 +22,7 @@ struct NewTabChooserView: View {
                             .font(.subheadline)
                     }
                     .frame(width: 120, height: 100)
-                    .background(Color(nsColor: .controlBackgroundColor))
+                    .background(appColors?.panel ?? Color(nsColor: .controlBackgroundColor))
                     .cornerRadius(8)
                 }
                 .buttonStyle(.plain)
@@ -32,7 +35,7 @@ struct NewTabChooserView: View {
                             .font(.subheadline)
                     }
                     .frame(width: 120, height: 100)
-                    .background(Color(nsColor: .controlBackgroundColor))
+                    .background(appColors?.panel ?? Color(nsColor: .controlBackgroundColor))
                     .cornerRadius(8)
                 }
                 .buttonStyle(.plain)
@@ -42,8 +45,13 @@ struct NewTabChooserView: View {
                 .keyboardShortcut(.escape, modifiers: [])
         }
         .padding(30)
-        .background(Color(nsColor: .windowBackgroundColor))
+        .background(appColors?.background ?? Color(nsColor: .windowBackgroundColor))
+        .foregroundStyle(appColors?.foreground ?? Color.primary)
         .cornerRadius(12)
         .shadow(radius: 10)
+    }
+
+    private var appColors: TerminalAppColors? {
+        terminalAppTheme?.colors(for: colorScheme)
     }
 }

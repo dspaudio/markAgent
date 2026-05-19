@@ -3,6 +3,9 @@ import SwiftUI
 struct GitChangesSidebar: View {
     var state: GitDiffState
 
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.terminalAppTheme) private var terminalAppTheme
+
     var body: some View {
         VStack(spacing: 0) {
             header
@@ -18,7 +21,12 @@ struct GitChangesSidebar: View {
         }
         .frame(width: 420)
         .frame(maxHeight: .infinity)
-        .background(Color(NSColor.controlBackgroundColor))
+        .background(appColors?.panel ?? Color(NSColor.controlBackgroundColor))
+        .foregroundStyle(appColors?.foreground ?? Color.primary)
+    }
+
+    private var appColors: TerminalAppColors? {
+        terminalAppTheme?.colors(for: colorScheme)
     }
 
     private var header: some View {

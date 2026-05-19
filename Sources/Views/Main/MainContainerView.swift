@@ -9,6 +9,8 @@ struct MainContainerView: View {
 
     @State private var isShowingNewTabChooser = false
     @State private var gitDiffState = GitDiffState()
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.terminalAppTheme) private var terminalAppTheme
     
     var body: some View {
         VStack(spacing: 0) {
@@ -78,6 +80,13 @@ struct MainContainerView: View {
         .onChange(of: scanner.currentDirectory) { _, directory in
             gitDiffState.refresh(for: directory)
         }
+        .background(appColors?.background ?? Color(nsColor: .windowBackgroundColor))
+        .foregroundStyle(appColors?.foreground ?? Color.primary)
+        .tint(appColors?.accent ?? Color.accentColor)
+    }
+
+    private var appColors: TerminalAppColors? {
+        terminalAppTheme?.colors(for: colorScheme)
     }
 
     private func createTerminalTab() {
