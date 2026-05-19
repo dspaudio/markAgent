@@ -23,9 +23,20 @@ struct DiffResult {
 
 enum DiffEngine {
     /// 줄 단위 diff 계산. old가 빈 문자열(첫 로드)이면 빈 DiffResult 반환.
-    nonisolated static func compute(old: String, new: String) -> DiffResult {
-        guard !old.isEmpty else {
+    nonisolated static func compute(
+        old: String,
+        new: String,
+        emptyOldIsAllAdded: Bool = false
+    ) -> DiffResult {
+        guard !old.isEmpty || emptyOldIsAllAdded else {
             return DiffResult(lines: [], addedCount: 0, removedCount: 0)
+        }
+
+        if old.isEmpty {
+            let addedLines = new.components(separatedBy: "\n").enumerated().map { index, line in
+                DiffLine(type: .added, content: line, lineNumber: index + 1, oldLineNumber: nil)
+            }
+            return DiffResult(lines: addedLines, addedCount: addedLines.count, removedCount: 0)
         }
 
         let oldLines = old.components(separatedBy: "\n")

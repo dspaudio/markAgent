@@ -1,6 +1,4 @@
 import SwiftUI
-import AppKit
-import GhosttyTerminal
 
 struct MainContainerView: View {
     var tabs: TabCollection
@@ -10,12 +8,18 @@ struct MainContainerView: View {
     var onDocumentChanged: () -> Void
 
     @State private var isShowingNewTabChooser = false
+    @State private var gitDiffState = GitDiffState()
     
     var body: some View {
         VStack(spacing: 0) {
             TabBarView(
                 tabs: tabs,
-                onNewTab: { isShowingNewTabChooser = true }
+                onNewTab: { isShowingNewTabChooser = true },
+                isDiffEnabled: gitDiffState.isInGitRepository,
+                isDiffVisible: gitDiffState.isShowingSidebar,
+                onToggleDiff: {
+                    gitDiffState.toggleSidebar(for: scanner.currentDirectory)
+                }
             )
             
             HStack(spacing: 0) {
@@ -24,8 +28,7 @@ struct MainContainerView: View {
                     recentStore: recentStore,
                     currentFileURL: tabs.activeMarkdownTab?.fileURL,
                     onOpenMarkdown: openMarkdownFromSidebar,
-                    onOpenOtherFile: { _ in },
-                    onEnterDirectory: handleEnterDirectory
+                    onOpenOtherFile: openFileFromSidebar
                 )
                 
                 Divider()
@@ -37,6 +40,12 @@ struct MainContainerView: View {
                     onDocumentChanged: onDocumentChanged
                 )
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+                if gitDiffState.isShowingSidebar {
+                    Divider()
+
+                    GitChangesSidebar(state: gitDiffState)
+                }
             }
         }
         .sheet(isPresented: $isShowingNewTabChooser) {
@@ -57,12 +66,17 @@ struct MainContainerView: View {
         .onAppear {
             syncDirectoryToActiveTab()
             scanner.reload()
+            gitDiffState.refresh(for: scanner.currentDirectory)
             setupActiveTabDirectoryObserver()
         }
         .onChange(of: tabs.activeTabID) { _, _ in
             syncDirectoryToActiveTab()
+            gitDiffState.refresh(for: scanner.currentDirectory)
             setupActiveTabDirectoryObserver()
             onDocumentChanged()
+        }
+        .onChange(of: scanner.currentDirectory) { _, directory in
+            gitDiffState.refresh(for: directory)
         }
     }
 
@@ -81,42 +95,16 @@ struct MainContainerView: View {
     }
     
     private func openMarkdownFromSidebar(_ url: URL) {
+        openFileFromSidebar(url)
+    }
+
+    private func openFileFromSidebar(_ url: URL) {
         tabs.createMarkdownTab(fileURL: url)
         recentStore.record(url: url)
         scanner.setDirectory(url.deletingLastPathComponent())
         onDocumentChanged()
     }
 
-    private func handleEnterDirectory(_ url: URL) {
-        if let terminalTab = tabs.activeTerminalTab,
-           let terminalView = terminalTab.state.terminalView {
-            let path = url.path
-            terminalView.sendText("cd \(path)")
-            sendEnterKey(to: terminalView)
-        } else {
-            scanner.enterDirectory(url)
-        }
-    }
-    
-    private func sendEnterKey(to terminalView: AppTerminalView) {
-        let enterKeyCode: UInt16 = 36
-        guard let event = NSEvent.keyEvent(
-            with: .keyDown,
-            location: .zero,
-            modifierFlags: [],
-            timestamp: ProcessInfo.processInfo.systemUptime,
-            windowNumber: terminalView.window?.windowNumber ?? 0,
-            context: nil,
-            characters: "\r",
-            charactersIgnoringModifiers: "\r",
-            isARepeat: false,
-            keyCode: enterKeyCode
-        ) else { return }
-        
-        NSApp.postEvent(event, atStart: true)
-        RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.05))
-    }
-    
     private func syncDirectoryToActiveTab() {
         if let terminalTab = tabs.activeTerminalTab {
             scanner.setDirectory(terminalTab.state.workingDirectory)

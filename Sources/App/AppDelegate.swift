@@ -302,12 +302,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func openFile() {
         let panel = NSOpenPanel()
-        panel.title = "마크다운 파일 열기"
+        panel.title = "파일 열기"
         panel.prompt = "열기"
         panel.canChooseFiles = true
         panel.canChooseDirectories = false
         panel.allowsMultipleSelection = false
-        panel.allowedContentTypes = markdownContentTypes
 
         let completion: (NSApplication.ModalResponse) -> Void = { [weak self] response in
             guard response == .OK, let url = panel.url else { return }

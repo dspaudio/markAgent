@@ -12,6 +12,7 @@
 8. [세션 8: libghostty-spm 통합 및 터미널 중심 탭 앱 전환](#세션-8-libghostty-spm-통합-및-터미널-중심-탭-앱-전환)
 9. [세션 9: Ghostty 사용자 설정 보존 및 v0.2.0 릴리즈 갱신](#세션-9-ghostty-사용자-설정-보존-및-v020-릴리즈-갱신)
 10. [세션 10: Ghostty 폰트 설정 보강 및 v0.2.1 릴리즈](#세션-10-ghostty-폰트-설정-보강-및-v021-릴리즈)
+11. [세션 11: Raw Editor 확장 및 v0.2.2 릴리즈](#세션-11-raw-editor-확장-및-v022-릴리즈)
 
 ---
 
@@ -45,6 +46,8 @@
 | 24 | libghostty-spm 통합 및 터미널 중심 탭 앱 전환 | 터미널 탭, 파일 브라우저 사이드바, Ghostty 테마 연동, 디렉토리 동기화 구현 |
 | 25 | Ghostty 사용자 config 보존 및 v0.2.0 릴리즈 asset 갱신 | `~/.config/ghostty/config` 폰트 설정 보존, 릴리즈 바이너리 재빌드 및 업로드 완료 |
 | 26 | Ghostty 폰트 설정 보강 및 v0.2.1 릴리즈 | `font-size` surface 전달 보강, `font-family` config 보존 테스트, Gatekeeper 노트 포함 릴리즈 준비 |
+| 27 | Raw Editor와 Diff 사이드바 확장 | 비마크다운 파일 raw editor 열기, line number, git 변경 파일 Diff 사이드바 구현 |
+| 28 | v0.2.2 릴리즈 빌드 및 배포 | 앱 번들 버전 0.2.2 갱신, 릴리즈 빌드와 GitHub Release 업로드 준비 |
 
 ---
 
@@ -740,3 +743,45 @@ libghostty surface API에는 font family 전용 필드가 없으므로 사용자
 릴리즈 빌드에서 사용자 config 전체가 fallback될 경우에도 `font-family`가 유지되도록, config의 `font-family` 라인을 순서와 따옴표를 보존해 파싱하고 `TerminalConfiguration.withFontFamily(...)`로 명시 주입. `font-size`도 `TerminalConfiguration`과 surface option 양쪽에 반영되도록 유지. `v0.2.1` Release asset을 새 산출물로 교체하고 태그를 새 커밋으로 갱신.
 
 변경 파일: `Sources/Core/Tabs/GhosttyConfig.swift`, `Sources/Core/Tabs/TerminalTabState.swift`, `Tests/MarkAgentTests/GhosttyConfigTests.swift`, `history.md`
+
+---
+
+## 세션 11: Raw Editor 확장 및 v0.2.2 릴리즈
+
+> 날짜: 2026-05-19
+> 경로: ~/workspace/markAgent
+
+Raw Editor가 마크다운 외 파일도 처리하도록 확장하고, git 변경 파일 Diff 사이드바를 추가한 뒤 `v0.2.2` 릴리즈를 준비.
+
+### 대화 1: 사이드바 더블클릭 및 Raw Editor 동작 변경
+
+**사용자:**
+> 왼쪽 사이드바에서 경로를 더블클릭하면 터미널에 cd path 명령을 보내는 기능을 없애줘.
+>
+> .md 파일이 아니더라도 더블클릭하면 rawEditor로 열리게 해줘. rawEditor 오른쪽 상단의 DiffView 버튼을 전체 윈도우 우측 상단으로 옮기고, git 폴더에 있을 경우에만 활성화 해줘. 해당 버튼을 클릭하면 오른쪽에 사이드 바가 나타나서 마지막 커밋 대비 변경된 파일의 목록을 표시하고, 해당 파일을 클릭하면 이미 구현되어 있는 DiffView를 볼 수 있게 해줘. ultrawork로 구현해줘.
+>
+> rawEditor 왼쪽에 line number도 표시되었으면 좋겠어.
+
+**응답:**
+사이드바 디렉터리 더블클릭의 터미널 `cd` 전송 경로를 제거하고, 파일 더블클릭은 확장자와 관계없이 raw editor 기반 탭으로 열리도록 수정. 비마크다운 파일은 preview 전환을 비활성화하고 raw editor로 고정되며, raw editor 좌측에는 `NSRulerView` 기반 line number gutter를 추가.
+
+Diff 버튼은 탭 내부 toolbar에서 전체 윈도우 우측 상단으로 이동하고, 현재 파일/디렉터리가 git repository 안에 있을 때만 활성화. 버튼 클릭 시 오른쪽 사이드바가 나타나며, `git status --porcelain` 기반 변경 파일 목록을 표시하고 선택한 파일은 `git show HEAD:<path>`와 working tree 내용을 비교해 기존 `DiffOverlayView`로 렌더링.
+
+검증:
+- `swift test` 성공 (11 tests, 0 failures)
+- `scripts/bundle.sh` 성공
+- 터미널 `cd` 전송 경로 제거 여부 확인
+
+변경 파일: `Sources/App/AppDelegate.swift`, `Sources/Core/DiffEngine.swift`, `Sources/Core/Document.swift`, `Sources/Core/GitDiffState.swift`, `Sources/Views/EditorView.swift`, `Sources/Views/Main/MainContainerView.swift`, `Sources/Views/Main/TabBarView.swift`, `Sources/Views/Sidebar/FileBrowserSidebar.swift`, `Sources/Views/Sidebar/GitChangesSidebar.swift`, `Sources/Views/Tabs/MarkdownTabView.swift`, `Tests/MarkAgentTests/DocumentTests.swift`
+
+---
+
+### 대화 2: v0.2.2 릴리즈 빌드 및 GitHub Release 요청
+
+**사용자:**
+> 릴리즈 빌드를 0.2.2로 만들고 깃헙 Release에 올려줘. 커밋 & 푸시해줘.
+
+**응답:**
+앱 번들 버전을 `0.2.2`로 갱신하고, 릴리즈 빌드 산출물과 체크섬을 생성해 GitHub Release `v0.2.2` 업로드를 진행. 커밋과 푸시 전에 본 세션의 작업 내용을 `history.md`에 기록.
+
+변경 파일: `Sources/App/Info.plist`, `history.md`

@@ -15,6 +15,7 @@ final class MarkdownDocument {
     var isLoaded: Bool = false
     var isExternalUpdatePending: Bool = false
     var viewMode: ViewMode = .rawEdit
+    var supportsPreview: Bool = true
 
     var previousContent: String?
     var diffResult: DiffResult?
@@ -33,6 +34,10 @@ final class MarkdownDocument {
             fileURL = url
             errorMessage = nil
             isLoaded = true
+            supportsPreview = Self.isMarkdownURL(url)
+            if !supportsPreview {
+                viewMode = .rawEdit
+            }
 
             if isDirty {
                 pendingExternalContent = newContent
@@ -64,6 +69,7 @@ final class MarkdownDocument {
         isExternalUpdatePending = false
         pendingExternalContent = nil
         viewMode = .rawEdit
+        supportsPreview = true
         clearDiff()
     }
 
@@ -100,6 +106,7 @@ final class MarkdownDocument {
         content = editableContent
         errorMessage = nil
         isLoaded = true
+        supportsPreview = Self.isMarkdownURL(url)
     }
 
     func acceptExternalUpdate() {
@@ -136,6 +143,11 @@ final class MarkdownDocument {
         }
 
         return .success(url)
+    }
+
+    nonisolated static func isMarkdownURL(_ url: URL) -> Bool {
+        let pathExtension = url.pathExtension.lowercased()
+        return pathExtension == "md" || pathExtension == "markdown"
     }
 }
 

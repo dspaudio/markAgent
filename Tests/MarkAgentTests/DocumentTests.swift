@@ -9,6 +9,27 @@ final class DocumentTests: XCTestCase {
         XCTAssertEqual(document.viewMode, .rawEdit)
     }
 
+    @MainActor
+    func testPlainTextFileDisablesPreview() throws {
+        let tempDir = FileManager.default.temporaryDirectory
+        let tempFile = tempDir.appendingPathComponent("test_markagent.swift")
+        try "print(\"Hello\")".write(to: tempFile, atomically: true, encoding: .utf8)
+        defer { try? FileManager.default.removeItem(at: tempFile) }
+
+        let document = MarkdownDocument()
+        document.load(from: tempFile)
+
+        XCTAssertFalse(document.supportsPreview)
+        XCTAssertEqual(document.viewMode, .rawEdit)
+    }
+
+    func testDiffCanTreatEmptyOldContentAsAdded() {
+        let diff = DiffEngine.compute(old: "", new: "first\nsecond", emptyOldIsAllAdded: true)
+
+        XCTAssertEqual(diff.addedCount, 2)
+        XCTAssertEqual(diff.removedCount, 0)
+    }
+
     func testResolveValidPath() throws {
         let tempDir = FileManager.default.temporaryDirectory
         let tempFile = tempDir.appendingPathComponent("test_markagent.md")

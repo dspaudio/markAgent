@@ -6,7 +6,6 @@ struct FileBrowserSidebar: View {
     var currentFileURL: URL?
     var onOpenMarkdown: (URL) -> Void
     var onOpenOtherFile: (URL) -> Void
-    var onEnterDirectory: ((URL) -> Void)? = nil
     
     @State private var selectedEntryID: String?
     
@@ -91,11 +90,7 @@ struct FileBrowserSidebar: View {
     private func handleDoubleClick(_ entry: FileEntry) {
         switch entry.kind {
         case .directory:
-            if let onEnterDirectory = onEnterDirectory {
-                onEnterDirectory(entry.url)
-            } else {
-                scanner.enterDirectory(entry.url)
-            }
+            scanner.enterDirectory(entry.url)
         case .markdown:
             onOpenMarkdown(entry.url)
         case .file:

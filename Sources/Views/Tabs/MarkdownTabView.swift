@@ -10,22 +10,10 @@ struct MarkdownTabView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .toolbar {
                 ToolbarItemGroup(placement: .automatic) {
-                    modeButton(.preview, title: "Preview", systemImage: "eye", shortcut: "1")
-                    modeButton(.rawEdit, title: "Raw Edit", systemImage: "square.and.pencil", shortcut: "2")
-                }
-
-                ToolbarItem(placement: .automatic) {
-                    Button {
-                        state.document.showDiff.toggle()
-                    } label: {
-                        Label(
-                            state.document.showDiff ? "Diff 숨기기" : "Diff 보기",
-                            systemImage: "arrow.left.arrow.right.circle"
-                        )
+                    if state.document.supportsPreview {
+                        modeButton(.preview, title: "Preview", systemImage: "eye", shortcut: "1")
                     }
-                    .help("Diff 보기 토글 (⌘D)")
-                    .keyboardShortcut("d", modifiers: .command)
-                    .disabled(state.document.diffResult == nil)
+                    modeButton(.rawEdit, title: "Raw Edit", systemImage: "square.and.pencil", shortcut: "2")
                 }
             }
             .alert(
@@ -55,7 +43,9 @@ struct MarkdownTabView: View {
         } else {
             switch state.document.viewMode {
             case .preview:
-                if state.document.editableContent.isEmpty {
+                if !state.document.supportsPreview {
+                    rawEditor
+                } else if state.document.editableContent.isEmpty {
                     emptyDocumentView
                 } else if state.document.showDiff, let diffResult = state.document.diffResult {
                     DiffOverlayView(diffResult: diffResult) {
@@ -65,13 +55,17 @@ struct MarkdownTabView: View {
                     previewContent
                 }
             case .rawEdit:
-                EditorView(
-                    document: state.document,
-                    showsInlineToolbar: true,
-                    rendersMarkdownStyle: false
-                )
+                rawEditor
             }
         }
+    }
+
+    private var rawEditor: some View {
+        EditorView(
+            document: state.document,
+            showsInlineToolbar: state.document.supportsPreview,
+            rendersMarkdownStyle: false
+        )
     }
 
     private func modeButton(

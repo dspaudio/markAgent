@@ -206,6 +206,12 @@ private struct MarkdownTextEditor: NSViewRepresentable {
 
         scrollView.drawsBackground = true
         scrollView.backgroundColor = .textBackgroundColor
+        if !rendersMarkdownStyle {
+            let rulerView = LineNumberRulerView(textView: textView)
+            scrollView.verticalRulerView = rulerView
+            scrollView.hasVerticalRuler = true
+            scrollView.rulersVisible = true
+        }
         context.coordinator.applyMarkdownStyle(to: textView)
         return scrollView
     }
@@ -219,6 +225,7 @@ private struct MarkdownTextEditor: NSViewRepresentable {
 
         context.coordinator.rendersMarkdownStyle = rendersMarkdownStyle
         context.coordinator.applyMarkdownStyle(to: textView)
+        scrollView.verticalRulerView?.needsDisplay = true
 
         let textLength = (textView.string as NSString).length
         let safeLocation = min(selectedRange.location, textLength)
@@ -254,6 +261,7 @@ private struct MarkdownTextEditor: NSViewRepresentable {
             guard let textView = notification.object as? NSTextView else { return }
             text = textView.string
             applyMarkdownStyle(to: textView)
+            textView.enclosingScrollView?.verticalRulerView?.needsDisplay = true
         }
 
         func textViewDidChangeSelection(_ notification: Notification) {
@@ -582,6 +590,65 @@ private struct MarkdownTextEditor: NSViewRepresentable {
             style.lineSpacing = lineSpacing
             style.paragraphSpacing = lineSpacing
             return style
+        }
+    }
+}
+
+private final class LineNumberRulerView: NSRulerView {
+    private weak var textView: NSTextView?
+    private let textAttributes: [NSAttributedString.Key: Any] = [
+        .font: NSFont.monospacedSystemFont(ofSize: 11, weight: .regular),
+        .foregroundColor: NSColor.secondaryLabelColor
+    ]
+
+    init(textView: NSTextView) {
+        self.textView = textView
+        super.init(scrollView: textView.enclosingScrollView, orientation: .verticalRuler)
+        clientView = textView
+        ruleThickness = 46
+    }
+
+    required init(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    override func drawHashMarksAndLabels(in rect: NSRect) {
+        guard let textView,
+              let layoutManager = textView.layoutManager,
+              let textContainer = textView.textContainer else { return }
+
+        NSColor.textBackgroundColor.setFill()
+        rect.fill()
+
+        let visibleRect = textView.visibleRect
+        let glyphRange = layoutManager.glyphRange(forBoundingRect: visibleRect, in: textContainer)
+        let text = textView.string as NSString
+        var glyphIndex = glyphRange.location
+
+        while glyphIndex < NSMaxRange(glyphRange) {
+            var effectiveRange = NSRange(location: 0, length: 0)
+            let lineRect = layoutManager.lineFragmentRect(
+                forGlyphAt: glyphIndex,
+                effectiveRange: &effectiveRange
+            )
+            let characterIndex = layoutManager.characterIndexForGlyph(at: glyphIndex)
+            let characterLineRange = text.lineRange(for: NSRange(location: characterIndex, length: 0))
+            guard characterIndex == characterLineRange.location else {
+                glyphIndex = max(NSMaxRange(effectiveRange), glyphIndex + 1)
+                continue
+            }
+            let lineNumber = text.substring(to: min(characterIndex, text.length))
+                .filter { $0 == "\n" }
+                .count + 1
+
+            let label = "\(lineNumber)" as NSString
+            let labelSize = label.size(withAttributes: textAttributes)
+            let y = lineRect.minY + textView.textContainerOrigin.y - visibleRect.minY
+                + (lineRect.height - labelSize.height) / 2
+            let x = ruleThickness - labelSize.width - 8
+            label.draw(at: NSPoint(x: x, y: y), withAttributes: textAttributes)
+
+            glyphIndex = max(NSMaxRange(effectiveRange), glyphIndex + 1)
         }
     }
 }
