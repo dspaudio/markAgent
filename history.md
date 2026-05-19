@@ -17,6 +17,7 @@
 13. [세션 13: About 패널, README, v1.0.0 릴리즈](#세션-13-about-패널-readme-v100-릴리즈)
 14. [세션 14: README 재정리 및 v1.0.1 릴리즈](#세션-14-readme-재정리-및-v101-릴리즈)
 15. [세션 15: v1.0.1 릴리즈 문구 보정 및 README 설치 안내 보강](#세션-15-v101-릴리즈-문구-보정-및-readme-설치-안내-보강)
+16. [세션 16: README CLI 안내 제거](#세션-16-readme-cli-안내-제거)
 
 ---
 
@@ -56,6 +57,7 @@
 | 30 | About 패널, README, v1.0.0 릴리즈 | About 메뉴 콘텐츠 추가, Always on Top 기본 비활성화, 한/영 README 작성, v1.0.0 릴리즈 준비 |
 | 31 | README 재정리 및 v1.0.1 릴리즈 | Ghostty 기반 AI 개발환경 컨셉 README 반영, 스크린샷 추가, 앱 번들 버전 1.0.1 갱신 및 릴리즈 준비 |
 | 32 | v1.0.1 릴리즈 문구 및 README 설치 안내 보강 | GitHub Release 본문 줄바꿈 보정, quarantine 해제 명령 README 추가, dev에서 main 병합 준비 |
+| 33 | README CLI 안내 제거 | README 설치/사용 섹션에서 `ma` CLI 링크와 `.build/debug/ma` 실행 예시 제거 |
 
 ---
 
@@ -957,5 +959,30 @@ README를 한국어 중심으로 재작성해 Ghostty 기반 멀티탭 터미널
 
 **응답:**
 커밋 및 병합 전에 `history.md`에 이번 세션의 작업 내용을 기록. README 설치 안내 보강 내용을 `dev`에 커밋한 뒤, 로컬 `main`을 최신 원격 상태로 맞추고 `dev` 변경사항을 `main`에 병합할 예정.
+
+변경 파일: `README.md`, `history.md`
+
+---
+
+## 세션 16: README CLI 안내 제거
+
+> 날짜: 2026-05-19
+> 경로: ~/workspace/markAgent
+
+README에 `ma` CLI 링크 생성 및 CLI 바이너리 실행 예시가 남아 있어, 현재 사용자가 의도한 앱 번들 중심 안내와 맞지 않는 부분을 제거.
+
+### 대화 1: README의 `ma` CLI 안내 제거
+
+**사용자:**
+> ma CLI는 없앤거 아니었어? README에 그대로 남아있는데?
+>
+> 1
+>
+> ~/Applications에 설치하고 가능한 경우 ma CLI 링크 생성:
+>
+> 내용이 있는데?
+
+**응답:**
+README의 설치 문구를 `~/Applications` 앱 번들 설치 중심으로 수정하고, `.build/debug/ma README.md` 실행 예시를 제거. GitHub에서 이전 문구가 보이는 것은 변경사항이 아직 커밋/푸시되지 않았기 때문이므로, 커밋 전 히스토리에 본 세션을 기록.
 
 변경 파일: `README.md`, `history.md`

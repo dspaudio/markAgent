@@ -77,7 +77,7 @@ scripts/bundle.sh
 scripts/bundle.sh release
 ```
 
-`~/Applications`에 설치하고 가능한 경우 `ma` CLI 링크 생성:
+`~/Applications`에 앱 번들 설치:
 
 ```bash
 scripts/bundle.sh install
@@ -93,12 +93,6 @@ xattr -dr com.apple.quarantine /Applications/MarkAgent.app
 
 ```bash
 open .build/MarkAgent.app --args README.md
-```
-
-빌드된 CLI 바이너리로 실행:
-
-```bash
-.build/debug/ma README.md
 ```
 
 ## Ghostty 설정
