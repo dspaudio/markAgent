@@ -83,6 +83,12 @@ scripts/bundle.sh release
 scripts/bundle.sh install
 ```
 
+macOS에서 직접 빌드한 앱이 보안 격리(quarantine) 상태로 실행되지 않으면 다음 명령으로 격리 속성을 제거합니다:
+
+```bash
+xattr -dr com.apple.quarantine /Applications/MarkAgent.app
+```
+
 앱 번들로 Markdown 파일 열기:
 
 ```bash
