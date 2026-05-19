@@ -20,53 +20,92 @@ final class GitDiffState {
     var selectedDiffResult: DiffResult?
     private(set) var errorMessage: String?
     var isShowingSidebar = false
+    private var refreshTask: Task<Void, Never>?
+    private var selectTask: Task<Void, Never>?
+    private var refreshToken = 0
 
     var isInGitRepository: Bool { repositoryRoot != nil }
 
     func refresh(for directory: URL) {
-        repositoryRoot = Self.findRepositoryRoot(from: directory)
+        refreshToken += 1
+        let token = refreshToken
+        refreshTask?.cancel()
         selectedFile = nil
         selectedDiffResult = nil
         errorMessage = nil
 
-        guard let repositoryRoot else {
-            changedFiles = []
-            isShowingSidebar = false
-            return
-        }
+        refreshTask = Task { [directory, token] in
+            let result = await Task.detached(priority: .utility) {
+                let repositoryRoot = Self.findRepositoryRoot(from: directory)
+                guard let repositoryRoot else {
+                    return (
+                        repositoryRoot: Optional<URL>.none,
+                        changedFiles: [GitChangedFile](),
+                        errorMessage: Optional<String>.none
+                    )
+                }
 
-        do {
-            changedFiles = try Self.loadChangedFiles(repositoryRoot: repositoryRoot)
-        } catch {
-            changedFiles = []
-            errorMessage = error.localizedDescription
+                do {
+                    let changedFiles = try Self.loadChangedFiles(repositoryRoot: repositoryRoot)
+                    return (
+                        repositoryRoot: Optional(repositoryRoot),
+                        changedFiles: changedFiles,
+                        errorMessage: Optional<String>.none
+                    )
+                } catch {
+                    return (
+                        repositoryRoot: Optional(repositoryRoot),
+                        changedFiles: [GitChangedFile](),
+                        errorMessage: Optional(error.localizedDescription)
+                    )
+                }
+            }.value
+
+            guard !Task.isCancelled, token == self.refreshToken else { return }
+            self.repositoryRoot = result.repositoryRoot
+            self.changedFiles = result.changedFiles
+            self.errorMessage = result.errorMessage
+            if result.repositoryRoot == nil {
+                self.isShowingSidebar = false
+            }
         }
     }
 
     func toggleSidebar(for directory: URL) {
-        refresh(for: directory)
         guard isInGitRepository else { return }
         isShowingSidebar.toggle()
+        refresh(for: directory)
     }
 
     func select(_ file: GitChangedFile) {
         selectedFile = file
-        do {
-            let oldContent = try Self.gitShowHead(file: file)
-            let newContent = (try? String(contentsOf: file.url, encoding: .utf8)) ?? ""
-            selectedDiffResult = DiffEngine.compute(
-                old: oldContent,
-                new: newContent,
-                emptyOldIsAllAdded: true
-            )
-            errorMessage = nil
-        } catch {
-            selectedDiffResult = nil
-            errorMessage = error.localizedDescription
+        selectedDiffResult = nil
+        errorMessage = nil
+        selectTask?.cancel()
+
+        selectTask = Task { [file] in
+            do {
+                let diffResult = try await Task.detached(priority: .userInitiated) {
+                    let oldContent = try Self.gitShowHead(file: file)
+                    let newContent = (try? String(contentsOf: file.url, encoding: .utf8)) ?? ""
+                    return DiffEngine.compute(
+                        old: oldContent,
+                        new: newContent,
+                        emptyOldIsAllAdded: true
+                    )
+                }.value
+                guard !Task.isCancelled, self.selectedFile == file else { return }
+                self.selectedDiffResult = diffResult
+                self.errorMessage = nil
+            } catch {
+                guard !Task.isCancelled, self.selectedFile == file else { return }
+                self.selectedDiffResult = nil
+                self.errorMessage = error.localizedDescription
+            }
         }
     }
 
-    private static func findRepositoryRoot(from directory: URL) -> URL? {
+    private nonisolated static func findRepositoryRoot(from directory: URL) -> URL? {
         var current = directory
         while true {
             if FileManager.default.fileExists(atPath: current.appendingPathComponent(".git").path) {
@@ -78,7 +117,7 @@ final class GitDiffState {
         }
     }
 
-    private static func loadChangedFiles(repositoryRoot: URL) throws -> [GitChangedFile] {
+    private nonisolated static func loadChangedFiles(repositoryRoot: URL) throws -> [GitChangedFile] {
         let output = try runGit(["status", "--porcelain=v1", "-uall"], repositoryRoot: repositoryRoot)
         return output
             .split(whereSeparator: \.isNewline)
@@ -96,7 +135,7 @@ final class GitDiffState {
             .sorted { $0.relativePath.localizedStandardCompare($1.relativePath) == .orderedAscending }
     }
 
-    private static func gitShowHead(file: GitChangedFile) throws -> String {
+    private nonisolated static func gitShowHead(file: GitChangedFile) throws -> String {
         do {
             return try runGit(["show", "HEAD:\(file.relativePath)"], repositoryRoot: file.rootURL)
         } catch {
@@ -104,7 +143,7 @@ final class GitDiffState {
         }
     }
 
-    private static func runGit(_ arguments: [String], repositoryRoot: URL) throws -> String {
+    private nonisolated static func runGit(_ arguments: [String], repositoryRoot: URL) throws -> String {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/git")
         process.arguments = arguments

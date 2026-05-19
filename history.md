@@ -785,3 +785,17 @@ Diff 버튼은 탭 내부 toolbar에서 전체 윈도우 우측 상단으로 이
 앱 번들 버전을 `0.2.2`로 갱신하고, 릴리즈 빌드 산출물과 체크섬을 생성해 GitHub Release `v0.2.2` 업로드를 진행. 커밋과 푸시 전에 본 세션의 작업 내용을 `history.md`에 기록.
 
 변경 파일: `Sources/App/Info.plist`, `history.md`
+
+---
+
+### 대화 3: 폴더 더블클릭 응답 지연 수정 및 v0.2.2 바이너리 교체
+
+**사용자:**
+> 왼쪽 현재 폴더 목록에서 폴더를 더블 클릭하니 무지개가 도는데?
+>
+> 0.2.2 빌드를 다시 만들고 업로드 해줘.
+
+**응답:**
+폴더 더블클릭 시 디렉터리 스캔과 git 변경 목록 조회가 메인 액터에서 동기 실행되어 큰 폴더나 git repository에서 UI가 멈출 수 있는 문제를 수정. 디렉터리 스캔, `git status`, Diff 대상 파일 읽기/비교를 백그라운드 작업으로 이동하고, 최신 요청 토큰만 UI에 반영해 빠른 폴더 이동 중 stale 결과가 덮어쓰지 않도록 보강. 수정된 빌드로 `v0.2.2` Release asset 교체를 진행.
+
+변경 파일: `Sources/Core/FileBrowser/DirectoryScanner.swift`, `Sources/Core/GitDiffState.swift`, `history.md`

@@ -7,6 +7,8 @@ final class DirectoryScanner {
     private(set) var entries: [FileEntry] = []
     private(set) var errorMessage: String?
     private(set) var isLoading = false
+    private var scanTask: Task<Void, Never>?
+    private var scanToken = 0
 
     init(currentDirectory: URL) {
         self.currentDirectory = currentDirectory
@@ -14,15 +16,28 @@ final class DirectoryScanner {
     }
 
     func reload() {
+        let directory = currentDirectory
+        scanToken += 1
+        let token = scanToken
+        scanTask?.cancel()
         isLoading = true
         errorMessage = nil
-        do {
-            entries = try Self.scan(directory: currentDirectory)
-        } catch {
-            errorMessage = error.localizedDescription
-            entries = []
+
+        scanTask = Task { [directory, token] in
+            do {
+                let entries = try await Task.detached(priority: .userInitiated) {
+                    try Self.scan(directory: directory)
+                }.value
+                guard !Task.isCancelled, token == self.scanToken, self.currentDirectory == directory else { return }
+                self.entries = entries
+                self.isLoading = false
+            } catch {
+                guard !Task.isCancelled, token == self.scanToken, self.currentDirectory == directory else { return }
+                self.errorMessage = error.localizedDescription
+                self.entries = []
+                self.isLoading = false
+            }
         }
-        isLoading = false
     }
 
     func enterDirectory(_ url: URL) {
@@ -42,7 +57,7 @@ final class DirectoryScanner {
         reload()
     }
 
-    private static func scan(directory: URL) throws -> [FileEntry] {
+    private nonisolated static func scan(directory: URL) throws -> [FileEntry] {
         let contents = try FileManager.default.contentsOfDirectory(
             at: directory,
             includingPropertiesForKeys: [.contentTypeKey, .fileSizeKey, .contentModificationDateKey],
