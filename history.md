@@ -16,6 +16,7 @@
 12. [세션 12: Ghostty 테마 연동 및 v0.2.3 릴리즈](#세션-12-ghostty-테마-연동-및-v023-릴리즈)
 13. [세션 13: About 패널, README, v1.0.0 릴리즈](#세션-13-about-패널-readme-v100-릴리즈)
 14. [세션 14: README 재정리 및 v1.0.1 릴리즈](#세션-14-readme-재정리-및-v101-릴리즈)
+15. [세션 15: v1.0.1 릴리즈 문구 보정 및 README 설치 안내 보강](#세션-15-v101-릴리즈-문구-보정-및-readme-설치-안내-보강)
 
 ---
 
@@ -54,6 +55,7 @@
 | 29 | Ghostty 테마 연동 및 v0.2.3 릴리즈 | 앱 UI에 Ghostty 색상 테마 적용, 창 위치/전체화면 동작 보강, 릴리즈 빌드와 GitHub Release 준비 |
 | 30 | About 패널, README, v1.0.0 릴리즈 | About 메뉴 콘텐츠 추가, Always on Top 기본 비활성화, 한/영 README 작성, v1.0.0 릴리즈 준비 |
 | 31 | README 재정리 및 v1.0.1 릴리즈 | Ghostty 기반 AI 개발환경 컨셉 README 반영, 스크린샷 추가, 앱 번들 버전 1.0.1 갱신 및 릴리즈 준비 |
+| 32 | v1.0.1 릴리즈 문구 및 README 설치 안내 보강 | GitHub Release 본문 줄바꿈 보정, quarantine 해제 명령 README 추가, dev에서 main 병합 준비 |
 
 ---
 
@@ -912,3 +914,48 @@ README를 한국어 중심으로 재작성해 Ghostty 기반 멀티탭 터미널
 앱 번들 버전을 `1.0.1`로 갱신하고, 현재 README 및 앱 기능 개선분을 포함해 릴리즈 빌드와 GitHub Release `v1.0.1` 업로드를 준비. 커밋 및 푸시 전에 본 세션의 작업 내용을 `history.md`에 기록.
 
 변경 파일: `Sources/App/Info.plist`, `README.md`, `screenshot.png`, `history.md`
+
+---
+
+## 세션 15: v1.0.1 릴리즈 문구 보정 및 README 설치 안내 보강
+
+> 날짜: 2026-05-19
+> 경로: ~/workspace/markAgent
+
+`v1.0.1` GitHub Release 본문에 줄바꿈이 실제 개행이 아니라 `\n` 문자열로 표시되는 문제를 수정하고, 직접 빌드한 앱 실행 시 필요한 quarantine 해제 명령을 README 설치 안내에 추가. 이후 `dev` 브랜치 변경사항을 `main`으로 병합하기 위해 커밋 전 히스토리를 기록.
+
+### 대화 1: GitHub Release 본문 줄바꿈 보정
+
+**사용자:**
+> gh release 페이지 설명이 다음과 같이 나와있어. MarkAgent v1.0.1 release.\n\n- README를 실제 앱 컨셉에 맞춰 Ghostty 기반 CLI AI 개발환경 중심으로 재정리했습니다.\n- 앱 아이콘과 screenshot.png 실행 화면을 README에 추가했습니다.\n- Markdown 이미지 렌더링과 이미지 변경 Diff 표시를 보강했습니다.\n- 앱 번들 버전을 1.0.1로 갱신했습니다.\n\nVerification:\n- DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer swift test\n- DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer scripts/bundle.sh release\n\nSHA-256:\n991c6e7ce66cb27328fa397af9f8868f7701c0666f7e83007c1d65e3a5e2136d
+>
+> 줄바꿈이 안들어가 있고 \n 문자가 그대로 나와있어
+
+**응답:**
+`gh release edit v1.0.1 --notes`를 실제 멀티라인 문자열로 다시 실행해 GitHub Release 본문에 실제 줄바꿈이 표시되도록 보정. `gh release view v1.0.1 --json tagName,name,body`로 본문이 실제 개행을 포함하는지 확인.
+
+변경 파일: 없음
+
+---
+
+### 대화 2: README quarantine 해제 명령 추가
+
+**사용자:**
+> README.md에 다음 내용은 중요한 부분으로 포함시켜야 해. xattr -dr com.apple.quarantine /Applications/MarkAgent.app
+
+**응답:**
+`README.md`의 설치 섹션에서 `scripts/bundle.sh install` 바로 아래에 macOS 보안 격리(quarantine) 상태로 앱이 실행되지 않을 때 사용할 명령을 추가.
+
+변경 파일: `README.md`
+
+---
+
+### 대화 3: dev에서 main으로 병합
+
+**사용자:**
+> dev -> main 으로 머지해줘.
+
+**응답:**
+커밋 및 병합 전에 `history.md`에 이번 세션의 작업 내용을 기록. README 설치 안내 보강 내용을 `dev`에 커밋한 뒤, 로컬 `main`을 최신 원격 상태로 맞추고 `dev` 변경사항을 `main`에 병합할 예정.
+
+변경 파일: `README.md`, `history.md`
