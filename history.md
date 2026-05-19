@@ -14,6 +14,7 @@
 10. [세션 10: Ghostty 폰트 설정 보강 및 v0.2.1 릴리즈](#세션-10-ghostty-폰트-설정-보강-및-v021-릴리즈)
 11. [세션 11: Raw Editor 확장 및 v0.2.2 릴리즈](#세션-11-raw-editor-확장-및-v022-릴리즈)
 12. [세션 12: Ghostty 테마 연동 및 v0.2.3 릴리즈](#세션-12-ghostty-테마-연동-및-v023-릴리즈)
+13. [세션 13: About 패널, README, v1.0.0 릴리즈](#세션-13-about-패널-readme-v100-릴리즈)
 
 ---
 
@@ -50,6 +51,7 @@
 | 27 | Raw Editor와 Diff 사이드바 확장 | 비마크다운 파일 raw editor 열기, line number, git 변경 파일 Diff 사이드바 구현 |
 | 28 | v0.2.2 릴리즈 빌드 및 배포 | 앱 번들 버전 0.2.2 갱신, 릴리즈 빌드와 GitHub Release 업로드 준비 |
 | 29 | Ghostty 테마 연동 및 v0.2.3 릴리즈 | 앱 UI에 Ghostty 색상 테마 적용, 창 위치/전체화면 동작 보강, 릴리즈 빌드와 GitHub Release 준비 |
+| 30 | About 패널, README, v1.0.0 릴리즈 | About 메뉴 콘텐츠 추가, Always on Top 기본 비활성화, 한/영 README 작성, v1.0.0 릴리즈 준비 |
 
 ---
 
@@ -846,3 +848,34 @@ Ghostty 설정의 색상 테마를 MarkAgent 앱 UI에 반영하고, 창 위치 
 앱 번들 버전을 `0.2.2`에서 `0.2.3`으로 갱신하고, 릴리즈 빌드 산출물 `MarkAgent.app`과 GitHub Release 업로드용 `MarkAgent-v0.2.3.zip`을 생성. `swift test`와 `scripts/bundle.sh release`로 검증한 뒤 GitHub Release `v0.2.3`, git 태그, 커밋 및 푸시를 진행.
 
 변경 파일: `.gitignore`, `Sources/App/AppDelegate.swift`, `Sources/App/Info.plist`, `Sources/Core/Tabs/GhosttyConfig.swift`, `Sources/Core/Tabs/TerminalAppTheme.swift`, `Sources/Views/ContentView.swift`, `Sources/Views/EditorView.swift`, `Sources/Views/Main/ActiveTabContentView.swift`, `Sources/Views/Main/MainContainerView.swift`, `Sources/Views/Main/NewTabChooserView.swift`, `Sources/Views/Main/TabBarView.swift`, `Sources/Views/Main/TabItemView.swift`, `Sources/Views/Sidebar/FileBrowserSidebar.swift`, `Sources/Views/Sidebar/GitChangesSidebar.swift`, `Sources/Views/Tabs/MarkdownTabView.swift`, `Tests/MarkAgentTests/GhosttyConfigTests.swift`, `history.md`
+
+---
+
+## 세션 13: About 패널, README, v1.0.0 릴리즈
+
+> 날짜: 2026-05-19
+> 경로: ~/workspace/markAgent
+
+MarkAgent의 About 메뉴 콘텐츠를 보강하고, 기본 윈도우 동작을 일반 창으로 되돌린 뒤 `v1.0.0` 릴리즈를 준비.
+
+### 대화 1: About 메뉴 콘텐츠 구현
+
+**사용자:**
+> About 메뉴에 아무런 내용이 없어. 이 앱의 아이콘과 이 앱을 소개하는 간략한 문장. 그리고 깃헙 주소, 사용한 오픈소스 라이브러리 및 라이선스 정보를 포함한 내용으로 꾸며서 구현해줘.
+
+**응답:**
+표준 About 패널 대신 SwiftUI 기반 전용 About 윈도우를 추가. 앱 아이콘, 버전, 소개 문장, GitHub 주소, 오픈소스 라이브러리 및 라이선스 목록을 표시하도록 구현하고 Help 메뉴의 GitHub URL도 실제 repository 주소로 보정.
+
+변경 파일: `Sources/App/AppDelegate.swift`, `Sources/App/AboutView.swift`
+
+---
+
+### 대화 2: README 작성, Always on Top 기본 비활성화, v1.0.0 릴리즈 준비
+
+**사용자:**
+> 앱이 항상 최상단에 표시되는 부분을 꺼줘. 항상 최상단이 아니어도 돼. README.md 파일을 만들어줘. 영어 및 한국어 설명을 같이 넣어줘.  그리고 앱의 버전을 1.0.0으로 설정하고 Release 빌드를 만들고 깃허브에 업로드 해줘. 커밋 & 푸시까지 해줘.
+
+**응답:**
+앱 기본 윈도우 레벨을 `.normal`로 변경하고 Always on Top 상태를 기본 비활성화. `README.md`에 영어/한국어 소개, 기능, 요구 사항, 빌드/사용법, 오픈소스 라이선스 정보를 추가. 앱 번들 버전을 `1.0.0`으로 갱신하고 릴리즈 빌드, GitHub Release 업로드, 커밋 및 푸시를 진행.
+
+변경 파일: `Sources/App/AppDelegate.swift`, `Sources/App/Info.plist`, `Sources/App/AboutView.swift`, `README.md`, `history.md`

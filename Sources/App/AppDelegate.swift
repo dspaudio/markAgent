@@ -8,9 +8,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     let recentStore = RecentDocumentStore()
     let directoryScanner: DirectoryScanner
     let dirtyPrompter: AppDirtyDocumentPrompter
-    var isAlwaysOnTop = true
+    var isAlwaysOnTop = false
     var window: NSWindow?
 
+    private var aboutWindow: NSWindow?
     private var isClosingAfterDirtyConfirmation = false
     private let windowFrameDefaultsKey = "MarkAgent.windowFrame"
 
@@ -59,7 +60,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
         window.contentView = hostingView
         window.collectionBehavior = [.fullScreenPrimary]
-        window.level = .floating
+        window.level = .normal
         window.delegate = self
         self.window = window
         dirtyPrompter.window = window
@@ -121,11 +122,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let appMenu = NSMenu()
         appMenuItem.submenu = appMenu
 
-        appMenu.addItem(NSMenuItem(
-            title: "About MarkAgent",
-            action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)),
-            keyEquivalent: ""
-        ))
+        let aboutItem = NSMenuItem(title: "About MarkAgent", action: #selector(showAbout), keyEquivalent: "")
+        aboutItem.target = self
+        appMenu.addItem(aboutItem)
         appMenu.addItem(.separator())
 
         let servicesMenuItem = NSMenuItem(title: "Services", action: nil, keyEquivalent: "")
@@ -232,7 +231,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let alwaysOnTopItem = NSMenuItem(title: "Always on Top", action: #selector(toggleAlwaysOnTop), keyEquivalent: "t")
         alwaysOnTopItem.keyEquivalentModifierMask = [.command, .shift]
         alwaysOnTopItem.target = self
-        alwaysOnTopItem.state = .on
+        alwaysOnTopItem.state = .off
         viewMenu.addItem(alwaysOnTopItem)
 
         viewMenu.addItem(.separator())
@@ -447,8 +446,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         window?.toggleFullScreen(nil)
     }
 
+    @objc private func showAbout() {
+        if let aboutWindow {
+            aboutWindow.makeKeyAndOrderFront(nil)
+            NSRunningApplication.current.activate()
+            return
+        }
+
+        let contentView = AboutView()
+        let hostingView = NSHostingView(rootView: contentView)
+        let aboutWindow = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 560, height: 620),
+            styleMask: [.titled, .closable],
+            backing: .buffered,
+            defer: false
+        )
+        aboutWindow.title = "About MarkAgent"
+        aboutWindow.contentView = hostingView
+        aboutWindow.level = isAlwaysOnTop ? .floating : .normal
+        aboutWindow.isReleasedWhenClosed = false
+        aboutWindow.center()
+        aboutWindow.makeKeyAndOrderFront(nil)
+        self.aboutWindow = aboutWindow
+        NSRunningApplication.current.activate()
+    }
+
     @objc private func showHelp() {
-        guard let url = URL(string: "https://github.com/user/markAgent") else { return }
+        guard let url = URL(string: AboutView.githubURLString) else { return }
         NSWorkspace.shared.open(url)
     }
 
@@ -539,6 +563,7 @@ extension AppDelegate: NSMenuItemValidation {
              #selector(newMarkdownTab),
              #selector(openFile),
              #selector(toggleAlwaysOnTop),
+             #selector(showAbout),
              #selector(showHelp):
             return true
         case #selector(toggleFullScreen):
