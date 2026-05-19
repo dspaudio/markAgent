@@ -5,23 +5,36 @@ struct EditorView: View {
     @Bindable var document: MarkdownDocument
     var showsInlineToolbar = true
     var rendersMarkdownStyle = false
+    var isActive = true
 
     @State private var selectedRange: NSRange = NSRange(location: 0, length: 0)
+    @State private var cursorPosition = CursorPosition(line: 1, column: 1)
 
     var body: some View {
-        ZStack(alignment: .top) {
-            MarkdownTextEditor(
-                text: $document.editableContent,
-                selectedRange: $selectedRange,
-                rendersMarkdownStyle: rendersMarkdownStyle
-            )
+        VStack(spacing: 0) {
+            ZStack(alignment: .top) {
+                MarkdownTextEditor(
+                    text: $document.editableContent,
+                    selectedRange: $selectedRange,
+                    cursorPosition: $cursorPosition,
+                    rendersMarkdownStyle: rendersMarkdownStyle,
+                    isActive: isActive
+                )
 
-            if showsInlineToolbar, selectedRange.length > 0 {
-                InlineEditToolbar { action in
-                    apply(action)
+                if showsInlineToolbar, selectedRange.length > 0 {
+                    InlineEditToolbar { action in
+                        apply(action)
+                    }
+                    .padding(.top, 18)
+                    .transition(.opacity.combined(with: .scale(scale: 0.98)))
                 }
-                .padding(.top, 18)
-                .transition(.opacity.combined(with: .scale(scale: 0.98)))
+            }
+
+            if !rendersMarkdownStyle {
+                EditorStatusBar(
+                    fileURL: document.fileURL,
+                    cursorPosition: cursorPosition
+                )
             }
         }
     }
@@ -106,6 +119,40 @@ struct EditorView: View {
     }
 }
 
+private struct CursorPosition: Equatable {
+    var line: Int
+    var column: Int
+}
+
+private struct EditorStatusBar: View {
+    let fileURL: URL?
+    let cursorPosition: CursorPosition
+
+    var body: some View {
+        HStack {
+            Spacer()
+            Text("\(displayPath):\(cursorPosition.line):\(cursorPosition.column)")
+                .font(.system(size: 11, weight: .medium, design: .monospaced))
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .truncationMode(.middle)
+                .padding(.horizontal, 10)
+        }
+        .frame(height: 24)
+        .background(Color(NSColor.controlBackgroundColor))
+        .overlay(alignment: .top) {
+            Divider()
+        }
+    }
+
+    private var displayPath: String {
+        if let fileURL {
+            return fileURL.path
+        }
+        return "Untitled"
+    }
+}
+
 private enum MarkdownEditAction {
     case heading
     case bold
@@ -168,21 +215,38 @@ private struct InlineEditToolbar: View {
 private struct MarkdownTextEditor: NSViewRepresentable {
     @Binding var text: String
     @Binding var selectedRange: NSRange
+    @Binding var cursorPosition: CursorPosition
     let rendersMarkdownStyle: Bool
+    let isActive: Bool
 
     func makeCoordinator() -> Coordinator {
         Coordinator(
             text: $text,
             selectedRange: $selectedRange,
+            cursorPosition: $cursorPosition,
             rendersMarkdownStyle: rendersMarkdownStyle
         )
     }
 
     func makeNSView(context: Context) -> NSScrollView {
-        let scrollView = NSTextView.scrollableTextView()
-        guard let textView = scrollView.documentView as? NSTextView else {
-            return scrollView
-        }
+        let scrollView = NSScrollView()
+        scrollView.hasVerticalScroller = true
+        scrollView.hasHorizontalScroller = false
+        scrollView.autohidesScrollers = true
+        scrollView.borderType = .noBorder
+        scrollView.drawsBackground = true
+        scrollView.backgroundColor = .textBackgroundColor
+
+        let textStorage = NSTextStorage()
+        let layoutManager = NSLayoutManager()
+        let textContainer = NSTextContainer(
+            containerSize: NSSize(width: scrollView.contentSize.width, height: CGFloat.greatestFiniteMagnitude)
+        )
+        textContainer.widthTracksTextView = true
+        layoutManager.addTextContainer(textContainer)
+        textStorage.addLayoutManager(layoutManager)
+
+        let textView = NSTextView(frame: .zero, textContainer: textContainer)
 
         textView.delegate = context.coordinator
         textView.string = text
@@ -198,20 +262,15 @@ private struct MarkdownTextEditor: NSViewRepresentable {
         textView.isAutomaticTextReplacementEnabled = false
         textView.allowsUndo = true
         textView.textContainerInset = NSSize(width: 20, height: 20)
+        textView.minSize = NSSize(width: 0, height: scrollView.contentSize.height)
+        textView.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
+        textView.isVerticallyResizable = true
+        textView.isHorizontallyResizable = false
+        textView.autoresizingMask = [.width]
         textView.textContainer?.widthTracksTextView = true
-        textView.textContainer?.containerSize = NSSize(
-            width: scrollView.contentSize.width,
-            height: .greatestFiniteMagnitude
-        )
+        configureTextContainer(for: textView, in: scrollView)
 
-        scrollView.drawsBackground = true
-        scrollView.backgroundColor = .textBackgroundColor
-        if !rendersMarkdownStyle {
-            let rulerView = LineNumberRulerView(textView: textView)
-            scrollView.verticalRulerView = rulerView
-            scrollView.hasVerticalRuler = true
-            scrollView.rulersVisible = true
-        }
+        scrollView.documentView = textView
         context.coordinator.applyMarkdownStyle(to: textView)
         return scrollView
     }
@@ -224,8 +283,11 @@ private struct MarkdownTextEditor: NSViewRepresentable {
         }
 
         context.coordinator.rendersMarkdownStyle = rendersMarkdownStyle
+        textView.textContainerInset = NSSize(width: 20, height: 20)
         context.coordinator.applyMarkdownStyle(to: textView)
-        scrollView.verticalRulerView?.needsDisplay = true
+        textView.textContainer?.widthTracksTextView = true
+        configureTextContainer(for: textView, in: scrollView)
+        textView.needsDisplay = true
 
         let textLength = (textView.string as NSString).length
         let safeLocation = min(selectedRange.location, textLength)
@@ -234,26 +296,39 @@ private struct MarkdownTextEditor: NSViewRepresentable {
         if textView.selectedRange() != safeRange {
             textView.setSelectedRange(safeRange)
         }
+        context.coordinator.updateCursorPosition(textView: textView)
 
-        if scrollView.window?.firstResponder !== textView {
+        if isActive, scrollView.window?.firstResponder !== textView {
             DispatchQueue.main.async {
+                guard scrollView.window?.firstResponder !== textView else { return }
                 scrollView.window?.makeFirstResponder(textView)
             }
         }
     }
 
+    private func configureTextContainer(for textView: NSTextView, in scrollView: NSScrollView) {
+        let availableWidth = max(scrollView.contentSize.width, scrollView.bounds.width - 1, 120)
+        textView.textContainer?.containerSize = NSSize(
+            width: availableWidth,
+            height: CGFloat.greatestFiniteMagnitude
+        )
+    }
+
     final class Coordinator: NSObject, NSTextViewDelegate {
         @Binding var text: String
         @Binding var selectedRange: NSRange
+        @Binding var cursorPosition: CursorPosition
         var rendersMarkdownStyle: Bool
 
         init(
             text: Binding<String>,
             selectedRange: Binding<NSRange>,
+            cursorPosition: Binding<CursorPosition>,
             rendersMarkdownStyle: Bool
         ) {
             _text = text
             _selectedRange = selectedRange
+            _cursorPosition = cursorPosition
             self.rendersMarkdownStyle = rendersMarkdownStyle
         }
 
@@ -261,12 +336,30 @@ private struct MarkdownTextEditor: NSViewRepresentable {
             guard let textView = notification.object as? NSTextView else { return }
             text = textView.string
             applyMarkdownStyle(to: textView)
-            textView.enclosingScrollView?.verticalRulerView?.needsDisplay = true
+            textView.needsDisplay = true
+            updateCursorPosition(textView: textView)
         }
 
         func textViewDidChangeSelection(_ notification: Notification) {
             guard let textView = notification.object as? NSTextView else { return }
             selectedRange = textView.selectedRange()
+            updateCursorPosition(textView: textView)
+        }
+
+        @MainActor
+        func updateCursorPosition(textView: NSTextView) {
+            cursorPosition = Self.cursorPosition(
+                in: textView.string as NSString,
+                location: textView.selectedRange().location
+            )
+        }
+
+        private static func cursorPosition(in text: NSString, location: Int) -> CursorPosition {
+            let safeLocation = min(max(location, 0), text.length)
+            let prefix = text.substring(to: safeLocation) as NSString
+            let line = prefix.components(separatedBy: "\n").count
+            let lineRange = text.lineRange(for: NSRange(location: safeLocation, length: 0))
+            return CursorPosition(line: line, column: safeLocation - lineRange.location + 1)
         }
 
         @MainActor
@@ -590,65 +683,6 @@ private struct MarkdownTextEditor: NSViewRepresentable {
             style.lineSpacing = lineSpacing
             style.paragraphSpacing = lineSpacing
             return style
-        }
-    }
-}
-
-private final class LineNumberRulerView: NSRulerView {
-    private weak var textView: NSTextView?
-    private let textAttributes: [NSAttributedString.Key: Any] = [
-        .font: NSFont.monospacedSystemFont(ofSize: 11, weight: .regular),
-        .foregroundColor: NSColor.secondaryLabelColor
-    ]
-
-    init(textView: NSTextView) {
-        self.textView = textView
-        super.init(scrollView: textView.enclosingScrollView, orientation: .verticalRuler)
-        clientView = textView
-        ruleThickness = 46
-    }
-
-    required init(coder: NSCoder) {
-        fatalError("init(coder:) has not been implemented")
-    }
-
-    override func drawHashMarksAndLabels(in rect: NSRect) {
-        guard let textView,
-              let layoutManager = textView.layoutManager,
-              let textContainer = textView.textContainer else { return }
-
-        NSColor.textBackgroundColor.setFill()
-        rect.fill()
-
-        let visibleRect = textView.visibleRect
-        let glyphRange = layoutManager.glyphRange(forBoundingRect: visibleRect, in: textContainer)
-        let text = textView.string as NSString
-        var glyphIndex = glyphRange.location
-
-        while glyphIndex < NSMaxRange(glyphRange) {
-            var effectiveRange = NSRange(location: 0, length: 0)
-            let lineRect = layoutManager.lineFragmentRect(
-                forGlyphAt: glyphIndex,
-                effectiveRange: &effectiveRange
-            )
-            let characterIndex = layoutManager.characterIndexForGlyph(at: glyphIndex)
-            let characterLineRange = text.lineRange(for: NSRange(location: characterIndex, length: 0))
-            guard characterIndex == characterLineRange.location else {
-                glyphIndex = max(NSMaxRange(effectiveRange), glyphIndex + 1)
-                continue
-            }
-            let lineNumber = text.substring(to: min(characterIndex, text.length))
-                .filter { $0 == "\n" }
-                .count + 1
-
-            let label = "\(lineNumber)" as NSString
-            let labelSize = label.size(withAttributes: textAttributes)
-            let y = lineRect.minY + textView.textContainerOrigin.y - visibleRect.minY
-                + (lineRect.height - labelSize.height) / 2
-            let x = ruleThickness - labelSize.width - 8
-            label.draw(at: NSPoint(x: x, y: y), withAttributes: textAttributes)
-
-            glyphIndex = max(NSMaxRange(effectiveRange), glyphIndex + 1)
         }
     }
 }

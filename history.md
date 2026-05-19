@@ -799,3 +799,29 @@ Diff 버튼은 탭 내부 toolbar에서 전체 윈도우 우측 상단으로 이
 폴더 더블클릭 시 디렉터리 스캔과 git 변경 목록 조회가 메인 액터에서 동기 실행되어 큰 폴더나 git repository에서 UI가 멈출 수 있는 문제를 수정. 디렉터리 스캔, `git status`, Diff 대상 파일 읽기/비교를 백그라운드 작업으로 이동하고, 최신 요청 토큰만 UI에 반영해 빠른 폴더 이동 중 stale 결과가 덮어쓰지 않도록 보강. 수정된 빌드로 `v0.2.2` Release asset 교체를 진행.
 
 변경 파일: `Sources/Core/FileBrowser/DirectoryScanner.swift`, `Sources/Core/GitDiffState.swift`, `history.md`
+
+---
+
+### 대화 4: Raw Editor 표시 및 단축키 포커스 보정 후 v0.2.2 바이너리 교체
+
+**사용자:**
+> 마지막으로 cmd+1...0 으로 탭을 전환하면 창 내부에 포커스가 들어가지 않아.
+>
+> rawEditor에서 line number를 추가하면서 본문의 내용이 보이지 않는 문제가 생겼어
+>
+> 상단의 preview/rawEditor 아이콘이 중복으로 나오는 문제도 있어.
+>
+> 빈 터미널에 cd 라는 텍스트가 입력되는 문제도 있는데 찾아봐
+>
+> line number는 안보이네. 그냥 line number 표시하는 부분을 화면 하단에 status bar view를 추가해서 131:23 형태로 표시해줘.
+>
+> 표시 형식은 경로/파일이름:라인:컬럼 형식으로 해줘.
+>
+> 마지막 릴리즈의 바이너리를 교체하고 커밋 & 푸시해줘.
+
+**응답:**
+탭 전환 시 활성 탭에만 first responder를 넘기도록 `isActive`를 전달해 terminal/editor focus를 보정. opacity로 숨겨진 비활성 탭이 toolbar를 중복 등록하지 않도록 활성 Markdown 탭에서만 Preview/Raw Edit toolbar item을 생성하게 수정. `NSRulerView` 기반 line number 구현은 raw editor 본문 레이아웃을 깨는 문제가 있어 제거하고, 하단 status bar에 `/경로/파일이름:라인:컬럼` 형식으로 커서 위치를 표시하도록 변경.
+
+또한 앱 메뉴에 등록된 command shortcut이 비활성/미처리 상태로 터미널까지 내려가 문자로 입력되는 경로를 막기 위해 `MarkAgentWindow`의 key equivalent 처리를 보강. 현재 소스에서 `sendText`, `cd`, `NSEvent.keyEvent` 기반 터미널 입력 경로가 제거된 것도 확인.
+
+변경 파일: `Sources/App/MarkAgentWindow.swift`, `Sources/Views/EditorView.swift`, `Sources/Views/Main/ActiveTabContentView.swift`, `Sources/Views/Tabs/MarkdownTabView.swift`, `Sources/Views/Tabs/TerminalTabView.swift`, `history.md`

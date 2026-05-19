@@ -9,7 +9,7 @@ struct ActiveTabContentView: View {
     var body: some View {
         ZStack {
             ForEach(tabs.tabs, id: \.id) { tab in
-                tabContent(for: tab)
+                tabContent(for: tab, isActive: tabs.activeTabID == tab.id)
                     .opacity(tabs.activeTabID == tab.id ? 1 : 0)
             }
 
@@ -20,15 +20,16 @@ struct ActiveTabContentView: View {
     }
 
     @ViewBuilder
-    private func tabContent(for tab: any MarkAgentTab) -> some View {
+    private func tabContent(for tab: any MarkAgentTab, isActive: Bool) -> some View {
         if let terminalTab = tab as? TerminalTab {
-            TerminalTabView(state: terminalTab.state)
+            TerminalTabView(state: terminalTab.state, isActive: isActive)
                 .onChange(of: terminalTab.state.title) { _, _ in
                     onDocumentChanged()
                 }
         } else if let markdownTab = tab as? MarkdownTab {
             MarkdownTabView(
                 state: markdownTab.state,
+                isActive: isActive,
                 onOpenFile: onOpenFile,
                 onDocumentChanged: {
                     onDocumentChanged()

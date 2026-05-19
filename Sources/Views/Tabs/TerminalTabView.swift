@@ -3,6 +3,7 @@ import SwiftUI
 
 struct TerminalTabView: NSViewRepresentable {
     var state: TerminalTabState
+    var isActive: Bool
 
     func makeNSView(context: Context) -> AppTerminalView {
         let view = AppTerminalView()
@@ -15,6 +16,7 @@ struct TerminalTabView: NSViewRepresentable {
         state.startIfNeeded()
 
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            guard isActive else { return }
             view.window?.makeFirstResponder(view)
         }
 
@@ -25,8 +27,10 @@ struct TerminalTabView: NSViewRepresentable {
         nsView.controller = state.terminalViewState.controller
         nsView.configuration = state.terminalViewState.configuration
 
-        if state.terminalViewState.isFocused {
-            nsView.window?.makeFirstResponder(nsView)
+        if isActive {
+            DispatchQueue.main.async {
+                nsView.window?.makeFirstResponder(nsView)
+            }
         }
     }
 

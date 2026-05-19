@@ -2,6 +2,7 @@ import SwiftUI
 
 struct MarkdownTabView: View {
     var state: MarkdownTabState
+    var isActive: Bool
     var onOpenFile: () -> Void
     var onDocumentChanged: () -> Void
 
@@ -10,10 +11,12 @@ struct MarkdownTabView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .toolbar {
                 ToolbarItemGroup(placement: .automatic) {
-                    if state.document.supportsPreview {
-                        modeButton(.preview, title: "Preview", systemImage: "eye", shortcut: "1")
+                    if isActive {
+                        if state.document.supportsPreview {
+                            modeButton(.preview, title: "Preview", systemImage: "eye")
+                        }
+                        modeButton(.rawEdit, title: "Raw Edit", systemImage: "square.and.pencil")
                     }
-                    modeButton(.rawEdit, title: "Raw Edit", systemImage: "square.and.pencil", shortcut: "2")
                 }
             }
             .alert(
@@ -64,15 +67,15 @@ struct MarkdownTabView: View {
         EditorView(
             document: state.document,
             showsInlineToolbar: state.document.supportsPreview,
-            rendersMarkdownStyle: false
+            rendersMarkdownStyle: false,
+            isActive: isActive
         )
     }
 
     private func modeButton(
         _ mode: ViewMode,
         title: String,
-        systemImage: String,
-        shortcut: KeyEquivalent
+        systemImage: String
     ) -> some View {
         let isSelected = state.document.viewMode == mode
 
@@ -83,7 +86,6 @@ struct MarkdownTabView: View {
                 .foregroundStyle(isSelected ? Color.accentColor : Color.primary)
         }
         .help("\(title) 보기")
-        .keyboardShortcut(shortcut, modifiers: .command)
     }
 
     private var previewContent: some View {
