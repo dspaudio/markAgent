@@ -56,7 +56,7 @@ struct MarkdownTabView: View {
                 } else if state.document.editableContent.isEmpty {
                     emptyDocumentView
                 } else if state.document.showDiff, let diffResult = state.document.diffResult {
-                    DiffOverlayView(diffResult: diffResult) {
+                    DiffOverlayView(diffResult: diffResult, baseURL: documentImageBaseURL) {
                         state.document.showDiff = false
                     }
                 } else {
@@ -95,11 +95,15 @@ struct MarkdownTabView: View {
 
     private var previewContent: some View {
         ScrollView {
-            renderMarkdown(state.document.editableContent)
+            renderMarkdown(state.document.editableContent, baseURL: documentImageBaseURL)
                 .textSelection(.enabled)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(20)
         }
+    }
+
+    private var documentImageBaseURL: URL? {
+        state.document.fileURL?.deletingLastPathComponent()
     }
 
     private var loadingView: some View {

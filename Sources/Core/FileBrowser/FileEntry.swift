@@ -4,6 +4,7 @@ struct FileEntry: Identifiable, Equatable, Sendable {
     enum Kind: Sendable, Equatable {
         case directory
         case markdown
+        case image
         case file
     }
 
@@ -17,4 +18,14 @@ struct FileEntry: Identifiable, Equatable, Sendable {
 
     var isDirectory: Bool { kind == .directory }
     var isMarkdown: Bool { kind == .markdown }
+    var isImage: Bool { kind == .image }
+
+    static func isImageURL(_ url: URL) -> Bool {
+        switch url.pathExtension.lowercased() {
+        case "apng", "avif", "bmp", "gif", "heic", "heif", "ico", "jpeg", "jpg", "png", "tiff", "tif", "webp":
+            return true
+        default:
+            return false
+        }
+    }
 }

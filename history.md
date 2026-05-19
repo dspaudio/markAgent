@@ -15,6 +15,7 @@
 11. [세션 11: Raw Editor 확장 및 v0.2.2 릴리즈](#세션-11-raw-editor-확장-및-v022-릴리즈)
 12. [세션 12: Ghostty 테마 연동 및 v0.2.3 릴리즈](#세션-12-ghostty-테마-연동-및-v023-릴리즈)
 13. [세션 13: About 패널, README, v1.0.0 릴리즈](#세션-13-about-패널-readme-v100-릴리즈)
+14. [세션 14: README 재정리 및 v1.0.1 릴리즈](#세션-14-readme-재정리-및-v101-릴리즈)
 
 ---
 
@@ -52,6 +53,7 @@
 | 28 | v0.2.2 릴리즈 빌드 및 배포 | 앱 번들 버전 0.2.2 갱신, 릴리즈 빌드와 GitHub Release 업로드 준비 |
 | 29 | Ghostty 테마 연동 및 v0.2.3 릴리즈 | 앱 UI에 Ghostty 색상 테마 적용, 창 위치/전체화면 동작 보강, 릴리즈 빌드와 GitHub Release 준비 |
 | 30 | About 패널, README, v1.0.0 릴리즈 | About 메뉴 콘텐츠 추가, Always on Top 기본 비활성화, 한/영 README 작성, v1.0.0 릴리즈 준비 |
+| 31 | README 재정리 및 v1.0.1 릴리즈 | Ghostty 기반 AI 개발환경 컨셉 README 반영, 스크린샷 추가, 앱 번들 버전 1.0.1 갱신 및 릴리즈 준비 |
 
 ---
 
@@ -879,3 +881,34 @@ MarkAgent의 About 메뉴 콘텐츠를 보강하고, 기본 윈도우 동작을 
 앱 기본 윈도우 레벨을 `.normal`로 변경하고 Always on Top 상태를 기본 비활성화. `README.md`에 영어/한국어 소개, 기능, 요구 사항, 빌드/사용법, 오픈소스 라이선스 정보를 추가. 앱 번들 버전을 `1.0.0`으로 갱신하고 릴리즈 빌드, GitHub Release 업로드, 커밋 및 푸시를 진행.
 
 변경 파일: `Sources/App/AppDelegate.swift`, `Sources/App/Info.plist`, `Sources/App/AboutView.swift`, `README.md`, `history.md`
+
+---
+
+## 세션 14: README 재정리 및 v1.0.1 릴리즈
+
+> 날짜: 2026-05-19
+> 경로: ~/workspace/markAgent
+
+MarkAgent의 실제 구현 상태에 맞춰 README를 Ghostty 기반 AI 개발환경 중심으로 다시 정리하고, 현재 기능 개선분을 `v1.0.1` 릴리즈로 준비.
+
+### 대화 1: 실제 앱 컨셉에 맞춘 README 재작성
+
+**사용자:**
+> README.md 파일의 내용이 실제 구현된 앱의 내용과는 달라. 이 앱의 컨셉은 Ghostty 기반 멀티탭 터미널에서 CLI 기반 AI 에이전트로 개발할때 필요한 변경사항 추적, markdown 파일 편집 및 미리보기, 작업경로의 파일 내용 확인하기 기능을 기본적인 기능으로 구현한 앱이야. ~/.config/ghostty/config 파일에서 테마, 폰트 등의 설정을 읽어서 동작하며, 멀티 플렉서 기능이 필요할 경우 tmux를, 고급 파일 편집 기능이 필요하면 vim등 여러 cli 도구에 최적화된 개발환경이야. 이런 내용을 README.md 에 잘 정리해서 넣어줘. 그리고 얼마든지 포크해서 빌드해서 사용할 수 있도록 되어 있으며, AI 에이전트를 위한 작업 내역도 포함하고 있다는 점을 명시해줘. 마지막으로 README.md 파일의 상단에 적당한 크기로 이 앱의 아이콘을 표시하고, screenshot.png 파일도 넣어서 실제 실행 사진도 보여주면 좋겠어.
+
+**응답:**
+README를 한국어 중심으로 재작성해 Ghostty 기반 멀티탭 터미널, 작업 경로 파일 확인, Markdown 편집/미리보기, Git 변경사항 추적, `~/.config/ghostty/config` 연동, `tmux`/`vim` 등 CLI 도구와 함께 쓰는 개발환경 컨셉을 반영. 상단 앱 아이콘과 `screenshot.png` 실행 화면을 추가하고, 포크 후 빌드해 사용할 수 있다는 점과 AI 에이전트 작업 내역 포함 가능성을 명시.
+
+변경 파일: `README.md`, `screenshot.png`
+
+---
+
+### 대화 2: v1.0.1 릴리즈 빌드, GitHub Release, 커밋 및 푸시
+
+**사용자:**
+> 깃헙 릴리즈에 1.0.1로 빌드해서 업로드하고 커밋 & 푸시해줘.
+
+**응답:**
+앱 번들 버전을 `1.0.1`로 갱신하고, 현재 README 및 앱 기능 개선분을 포함해 릴리즈 빌드와 GitHub Release `v1.0.1` 업로드를 준비. 커밋 및 푸시 전에 본 세션의 작업 내용을 `history.md`에 기록.
+
+변경 파일: `Sources/App/Info.plist`, `README.md`, `screenshot.png`, `history.md`

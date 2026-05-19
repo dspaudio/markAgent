@@ -1,4 +1,5 @@
 import Markdown
+import Foundation
 import SwiftUI
 
 // MARK: - MarkdownRenderer
@@ -6,17 +7,24 @@ import SwiftUI
 struct MarkdownRenderer: MarkupVisitor {
     typealias Result = AnyView
 
+    let baseURL: URL?
+
+    init(baseURL: URL? = nil) {
+        self.baseURL = baseURL
+    }
+
     // MARK: Default
 
     mutating func defaultVisit(_ markup: Markup) -> AnyView {
         let children = Array(markup.children)
+        let baseURL = self.baseURL
         if children.isEmpty {
             return AnyView(EmptyView())
         }
         return AnyView(
             VStack(alignment: .leading, spacing: 0) {
                 ForEach(Array(children.enumerated()), id: \.offset) { _, child in
-                    Self.renderBlock(child)
+                    Self.renderBlock(child, baseURL: baseURL)
                 }
             }
         )
@@ -25,10 +33,11 @@ struct MarkdownRenderer: MarkupVisitor {
     // MARK: Document
 
     mutating func visitDocument(_ document: Document) -> AnyView {
-        AnyView(
+        let baseURL = self.baseURL
+        return AnyView(
             LazyVStack(alignment: .leading, spacing: 12) {
                 ForEach(Array(document.children.enumerated()), id: \.offset) { _, child in
-                    Self.renderBlock(child)
+                    Self.renderBlock(child, baseURL: baseURL)
                 }
             }
         )
@@ -57,6 +66,13 @@ struct MarkdownRenderer: MarkupVisitor {
     // MARK: Paragraph
 
     mutating func visitParagraph(_ paragraph: Paragraph) -> AnyView {
+        if let image = Self.standaloneImage(in: paragraph, baseURL: baseURL) {
+            return AnyView(
+                MarkdownImagePreview(reference: image)
+                    .padding(.bottom, 8)
+            )
+        }
+
         let text = Self.renderInlineChildren(paragraph)
         return AnyView(
             text
@@ -69,14 +85,15 @@ struct MarkdownRenderer: MarkupVisitor {
     // MARK: BlockQuote
 
     mutating func visitBlockQuote(_ blockQuote: BlockQuote) -> AnyView {
-        AnyView(
+        let baseURL = self.baseURL
+        return AnyView(
             HStack(alignment: .top, spacing: 12) {
                 RoundedRectangle(cornerRadius: 1.5)
                     .fill(Color.secondary.opacity(0.4))
                     .frame(width: 3)
                 VStack(alignment: .leading, spacing: 8) {
                     ForEach(Array(blockQuote.children.enumerated()), id: \.offset) { _, child in
-                        Self.renderBlock(child)
+                        Self.renderBlock(child, baseURL: baseURL)
                     }
                 }
                 .foregroundStyle(.secondary)
@@ -88,10 +105,11 @@ struct MarkdownRenderer: MarkupVisitor {
     // MARK: Lists
 
     mutating func visitUnorderedList(_ unorderedList: UnorderedList) -> AnyView {
-        AnyView(
+        let baseURL = self.baseURL
+        return AnyView(
             VStack(alignment: .leading, spacing: 4) {
                 ForEach(Array(unorderedList.children.enumerated()), id: \.offset) { _, child in
-                    Self.renderBlock(child)
+                    Self.renderBlock(child, baseURL: baseURL)
                 }
             }
             .padding(.bottom, 8)
@@ -101,10 +119,11 @@ struct MarkdownRenderer: MarkupVisitor {
     mutating func visitOrderedList(_ orderedList: OrderedList) -> AnyView {
         let items = Array(orderedList.children)
         let startIndex = orderedList.startIndex
+        let baseURL = self.baseURL
         return AnyView(
             VStack(alignment: .leading, spacing: 4) {
                 ForEach(Array(items.enumerated()), id: \.offset) { index, child in
-                    Self.renderOrderedListItem(child, number: startIndex + UInt(index))
+                    Self.renderOrderedListItem(child, number: startIndex + UInt(index), baseURL: baseURL)
                 }
             }
             .padding(.bottom, 8)
@@ -112,6 +131,7 @@ struct MarkdownRenderer: MarkupVisitor {
     }
 
     mutating func visitListItem(_ listItem: ListItem) -> AnyView {
+        let baseURL = self.baseURL
         if let checkbox = listItem.checkbox {
             return AnyView(
                 HStack(alignment: .firstTextBaseline, spacing: 8) {
@@ -120,7 +140,7 @@ struct MarkdownRenderer: MarkupVisitor {
                         .imageScale(.small)
                     VStack(alignment: .leading, spacing: 4) {
                         ForEach(Array(listItem.children.enumerated()), id: \.offset) { _, child in
-                            Self.renderBlock(child)
+                            Self.renderBlock(child, baseURL: baseURL)
                         }
                     }
                     .foregroundStyle(checkbox == .checked ? .secondary : .primary)
@@ -133,7 +153,7 @@ struct MarkdownRenderer: MarkupVisitor {
                     .foregroundStyle(.secondary)
                 VStack(alignment: .leading, spacing: 4) {
                     ForEach(Array(listItem.children.enumerated()), id: \.offset) { _, child in
-                        Self.renderBlock(child)
+                        Self.renderBlock(child, baseURL: baseURL)
                     }
                 }
             }
@@ -211,8 +231,8 @@ struct MarkdownRenderer: MarkupVisitor {
         }
     }
 
-    static func renderBlock(_ node: Markup) -> AnyView {
-        var renderer = MarkdownRenderer()
+    static func renderBlock(_ node: Markup, baseURL: URL? = nil) -> AnyView {
+        var renderer = MarkdownRenderer(baseURL: baseURL)
         return renderer.visit(node)
     }
 
@@ -253,7 +273,7 @@ struct MarkdownRenderer: MarkupVisitor {
         .multilineTextAlignment(alignment.textAlignment)
     }
 
-    private static func renderOrderedListItem(_ node: Markup, number: UInt) -> AnyView {
+    private static func renderOrderedListItem(_ node: Markup, number: UInt, baseURL: URL?) -> AnyView {
         AnyView(
             HStack(alignment: .firstTextBaseline, spacing: 8) {
                 SwiftUI.Text("\(number).")
@@ -261,11 +281,35 @@ struct MarkdownRenderer: MarkupVisitor {
                     .monospacedDigit()
                 VStack(alignment: .leading, spacing: 4) {
                     ForEach(Array(node.children.enumerated()), id: \.offset) { _, child in
-                        Self.renderBlock(child)
+                        Self.renderBlock(child, baseURL: baseURL)
                     }
                 }
             }
         )
+    }
+
+    private static func standaloneImage(in paragraph: Paragraph, baseURL: URL?) -> MarkdownImageReference? {
+        let children = Array(paragraph.children)
+        guard children.count == 1, let image = children.first as? Markdown.Image else { return nil }
+        return MarkdownImageReference.resolve(
+            source: image.source ?? "",
+            altText: Self.plainInlineText(image),
+            title: image.title,
+            baseURL: baseURL
+        )
+    }
+
+    private static func plainInlineText(_ node: some Markup) -> String {
+        node.children.map { child in
+            if let text = child as? Markdown.Text {
+                return text.string
+            }
+            if let code = child as? InlineCode {
+                return code.code
+            }
+            return plainInlineText(child)
+        }
+        .joined()
     }
 
     private static func headingFont(level: Int) -> Font {
@@ -631,10 +675,10 @@ private func tableAlignment(_ source: String) -> Markdown.Table.ColumnAlignment?
 // MARK: - Public API
 
 @MainActor
-func renderMarkdown(_ source: String) -> AnyView {
+func renderMarkdown(_ source: String, baseURL: URL? = nil) -> AnyView {
     let blocks = parsePreviewBlocks(from: source)
     if blocks.count == 1, case .markdown(let markdown) = blocks[0] {
-        return renderMarkdownDocument(markdown)
+        return renderMarkdownDocument(markdown, baseURL: baseURL)
     }
 
     return AnyView(
@@ -642,7 +686,7 @@ func renderMarkdown(_ source: String) -> AnyView {
             ForEach(Array(blocks.enumerated()), id: \.offset) { _, block in
                 switch block {
                 case .markdown(let markdown):
-                    renderMarkdownDocument(markdown)
+                    renderMarkdownDocument(markdown, baseURL: baseURL)
                 case .table(let table):
                     ManualMarkdownTableView(table: table)
                 }
@@ -652,8 +696,8 @@ func renderMarkdown(_ source: String) -> AnyView {
 }
 
 @MainActor
-private func renderMarkdownDocument(_ source: String) -> AnyView {
+private func renderMarkdownDocument(_ source: String, baseURL: URL?) -> AnyView {
     let document = Document(parsing: source, options: [.parseBlockDirectives, .disableSmartOpts])
-    var renderer = MarkdownRenderer()
+    var renderer = MarkdownRenderer(baseURL: baseURL)
     return renderer.visit(document)
 }

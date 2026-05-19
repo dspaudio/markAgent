@@ -13,7 +13,7 @@ struct GitChangesSidebar: View {
             fileList
             if let diffResult = state.selectedDiffResult {
                 Divider()
-                DiffOverlayView(diffResult: diffResult) {
+                DiffOverlayView(diffResult: diffResult, baseURL: state.selectedFile?.url.deletingLastPathComponent()) {
                     state.selectedFile = nil
                     state.selectedDiffResult = nil
                 }

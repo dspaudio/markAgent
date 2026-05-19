@@ -55,6 +55,44 @@ final class DocumentTests: XCTestCase {
         }
     }
 
+    func testMarkdownImageResolvesRelativePathFromDocumentDirectory() throws {
+        let tempDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("MarkAgentImageTests-\(UUID().uuidString)", isDirectory: true)
+        let assetsDir = tempDir.appendingPathComponent("assets", isDirectory: true)
+        try FileManager.default.createDirectory(at: assetsDir, withIntermediateDirectories: true)
+        let imageURL = assetsDir.appendingPathComponent("shot.png")
+        try Data([0x89, 0x50, 0x4E, 0x47]).write(to: imageURL)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let reference = MarkdownImageReference.resolve(
+            source: "assets/shot.png",
+            altText: "screenshot",
+            baseURL: tempDir
+        )
+
+        XCTAssertEqual(reference.resolvedURL?.standardizedFileURL, imageURL.standardizedFileURL)
+        XCTAssertFalse(reference.isMissing)
+    }
+
+    func testMarkdownImageLineParserFindsBrokenImagePath() {
+        let baseURL = URL(fileURLWithPath: "/tmp/markagent")
+        let reference = MarkdownImageLineParser.firstImage(
+            in: "![issue screenshot](screenshots/missing.png)",
+            baseURL: baseURL
+        )
+
+        XCTAssertEqual(reference?.source, "screenshots/missing.png")
+        XCTAssertEqual(reference?.altText, "issue screenshot")
+        XCTAssertTrue(reference?.isMissing == true)
+        XCTAssertEqual(reference?.resolvedURL?.path, "/tmp/markagent/screenshots/missing.png")
+    }
+
+    func testFileEntryRecognizesImageExtensions() {
+        XCTAssertTrue(FileEntry.isImageURL(URL(fileURLWithPath: "/tmp/screenshot.PNG")))
+        XCTAssertTrue(FileEntry.isImageURL(URL(fileURLWithPath: "/tmp/photo.heic")))
+        XCTAssertFalse(FileEntry.isImageURL(URL(fileURLWithPath: "/tmp/readme.md")))
+    }
+
     @MainActor
     func testRecentDocumentStoreMovesExistingDocumentToFront() {
         let suiteName = "RecentDocumentStoreTests-\(UUID().uuidString)"
