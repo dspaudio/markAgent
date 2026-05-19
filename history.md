@@ -728,3 +728,15 @@ libghostty surface API에는 font family 전용 필드가 없으므로 사용자
 앱 번들 버전을 `0.2.1`로 갱신하고, 릴리즈 빌드 산출물과 체크섬을 생성해 GitHub Release `v0.2.1`에 업로드. Release notes에는 요청된 macOS Gatekeeper 안내를 포함.
 
 변경 파일: `Sources/App/Info.plist`, `history.md`
+
+---
+
+### 대화 4: v0.2.1 font-family 명시 적용 바이너리 교체
+
+**사용자:**
+> 0.2.1 릴리즈의 바이너리를 교체하고 다시 커밋 & 푸시해줘
+
+**응답:**
+릴리즈 빌드에서 사용자 config 전체가 fallback될 경우에도 `font-family`가 유지되도록, config의 `font-family` 라인을 순서와 따옴표를 보존해 파싱하고 `TerminalConfiguration.withFontFamily(...)`로 명시 주입. `font-size`도 `TerminalConfiguration`과 surface option 양쪽에 반영되도록 유지. `v0.2.1` Release asset을 새 산출물로 교체하고 태그를 새 커밋으로 갱신.
+
+변경 파일: `Sources/Core/Tabs/GhosttyConfig.swift`, `Sources/Core/Tabs/TerminalTabState.swift`, `Tests/MarkAgentTests/GhosttyConfigTests.swift`, `history.md`

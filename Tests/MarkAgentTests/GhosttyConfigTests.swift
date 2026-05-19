@@ -65,7 +65,22 @@ final class GhosttyConfigTests: XCTestCase {
         let config = GhosttyConfig.userConfig(homeDirectory: home)
 
         XCTAssertEqual(config?.fontSize, 16)
+        XCTAssertEqual(config?.fontFamilies, ["\"JetBrains Mono\"", "\"Noto Sans CJK KR\""])
         XCTAssertTrue(config?.contents.contains("font-family = \"JetBrains Mono\"") == true)
         XCTAssertTrue(config?.contents.contains("font-family = \"Noto Sans CJK KR\"") == true)
+    }
+
+    func testParseFontFamiliesPreservesOrderAndQuotes() {
+        let contents = """
+        font-family = "JetBrains Mono"
+        font-size = 16
+        # font-family = "Ignored"
+        font-family = "Noto Sans CJK KR"
+        """
+
+        XCTAssertEqual(
+            GhosttyConfig.parseFontFamilies(from: contents),
+            ["\"JetBrains Mono\"", "\"Noto Sans CJK KR\""]
+        )
     }
 }

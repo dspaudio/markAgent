@@ -22,6 +22,14 @@ final class TerminalTabState {
 
         let userConfig = GhosttyConfig.userConfig()
         self.configFontSize = userConfig?.fontSize
+        let terminalConfiguration = TerminalConfiguration { builder in
+            for fontFamily in userConfig?.fontFamilies ?? [] {
+                builder.withFontFamily(fontFamily)
+            }
+            if let fontSize = userConfig?.fontSize {
+                builder.withFontSize(fontSize)
+            }
+        }
 
         let configSource: TerminalController.ConfigSource = if let userConfig {
             .file(userConfig.url.path)
@@ -32,7 +40,8 @@ final class TerminalTabState {
 
         self.terminalViewState = TerminalViewState(
             configSource: configSource,
-            theme: theme
+            theme: theme,
+            terminalConfiguration: terminalConfiguration
         )
     }
 
