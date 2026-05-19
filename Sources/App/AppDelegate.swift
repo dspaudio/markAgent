@@ -4,22 +4,28 @@ import UniformTypeIdentifiers
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
-    private var window: NSWindow?
-    let document = MarkdownDocument()
-    private let recentStore = RecentDocumentStore()
-    private var fileWatcher: FileWatcher?
-    private var isAlwaysOnTop = true
-    private let cliArguments: CLIArguments
+    let tabs = TabCollection()
+    let recentStore = RecentDocumentStore()
+    let directoryScanner: DirectoryScanner
+    let dirtyPrompter: AppDirtyDocumentPrompter
+    var isAlwaysOnTop = true
+    var window: NSWindow?
 
-    init(cliArguments: CLIArguments) {
-        self.cliArguments = cliArguments
+    private var isClosingAfterDirtyConfirmation = false
+
+    override init() {
+        let homeURL = URL(fileURLWithPath: NSHomeDirectory())
+        self.directoryScanner = DirectoryScanner(currentDirectory: homeURL)
+        self.dirtyPrompter = AppDirtyDocumentPrompter(window: nil)
         super.init()
+        tabs.dirtyPrompter = dirtyPrompter
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         setupMenu()
-        loadFromCLIArguments()
         setupWindow()
+        tabs.createTerminalTab(workingDirectory: URL(fileURLWithPath: NSHomeDirectory()))
+        updateWindowTitle()
         NSRunningApplication.current.activate()
     }
 
@@ -28,17 +34,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func setupWindow() {
-        let contentView = ContentView(
-            document: document,
+        let contentView = MainContainerView(
+            tabs: tabs,
+            scanner: directoryScanner,
             recentStore: recentStore,
-            onNewDocument: { [weak self] in
-                self?.newDocument()
-            },
             onOpenFile: { [weak self] in
                 self?.openFile()
-            },
-            onOpenRecent: { [weak self] url in
-                self?.openDocumentIfAllowed(url: url)
             },
             onDocumentChanged: { [weak self] in
                 self?.updateWindowTitle()
@@ -46,7 +47,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
         let hostingView = NSHostingView(rootView: contentView)
 
-        let window = NSWindow(
+        let window = MarkAgentWindow(
             contentRect: NSRect(x: 0, y: 0, width: 980, height: 700),
             styleMask: [.titled, .closable, .resizable, .miniaturizable],
             backing: .buffered,
@@ -58,6 +59,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         window.delegate = self
         window.makeKeyAndOrderFront(nil)
         self.window = window
+        dirtyPrompter.window = window
 
         positionWindowOnRight(window)
         updateWindowTitle()
@@ -80,7 +82,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func setupMenu() {
         let mainMenu = NSMenu()
 
-        // MARK: App 메뉴
         let appMenuItem = NSMenuItem()
         mainMenu.addItem(appMenuItem)
         let appMenu = NSMenu()
@@ -100,79 +101,49 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         appMenu.addItem(servicesMenuItem)
 
         appMenu.addItem(.separator())
-        appMenu.addItem(NSMenuItem(
-            title: "Hide MarkAgent",
-            action: #selector(NSApplication.hide(_:)),
-            keyEquivalent: "h"
-        ))
-        let hideOthersItem = NSMenuItem(
-            title: "Hide Others",
-            action: #selector(NSApplication.hideOtherApplications(_:)),
-            keyEquivalent: "h"
-        )
+        appMenu.addItem(NSMenuItem(title: "Hide MarkAgent", action: #selector(NSApplication.hide(_:)), keyEquivalent: "h"))
+        let hideOthersItem = NSMenuItem(title: "Hide Others", action: #selector(NSApplication.hideOtherApplications(_:)), keyEquivalent: "h")
         hideOthersItem.keyEquivalentModifierMask = [.command, .option]
         appMenu.addItem(hideOthersItem)
-        appMenu.addItem(NSMenuItem(
-            title: "Show All",
-            action: #selector(NSApplication.unhideAllApplications(_:)),
-            keyEquivalent: ""
-        ))
+        appMenu.addItem(NSMenuItem(title: "Show All", action: #selector(NSApplication.unhideAllApplications(_:)), keyEquivalent: ""))
         appMenu.addItem(.separator())
-        appMenu.addItem(NSMenuItem(
-            title: "Quit MarkAgent",
-            action: #selector(NSApplication.terminate(_:)),
-            keyEquivalent: "q"
-        ))
+        appMenu.addItem(NSMenuItem(title: "Quit MarkAgent", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
 
-        // MARK: File 메뉴
         let fileMenuItem = NSMenuItem()
         mainMenu.addItem(fileMenuItem)
         let fileMenu = NSMenu(title: "File")
         fileMenuItem.submenu = fileMenu
 
-        let newItem = NSMenuItem(
-            title: "New",
-            action: #selector(newDocument),
-            keyEquivalent: "n"
-        )
-        newItem.target = self
-        fileMenu.addItem(newItem)
+        let newTerminalItem = NSMenuItem(title: "New Terminal Tab", action: #selector(newTab), keyEquivalent: "t")
+        newTerminalItem.target = self
+        fileMenu.addItem(newTerminalItem)
+
+        let newMarkdownItem = NSMenuItem(title: "New Markdown Tab", action: #selector(newMarkdownTab), keyEquivalent: "n")
+        newMarkdownItem.target = self
+        fileMenu.addItem(newMarkdownItem)
 
         fileMenu.addItem(.separator())
 
-        let openItem = NSMenuItem(
-            title: "Open…",
-            action: #selector(openFile),
-            keyEquivalent: "o"
-        )
+        let openItem = NSMenuItem(title: "Open…", action: #selector(openFile), keyEquivalent: "o")
         openItem.target = self
         fileMenu.addItem(openItem)
 
         fileMenu.addItem(.separator())
 
-        let saveItem = NSMenuItem(
-            title: "Save",
-            action: #selector(saveDocument),
-            keyEquivalent: "s"
-        )
+        let saveItem = NSMenuItem(title: "Save", action: #selector(saveDocument), keyEquivalent: "s")
         saveItem.target = self
         fileMenu.addItem(saveItem)
 
         fileMenu.addItem(.separator())
 
-        let closeItem = NSMenuItem(
-            title: "Close Window",
-            action: #selector(NSWindow.performClose(_:)),
-            keyEquivalent: "w"
-        )
-        fileMenu.addItem(closeItem)
+        let closeTabItem = NSMenuItem(title: "Close Tab", action: #selector(closeTab), keyEquivalent: "w")
+        closeTabItem.target = self
+        fileMenu.addItem(closeTabItem)
 
-        // MARK: Edit 메뉴
         let editMenuItem = NSMenuItem()
         mainMenu.addItem(editMenuItem)
         let editMenu = NSMenu(title: "Edit")
         editMenuItem.submenu = editMenu
-
         editMenu.addItem(NSMenuItem(title: "Undo", action: Selector(("undo:")), keyEquivalent: "z"))
         editMenu.addItem(NSMenuItem(title: "Redo", action: Selector(("redo:")), keyEquivalent: "Z"))
         editMenu.addItem(.separator())
@@ -183,112 +154,195 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         editMenu.addItem(.separator())
         editMenu.addItem(NSMenuItem(title: "Select All", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a"))
 
-        // MARK: View 메뉴
         let viewMenuItem = NSMenuItem()
         mainMenu.addItem(viewMenuItem)
         let viewMenu = NSMenu(title: "View")
         viewMenuItem.submenu = viewMenu
 
-        let toggleModeItem = NSMenuItem(
-            title: "Preview",
-            action: #selector(toggleViewMode),
-            keyEquivalent: "1"
-        )
+        let gotoTabItems: [(title: String, selector: Selector, key: String)] = [
+            ("Select Tab 1", #selector(gotoTab1), "1"),
+            ("Select Tab 2", #selector(gotoTab2), "2"),
+            ("Select Tab 3", #selector(gotoTab3), "3"),
+            ("Select Tab 4", #selector(gotoTab4), "4"),
+            ("Select Tab 5", #selector(gotoTab5), "5"),
+            ("Select Tab 6", #selector(gotoTab6), "6"),
+            ("Select Tab 7", #selector(gotoTab7), "7"),
+            ("Select Tab 8", #selector(gotoTab8), "8"),
+            ("Select Tab 9", #selector(gotoTab9), "9"),
+            ("Select Tab 10", #selector(gotoTab10), "0"),
+        ]
+        for item in gotoTabItems {
+            let menuItem = NSMenuItem(title: item.title, action: item.selector, keyEquivalent: item.key)
+            menuItem.target = self
+            viewMenu.addItem(menuItem)
+        }
+
+        viewMenu.addItem(.separator())
+
+        let toggleModeItem = NSMenuItem(title: "Preview", action: #selector(toggleViewMode), keyEquivalent: "p")
+        toggleModeItem.keyEquivalentModifierMask = [.command, .control]
         toggleModeItem.target = self
         viewMenu.addItem(toggleModeItem)
 
-        let rawViewItem = NSMenuItem(
-            title: "Raw Edit",
-            action: #selector(showRawView),
-            keyEquivalent: "2"
-        )
+        let rawViewItem = NSMenuItem(title: "Raw Edit", action: #selector(showRawView), keyEquivalent: "r")
+        rawViewItem.keyEquivalentModifierMask = [.command, .control]
         rawViewItem.target = self
         viewMenu.addItem(rawViewItem)
 
-        let toggleDiffItem = NSMenuItem(
-            title: "Toggle Diff",
-            action: #selector(toggleDiff),
-            keyEquivalent: "d"
-        )
+        let toggleDiffItem = NSMenuItem(title: "Toggle Diff", action: #selector(toggleDiff), keyEquivalent: "d")
         toggleDiffItem.target = self
         viewMenu.addItem(toggleDiffItem)
 
         viewMenu.addItem(.separator())
 
-        let alwaysOnTopItem = NSMenuItem(
-            title: "Always on Top",
-            action: #selector(toggleAlwaysOnTop),
-            keyEquivalent: "t"
-        )
+        let alwaysOnTopItem = NSMenuItem(title: "Always on Top", action: #selector(toggleAlwaysOnTop), keyEquivalent: "t")
         alwaysOnTopItem.keyEquivalentModifierMask = [.command, .shift]
         alwaysOnTopItem.target = self
         alwaysOnTopItem.state = .on
         viewMenu.addItem(alwaysOnTopItem)
 
         viewMenu.addItem(.separator())
-
-        let enterFullScreenItem = NSMenuItem(
-            title: "Enter Full Screen",
-            action: #selector(NSWindow.toggleFullScreen(_:)),
-            keyEquivalent: "f"
-        )
+        let enterFullScreenItem = NSMenuItem(title: "Enter Full Screen", action: #selector(NSWindow.toggleFullScreen(_:)), keyEquivalent: "f")
         enterFullScreenItem.keyEquivalentModifierMask = [.command, .control]
         viewMenu.addItem(enterFullScreenItem)
 
-        // MARK: Window 메뉴
         let windowMenuItem = NSMenuItem()
         mainMenu.addItem(windowMenuItem)
         let windowMenu = NSMenu(title: "Window")
         windowMenuItem.submenu = windowMenu
         NSApp.windowsMenu = windowMenu
-
-        windowMenu.addItem(NSMenuItem(
-            title: "Minimize",
-            action: #selector(NSWindow.performMiniaturize(_:)),
-            keyEquivalent: "m"
-        ))
-        windowMenu.addItem(NSMenuItem(
-            title: "Zoom",
-            action: #selector(NSWindow.performZoom(_:)),
-            keyEquivalent: ""
-        ))
+        windowMenu.addItem(NSMenuItem(title: "Minimize", action: #selector(NSWindow.performMiniaturize(_:)), keyEquivalent: "m"))
+        windowMenu.addItem(NSMenuItem(title: "Zoom", action: #selector(NSWindow.performZoom(_:)), keyEquivalent: ""))
         windowMenu.addItem(.separator())
-        windowMenu.addItem(NSMenuItem(
-            title: "Bring All to Front",
-            action: #selector(NSApplication.arrangeInFront(_:)),
-            keyEquivalent: ""
-        ))
+        windowMenu.addItem(NSMenuItem(title: "Bring All to Front", action: #selector(NSApplication.arrangeInFront(_:)), keyEquivalent: ""))
 
-        // MARK: Help 메뉴
         let helpMenuItem = NSMenuItem()
         mainMenu.addItem(helpMenuItem)
         let helpMenu = NSMenu(title: "Help")
         helpMenuItem.submenu = helpMenu
         NSApp.helpMenu = helpMenu
-
-        let helpItem = NSMenuItem(
-            title: "MarkAgent Help",
-            action: #selector(showHelp),
-            keyEquivalent: "?"
-        )
+        let helpItem = NSMenuItem(title: "MarkAgent Help", action: #selector(showHelp), keyEquivalent: "?")
         helpItem.target = self
         helpMenu.addItem(helpItem)
 
         NSApp.mainMenu = mainMenu
     }
 
+    @objc private func newTab() {
+        newTerminalTab()
+    }
+
+    @objc private func newTerminalTab() {
+        tabs.createTerminalTab(workingDirectory: directoryScanner.currentDirectory)
+        updateWindowTitle()
+    }
+
+    @objc private func newMarkdownTab() {
+        tabs.createMarkdownTab(fileURL: nil)
+        updateWindowTitle()
+    }
+
+    @objc private func gotoTab1() {
+        tabs.selectTab(at: 0)
+        updateWindowTitle()
+    }
+
+    @objc private func gotoTab2() {
+        tabs.selectTab(at: 1)
+        updateWindowTitle()
+    }
+
+    @objc private func gotoTab3() {
+        tabs.selectTab(at: 2)
+        updateWindowTitle()
+    }
+
+    @objc private func gotoTab4() {
+        tabs.selectTab(at: 3)
+        updateWindowTitle()
+    }
+
+    @objc private func gotoTab5() {
+        tabs.selectTab(at: 4)
+        updateWindowTitle()
+    }
+
+    @objc private func gotoTab6() {
+        tabs.selectTab(at: 5)
+        updateWindowTitle()
+    }
+
+    @objc private func gotoTab7() {
+        tabs.selectTab(at: 6)
+        updateWindowTitle()
+    }
+
+    @objc private func gotoTab8() {
+        tabs.selectTab(at: 7)
+        updateWindowTitle()
+    }
+
+    @objc private func gotoTab9() {
+        tabs.selectTab(at: 8)
+        updateWindowTitle()
+    }
+
+    @objc private func gotoTab10() {
+        tabs.selectTab(at: 9)
+        updateWindowTitle()
+    }
+
+    @objc private func closeTab() {
+        Task { [weak self] in
+            guard let self else { return }
+            _ = await tabs.closeActiveTab()
+            updateWindowTitle()
+        }
+    }
+
+    @objc private func openFile() {
+        let panel = NSOpenPanel()
+        panel.title = "마크다운 파일 열기"
+        panel.prompt = "열기"
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = false
+        panel.allowsMultipleSelection = false
+        panel.allowedContentTypes = markdownContentTypes
+
+        let completion: (NSApplication.ModalResponse) -> Void = { [weak self] response in
+            guard response == .OK, let url = panel.url else { return }
+            self?.openMarkdownFile(url)
+        }
+
+        if let window {
+            panel.beginSheetModal(for: window, completionHandler: completion)
+        } else {
+            completion(panel.runModal())
+        }
+    }
+
+    private func openMarkdownFile(_ url: URL) {
+        tabs.createMarkdownTab(fileURL: url)
+        recentStore.record(url: url)
+        directoryScanner.setDirectory(url.deletingLastPathComponent())
+        updateWindowTitle()
+    }
+
     @objc private func saveDocument() {
-        _ = saveDocumentInteractively()
+        _ = saveActiveMarkdownDocument()
     }
 
     @discardableResult
-    private func saveDocumentInteractively() -> Bool {
+    private func saveActiveMarkdownDocument() -> Bool {
+        guard let markdownTab = tabs.activeMarkdownTab else { return false }
         do {
-            if document.fileURL == nil {
-                guard let url = chooseSaveURL() else { return false }
-                try saveDocumentAt(url)
+            if markdownTab.state.fileURL == nil {
+                guard let url = chooseSaveURL(suggestedName: markdownTab.title) else { return false }
+                try markdownTab.state.save(to: url)
+                recentStore.record(url: url)
+                directoryScanner.setDirectory(url.deletingLastPathComponent())
             } else {
-                try document.save()
+                try markdownTab.state.save()
             }
             updateWindowTitle()
             return true
@@ -298,33 +352,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    private func saveDocumentAt(_ url: URL) throws {
-        Task {
-            await fileWatcher?.stopWatching()
-        }
-        try document.save(to: url)
-        recentStore.record(url: url)
-        startWatching(url: url)
-    }
-
-    private func chooseSaveURL() -> URL? {
+    private func chooseSaveURL(suggestedName: String) -> URL? {
         let panel = NSSavePanel()
         panel.title = "마크다운 문서 저장"
         panel.prompt = "저장"
-        panel.nameFieldStringValue = suggestedSaveFileName
-        panel.allowedContentTypes = [
-            UTType(filenameExtension: "md"),
-            UTType(filenameExtension: "markdown"),
-            .plainText
-        ].compactMap { $0 }
+        panel.nameFieldStringValue = suggestedName
+        panel.directoryURL = directoryScanner.currentDirectory
+        panel.allowedContentTypes = markdownContentTypes
         panel.canCreateDirectories = true
         panel.isExtensionHidden = false
 
         return panel.runModal() == .OK ? panel.url : nil
     }
 
-    private var suggestedSaveFileName: String {
-        document.fileURL?.lastPathComponent ?? "Untitled.md"
+    private var markdownContentTypes: [UTType] {
+        [
+            UTType(filenameExtension: "md"),
+            UTType(filenameExtension: "markdown"),
+            UTType(filenameExtension: "txt"),
+            .plainText
+        ].compactMap { $0 }
     }
 
     private func showSaveError(_ error: Error) {
@@ -335,63 +382,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         alert.runModal()
     }
 
-    @objc private func newDocument() {
-        guard canReplaceCurrentDocument() else { return }
-
-        Task {
-            await fileWatcher?.stopWatching()
-        }
-        fileWatcher = nil
-        document.resetToNewDocument()
-        updateWindowTitle()
-    }
-
-    @objc private func openFile() {
-        guard canReplaceCurrentDocument() else { return }
-
-        let panel = NSOpenPanel()
-        panel.title = "마크다운 파일 열기"
-        panel.prompt = "열기"
-        panel.canChooseFiles = true
-        panel.canChooseDirectories = false
-        panel.allowsMultipleSelection = false
-        panel.allowedContentTypes = [
-            UTType(filenameExtension: "md"),
-            UTType(filenameExtension: "markdown"),
-            UTType(filenameExtension: "txt"),
-            .plainText
-        ].compactMap { $0 }
-
-        let completion: (NSApplication.ModalResponse) -> Void = { [weak self] response in
-            guard response == .OK, let url = panel.url else { return }
-            self?.openDocument(url: url)
-        }
-
-        if let window {
-            panel.beginSheetModal(for: window, completionHandler: completion)
-        } else {
-            completion(panel.runModal())
-        }
-    }
-
     @objc private func toggleViewMode() {
-        document.viewMode = .preview
+        guard let markdownTab = tabs.activeMarkdownTab else { return }
+        markdownTab.state.document.viewMode = .preview
         updateViewMenuState()
     }
 
     @objc private func showRawView() {
-        document.viewMode = .rawEdit
+        guard let markdownTab = tabs.activeMarkdownTab else { return }
+        markdownTab.state.document.viewMode = .rawEdit
         updateViewMenuState()
     }
 
     @objc private func toggleDiff() {
-        guard document.diffResult != nil else { return }
+        guard let document = tabs.activeMarkdownTab?.state.document,
+              document.diffResult != nil else { return }
         document.showDiff.toggle()
         updateViewMenuState()
-    }
-
-    @objc private func showHelp() {
-        NSWorkspace.shared.open(URL(string: "https://github.com/user/markAgent")!)
     }
 
     @objc private func toggleAlwaysOnTop() {
@@ -401,94 +408,36 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         updateViewMenuState()
     }
 
+    @objc private func showHelp() {
+        guard let url = URL(string: "https://github.com/user/markAgent") else { return }
+        NSWorkspace.shared.open(url)
+    }
+
     private func updateWindowTitle() {
-        let fileName = document.fileURL?.lastPathComponent ?? "MarkAgent"
-        var title = fileName
-        if document.isDirty { title += " *" }
+        var title = tabs.activeTab?.title ?? "MarkAgent"
+        if tabs.activeTab?.isDirty == true { title += " *" }
         if isAlwaysOnTop { title += " 📌" }
-        if cliArguments.waitMode { title += " [wait]" }
         window?.title = title
-        window?.isDocumentEdited = document.isDirty
+        window?.isDocumentEdited = tabs.tabs.contains { $0.isDirty }
+        updateViewMenuState()
     }
 
     private func updateViewMenuState() {
         guard let viewMenu = NSApp.mainMenu?.item(withTitle: "View")?.submenu else { return }
-        viewMenu.items.first { $0.action == #selector(toggleViewMode) }?.state = document.viewMode == .preview ? .on : .off
-        viewMenu.items.first { $0.action == #selector(showRawView) }?.state = document.viewMode == .rawEdit ? .on : .off
-        viewMenu.items.first { $0.action == #selector(toggleDiff) }?.isEnabled = document.diffResult != nil
-        viewMenu.items.first { $0.action == #selector(toggleDiff) }?.state = document.showDiff ? .on : .off
+        let document = tabs.activeMarkdownTab?.state.document
+        viewMenu.items.first { $0.action == #selector(toggleViewMode) }?.state = document?.viewMode == .preview ? .on : .off
+        viewMenu.items.first { $0.action == #selector(showRawView) }?.state = document?.viewMode == .rawEdit ? .on : .off
+        viewMenu.items.first { $0.action == #selector(toggleDiff) }?.isEnabled = document?.diffResult != nil
+        viewMenu.items.first { $0.action == #selector(toggleDiff) }?.state = document?.showDiff == true ? .on : .off
         viewMenu.items.first { $0.action == #selector(toggleAlwaysOnTop) }?.state = isAlwaysOnTop ? .on : .off
     }
 
-    private func loadFromCLIArguments() {
-        guard let path = cliArguments.filePath else {
-            document.isLoaded = true
-            document.errorMessage = nil
-            return
+    private func confirmCloseAllDirtyMarkdownTabs() async -> Bool {
+        for tab in tabs.tabs {
+            guard let markdownTab = tab as? MarkdownTab else { continue }
+            guard await markdownTab.state.prepareForClose(prompt: dirtyPrompter) else { return false }
         }
-
-        switch MarkdownDocument.resolveFileURL(from: path) {
-        case .success(let url):
-            openDocument(url: url)
-        case .failure(let error):
-            document.errorMessage = error.errorDescription
-        }
-    }
-
-    private func openDocumentIfAllowed(url: URL) {
-        guard canReplaceCurrentDocument() else { return }
-        openDocument(url: url)
-    }
-
-    private func openDocument(url: URL) {
-        guard FileManager.default.fileExists(atPath: url.path) else {
-            document.errorMessage = DocumentError.fileNotFound(url.path).errorDescription
-            document.isLoaded = false
-            updateWindowTitle()
-            return
-        }
-
-        Task {
-            await fileWatcher?.stopWatching()
-        }
-
-        document.load(from: url)
-        document.viewMode = .rawEdit
-        recentStore.record(url: url)
-        startWatching(url: url)
-        updateWindowTitle()
-    }
-
-    private func canReplaceCurrentDocument() -> Bool {
-        guard document.isDirty else { return true }
-
-        let alert = NSAlert()
-        alert.messageText = "저장되지 않은 변경사항이 있습니다."
-        alert.informativeText = "다른 파일을 열기 전에 현재 변경사항을 저장하시겠습니까?"
-        alert.addButton(withTitle: "저장")
-        alert.addButton(withTitle: "저장 안 함")
-        alert.addButton(withTitle: "취소")
-        alert.alertStyle = .warning
-
-        switch alert.runModal() {
-        case .alertFirstButtonReturn:
-            return saveDocumentInteractively()
-        case .alertSecondButtonReturn:
-            return true
-        default:
-            return false
-        }
-    }
-
-    private func startWatching(url: URL) {
-        let doc = document
-        let watcher = FileWatcher {
-            doc.loadIfNotRecentlySaved(from: url)
-        }
-        fileWatcher = watcher
-        Task {
-            await watcher.startWatching(url: url)
-        }
+        return true
     }
 }
 
@@ -496,24 +445,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
 extension AppDelegate: NSWindowDelegate {
     func windowShouldClose(_ sender: NSWindow) -> Bool {
-        guard document.isDirty else { return true }
+        if isClosingAfterDirtyConfirmation { return true }
+        guard tabs.tabs.contains(where: { $0 is MarkdownTab && $0.isDirty }) else { return true }
 
-        let alert = NSAlert()
-        alert.messageText = "저장되지 않은 변경사항이 있습니다."
-        alert.informativeText = "변경사항을 저장하시겠습니까?"
-        alert.addButton(withTitle: "저장")
-        alert.addButton(withTitle: "저장 안 함")
-        alert.addButton(withTitle: "취소")
-        alert.alertStyle = .warning
-
-        switch alert.runModal() {
-        case .alertFirstButtonReturn:
-            return saveDocumentInteractively()
-        case .alertSecondButtonReturn:
-            return true
-        default:
-            return false
+        Task { [weak self, weak sender] in
+            guard let self, let sender else { return }
+            if await confirmCloseAllDirtyMarkdownTabs() {
+                isClosingAfterDirtyConfirmation = true
+                sender.performClose(nil)
+            }
         }
+        return false
     }
 }
 
@@ -522,23 +464,47 @@ extension AppDelegate: NSWindowDelegate {
 extension AppDelegate: NSMenuItemValidation {
     func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
         switch menuItem.action {
-        case #selector(newDocument),
+        case #selector(newTab),
+             #selector(newTerminalTab),
+             #selector(newMarkdownTab),
              #selector(openFile),
-             #selector(saveDocument),
+             #selector(toggleAlwaysOnTop),
              #selector(showHelp):
             return true
+        case #selector(gotoTab1):
+            return tabs.tabs.count >= 1
+        case #selector(gotoTab2):
+            return tabs.tabs.count >= 2
+        case #selector(gotoTab3):
+            return tabs.tabs.count >= 3
+        case #selector(gotoTab4):
+            return tabs.tabs.count >= 4
+        case #selector(gotoTab5):
+            return tabs.tabs.count >= 5
+        case #selector(gotoTab6):
+            return tabs.tabs.count >= 6
+        case #selector(gotoTab7):
+            return tabs.tabs.count >= 7
+        case #selector(gotoTab8):
+            return tabs.tabs.count >= 8
+        case #selector(gotoTab9):
+            return tabs.tabs.count >= 9
+        case #selector(gotoTab10):
+            return tabs.tabs.count >= 10
+        case #selector(closeTab):
+            return tabs.activeTab != nil
+        case #selector(saveDocument):
+            return tabs.activeMarkdownTab != nil
         case #selector(toggleViewMode):
-            menuItem.state = document.viewMode == .preview ? .on : .off
-            return true
+            menuItem.state = tabs.activeMarkdownTab?.state.document.viewMode == .preview ? .on : .off
+            return tabs.activeMarkdownTab != nil
         case #selector(showRawView):
-            menuItem.state = document.viewMode == .rawEdit ? .on : .off
-            return true
+            menuItem.state = tabs.activeMarkdownTab?.state.document.viewMode == .rawEdit ? .on : .off
+            return tabs.activeMarkdownTab != nil
         case #selector(toggleDiff):
-            menuItem.state = document.showDiff ? .on : .off
-            return document.diffResult != nil
-        case #selector(toggleAlwaysOnTop):
-            menuItem.state = isAlwaysOnTop ? .on : .off
-            return true
+            let document = tabs.activeMarkdownTab?.state.document
+            menuItem.state = document?.showDiff == true ? .on : .off
+            return document?.diffResult != nil
         default:
             return true
         }

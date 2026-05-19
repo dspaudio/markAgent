@@ -574,3 +574,50 @@ CLAUDE 중심 프로젝트 설정을 Codex/OSS 기준으로 전환하고, MarkAg
 - `scripts/bundle.sh release`
 
 변경 파일: `Sources/App/AppDelegate.swift`, `Sources/Core/Document.swift`, `Sources/Views/ContentView.swift`, `Sources/App/Info.plist`, `history.md`
+
+---
+
+## 세션 8: libghostty-spm 통합 및 터미널 중심 탭 앱 전환
+
+> 날짜: 2026-05-19
+> 경로: ~/workspace/markAgent
+
+MarkAgent를 기존 마크다운 뷰어에서 libghostty-spm 기반 터미널 중심 탭 앱으로 전환. 좌측 yazi 스타일 파일 브라우저 사이드바, 우측 터미널/마크다운 탭, `~/.config/ghostty/config` 테마 자동 적용, 사이드바-터미널 양방향 디렉토리 동기화 구현.
+
+### 대화 1: libghostty-spm 통합 및 탭 아키텍처 구현
+
+**사용자:**
+> markAgent에 libghostty-spm을 먼저 붙이고, 탭 기능까지 구현해줘.
+
+**응답:**
+Package.swift에 libghostty-spm 의존성 추가 (GhosttyTerminal, GhosttyTheme). Core Layer에 TabCollection, TerminalTab, MarkdownTab, TerminalTabState, MarkdownTabState, DirectoryScanner, FileEntry 구현. Views Layer에 FileBrowserSidebar, FileEntryRow, TabBarView, TabItemView, NewTabChooserView, MainContainerView, ActiveTabContentView, TerminalTabView (NSViewRepresentable), MarkdownTabView 구현. App Layer에서 AppDelegate 전면 재설계 (CLIArguments.swift 삭제, 순수 GUI .app 전환).
+
+- TerminalTabView: NSViewRepresentable로 AppTerminalView 직접 관리, Coordinator로 Title/Close/Pwd Delegate 연결
+- ActiveTabContentView: ZStack + opacity 패턴으로 탭 전환 시 뷰 재생성 방지
+- MarkAgentWindow: performKeyEquivalent 오버라이드로 ⌘단축키가 터미널에 먹히는 문제 해결
+- `~/.config/ghostty/config`에서 `theme = "..."` 파싱하여 GhosttyThemeCatalog로 테마 적용 (485개 테마)
+- TerminalSurfacePwdDelegate (OSC 7) 연결로 `cd` 시 workingDirectory 실시간 동기화 → 사이드바 자동 갱신
+- TerminalSurfaceCloseDelegate 연결로 `exit` 시 탭 자동 닫기
+- 앱 실행 시 `makeFirstResponder`로 터미널에 즉시 포커스
+- 사이드바 디렉토리 더블클릭 → 터미널에 `cd <path>` + Enter 키 이벤트 전송 (NSApp.postEvent)
+
+**변경 파일:**
+- `Package.swift`, `Package.resolved` (libghostty-spm 의존성 추가)
+- `Sources/App/AppDelegate.swift` (전면 재설계)
+- `Sources/App/main.swift` (단순화)
+- `Sources/App/CLIArguments.swift` (삭제)
+- `Sources/App/AppDirtyDocumentPrompter.swift` (신규)
+- `Sources/App/MarkAgentWindow.swift` (신규)
+- `Sources/Core/FileBrowser/` (DirectoryScanner, FileEntry 신규)
+- `Sources/Core/Tabs/` (TabCollection, TerminalTab, MarkdownTab, TerminalTabState, MarkdownTabState 신규)
+- `Sources/Views/Main/` (MainContainerView, ActiveTabContentView, TabBarView, TabItemView, NewTabChooserView 신규)
+- `Sources/Views/Sidebar/` (FileBrowserSidebar, FileEntryRow, RecentDocumentsSection 신규)
+- `Sources/Views/Tabs/` (TerminalTabView, MarkdownTabView 신규)
+
+### 검증
+
+- `swift build` 성공
+- `swift test` 성공 (기존 4개 테스트)
+- `scripts/bundle.sh` 성공
+- `scripts/bundle.sh release` 성공
+
