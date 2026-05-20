@@ -18,7 +18,7 @@ final class TerminalTabState {
     init(id: UUID = UUID(), workingDirectory: URL) {
         self.id = id
         self.workingDirectory = workingDirectory
-        self.title = workingDirectory.lastPathComponent
+        self.title = Self.title(for: workingDirectory)
 
         let userConfig = GhosttyConfig.userConfig()
         self.configFontSize = userConfig?.fontSize
@@ -72,8 +72,24 @@ final class TerminalTabState {
         title = terminalViewState.title
     }
 
+    func updateWorkingDirectory(_ url: URL) {
+        workingDirectory = url
+        title = Self.title(for: url)
+        onDirectoryChanged?(url)
+    }
+
     func close() {
         terminalViewState.onClose = nil
         didStart = false
+    }
+
+    private static func title(for url: URL) -> String {
+        let path = url.standardizedFileURL.path
+        if path == NSHomeDirectory() {
+            return "~"
+        }
+
+        let title = url.lastPathComponent
+        return title.isEmpty ? path : title
     }
 }
