@@ -17,6 +17,7 @@
 13. [세션 13: About 패널, README, v1.0.0 릴리즈](#세션-13-about-패널-readme-v100-릴리즈)
 14. [세션 14: README 재정리 및 v1.0.1 릴리즈](#세션-14-readme-재정리-및-v101-릴리즈)
 15. [세션 15: README 포크 중심 OSS 안내 보강](#세션-15-readme-포크-중심-oss-안내-보강)
+16. [세션 16: tmux cwd 보강, 탭 재정렬, v1.0.2 릴리즈](#세션-16-tmux-cwd-보강-탭-재정렬-v102-릴리즈)
 
 ---
 
@@ -56,6 +57,7 @@
 | 30 | About 패널, README, v1.0.0 릴리즈 | About 메뉴 콘텐츠 추가, Always on Top 기본 비활성화, 한/영 README 작성, v1.0.0 릴리즈 준비 |
 | 31 | README 재정리 및 v1.0.1 릴리즈 | Ghostty 기반 AI 개발환경 컨셉 README 반영, 스크린샷 추가, 앱 번들 버전 1.0.1 갱신 및 릴리즈 준비 |
 | 32 | README 포크 중심 OSS 안내 보강 | Fork welcome 메시지와 한/영 README 분리 링크를 상단에 추가 |
+| 33 | tmux cwd 보강, 탭 재정렬, v1.0.2 릴리즈 | tmux cwd troubleshooting 문서화, 터미널 탭 cwd 제목 갱신, 드래그 탭 순서 변경, GitHub Release 준비 |
 
 ---
 
@@ -945,3 +947,48 @@ README 상단에 "먼저 읽어 주세요" 섹션을 추가해 완성형 범용 
 기존 한국어 README 전체 구조를 영문으로 번역해 파일 최상단에 추가하고, `---` 구분선 아래에 기존 한국어 README를 유지. 이후 영문 섹션에서 한국어 설명으로 바로 이동할 수 있도록 `korean-readme` 앵커와 내부 링크를 추가.
 
 변경 파일: `README.md`
+
+---
+
+## 세션 16: tmux cwd 보강, 탭 재정렬, v1.0.2 릴리즈
+
+> 날짜: 2026-05-20
+> 경로: ~/workspace/markAgent
+
+tmux 내부에서 Git 프로젝트로 이동했을 때 cwd가 MarkAgent에 전달되지 않아 Diff 버튼과 탭 표시 경로가 갱신되지 않는 문제를 점검하고, 탭 순서 변경 UX를 보강한 뒤 `v1.0.2` 릴리즈를 준비.
+
+### 대화 1: tmux cwd 전달 문제 문서화
+
+**사용자:**
+> tmux에서 cwd가 동작하지 않아서 diff view 버튼이 반응하지 않을 때 수정해야할 내용을 정리해서 README.md 파일에 추가해줘.
+
+**응답:**
+README 영문/한국어 섹션에 tmux cwd troubleshooting 내용을 추가. `~/.tmux.conf`의 `allow-passthrough` 설정, 실행 중인 tmux 서버에 `source-file` 적용, zsh의 OSC 7 cwd hook, `allow-passthrough all` fallback을 문서화.
+
+변경 파일: `README.md`
+
+---
+
+### 대화 2: 터미널 탭 cwd 제목 반영 및 탭 드래그 재정렬
+
+**사용자:**
+> tab 메뉴의 경로에도 cwd가 반영되지 않은것 같아.
+>
+> 탭 순서도 드래그로 변경할 수 있게 해줘.
+
+**응답:**
+터미널 cwd 콜백이 들어오면 `workingDirectory`와 탭 제목을 함께 갱신하도록 `TerminalTabState`를 보강하고, cwd 변화 시 윈도우 제목도 갱신되도록 연결. `TabBarView`에 drag/drop 기반 탭 재정렬을 추가해 단축키 선택 순서도 변경된 탭 배열 순서를 따르게 함.
+
+변경 파일: `Sources/Core/Tabs/TerminalTabState.swift`, `Sources/Views/Tabs/TerminalTabView.swift`, `Sources/Views/Main/ActiveTabContentView.swift`, `Sources/Views/Main/TabBarView.swift`
+
+---
+
+### 대화 3: v1.0.2 GitHub Release, 커밋, PR, main 반영
+
+**사용자:**
+> 1.0.2 릴리즈 빌드를 만들어서 깃헙에 업로드 하고, 커밋 & 푸시해줘. 그리고 main 브랜치에 PR을 만들고, 머지해서 반영해줘.
+
+**응답:**
+앱 번들 버전을 `1.0.2`로 갱신하고, 릴리즈 빌드와 GitHub Release `v1.0.2` 업로드를 준비. 커밋/푸시 전 본 세션 작업 내용을 `history.md`에 기록.
+
+변경 파일: `Sources/App/Info.plist`, `README.md`, `Sources/Core/Tabs/TerminalTabState.swift`, `Sources/Views/Tabs/TerminalTabView.swift`, `Sources/Views/Main/ActiveTabContentView.swift`, `Sources/Views/Main/TabBarView.swift`, `history.md`

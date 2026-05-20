@@ -30,6 +30,9 @@ struct ActiveTabContentView: View {
                 .onChange(of: terminalTab.state.title) { _, _ in
                     onDocumentChanged()
                 }
+                .onChange(of: terminalTab.state.workingDirectory) { _, _ in
+                    onDocumentChanged()
+                }
         } else if let markdownTab = tab as? MarkdownTab {
             MarkdownTabView(
                 state: markdownTab.state,

@@ -51,6 +51,54 @@ MarkAgent is not trying to replace your terminal. It embeds the terminal experie
 - Run Git, builds, tests, package managers, and AI agents in terminal tabs.
 - Let MarkAgent's GUI assist with Markdown output, change review, and working directory browsing.
 
+## tmux cwd Troubleshooting
+
+The Diff button is enabled only when MarkAgent knows that the active working directory is inside a Git repository. Normal shells can report cwd changes to Ghostty through OSC 7, but tmux may block or fail to forward those updates. If you start tmux from a non-Git directory and then `cd` into a Git project inside tmux, the Diff button can remain disabled because MarkAgent still sees the old directory.
+
+Add passthrough support to `~/.tmux.conf`:
+
+```tmux
+# Allow shell integration inside tmux to pass OSC sequences such as OSC 7
+# working-directory updates through to Ghostty/MarkAgent.
+set -g allow-passthrough on
+```
+
+Apply it to a running tmux server:
+
+```bash
+tmux source-file ~/.tmux.conf
+```
+
+Then make your shell emit OSC 7 on prompt and directory changes. For zsh, add this to `~/.zshrc`:
+
+```zsh
+# MarkAgent/Ghostty: report cwd changes, including from inside tmux.
+__markagent_osc7_cwd() {
+  emulate -L zsh
+  local host="${HOST:-$(hostname)}"
+
+  if [[ -n "$TMUX" ]]; then
+    printf '\ePtmux;\e\e]7;file://%s%s\a\e\\' "$host" "$PWD"
+  else
+    printf '\e]7;file://%s%s\a' "$host" "$PWD"
+  fi
+}
+
+autoload -Uz add-zsh-hook
+add-zsh-hook chpwd __markagent_osc7_cwd
+add-zsh-hook precmd __markagent_osc7_cwd
+```
+
+Reload the shell inside the tmux pane and move directories again:
+
+```bash
+source ~/.zshrc
+cd ~
+cd ~/workspace/markAgent
+```
+
+If the cwd still does not reach MarkAgent, try `set -g allow-passthrough all` in `~/.tmux.conf`. The `on` value should be enough for visible panes, while `all` also allows passthrough from invisible panes.
+
 ## Built for AI Agent Development
 
 MarkAgent focuses on making AI agent work history and outputs easier for humans to review.
@@ -87,22 +135,22 @@ Create a release bundle:
 scripts/bundle.sh release
 ```
 
-Install to `~/Applications` and create the `ma` CLI link when possible:
+Install the app bundle to `~/Applications`:
 
 ```bash
 scripts/bundle.sh install
+```
+
+If a locally built macOS app does not open because it is still marked as quarantined, remove the quarantine attribute:
+
+```bash
+xattr -dr com.apple.quarantine /Applications/MarkAgent.app
 ```
 
 Open a Markdown file with the app bundle:
 
 ```bash
 open .build/MarkAgent.app --args README.md
-```
-
-Run with the built CLI binary:
-
-```bash
-.build/debug/ma README.md
 ```
 
 ## Ghostty Config
@@ -183,6 +231,54 @@ MarkAgent는 터미널을 대체하려는 앱이 아닙니다. Ghostty를 기반
 - Git, 빌드, 테스트, 패키지 관리, AI 에이전트 실행은 터미널 탭에서 처리합니다.
 - Markdown 산출물 확인, 변경사항 검토, 작업 경로 파일 탐색은 MarkAgent의 GUI가 보조합니다.
 
+## tmux cwd 문제 해결
+
+Diff 버튼은 MarkAgent가 현재 활성 작업 경로가 Git 저장소 안이라고 판단할 때만 활성화됩니다. 일반 쉘은 OSC 7로 cwd 변경을 Ghostty에 전달할 수 있지만, tmux는 이 업데이트를 막거나 전달하지 않을 수 있습니다. Git 저장소가 아닌 경로에서 tmux를 시작한 뒤 tmux 안에서 Git 프로젝트로 `cd`하면, MarkAgent가 여전히 이전 경로를 보고 있어서 Diff 버튼이 비활성화된 상태로 남을 수 있습니다.
+
+`~/.tmux.conf`에 passthrough 설정을 추가합니다:
+
+```tmux
+# Allow shell integration inside tmux to pass OSC sequences such as OSC 7
+# working-directory updates through to Ghostty/MarkAgent.
+set -g allow-passthrough on
+```
+
+실행 중인 tmux 서버에 적용합니다:
+
+```bash
+tmux source-file ~/.tmux.conf
+```
+
+그 다음 쉘이 프롬프트 표시와 디렉토리 변경 시 OSC 7을 보내도록 설정합니다. zsh를 사용한다면 `~/.zshrc`에 다음 내용을 추가합니다:
+
+```zsh
+# MarkAgent/Ghostty: report cwd changes, including from inside tmux.
+__markagent_osc7_cwd() {
+  emulate -L zsh
+  local host="${HOST:-$(hostname)}"
+
+  if [[ -n "$TMUX" ]]; then
+    printf '\ePtmux;\e\e]7;file://%s%s\a\e\\' "$host" "$PWD"
+  else
+    printf '\e]7;file://%s%s\a' "$host" "$PWD"
+  fi
+}
+
+autoload -Uz add-zsh-hook
+add-zsh-hook chpwd __markagent_osc7_cwd
+add-zsh-hook precmd __markagent_osc7_cwd
+```
+
+tmux pane 안에서 쉘 설정을 다시 읽고 디렉토리를 다시 이동합니다:
+
+```bash
+source ~/.zshrc
+cd ~
+cd ~/workspace/markAgent
+```
+
+그래도 cwd가 MarkAgent에 전달되지 않으면 `~/.tmux.conf`에서 `set -g allow-passthrough all`을 시도합니다. `on`은 보이는 pane에서 충분해야 하고, `all`은 보이지 않는 pane의 passthrough까지 허용합니다.
+
 ## AI 에이전트 개발에 맞춘 구성
 
 MarkAgent는 AI 에이전트가 남기는 작업 내역과 결과물을 사람이 검토하기 쉽게 만드는 데 초점을 둡니다.
@@ -219,22 +315,22 @@ scripts/bundle.sh
 scripts/bundle.sh release
 ```
 
-`~/Applications`에 설치하고 가능한 경우 `ma` CLI 링크 생성:
+`~/Applications`에 앱 번들 설치:
 
 ```bash
 scripts/bundle.sh install
+```
+
+macOS에서 직접 빌드한 앱이 보안 격리(quarantine) 상태로 실행되지 않으면 다음 명령으로 격리 속성을 제거합니다:
+
+```bash
+xattr -dr com.apple.quarantine /Applications/MarkAgent.app
 ```
 
 앱 번들로 Markdown 파일 열기:
 
 ```bash
 open .build/MarkAgent.app --args README.md
-```
-
-빌드된 CLI 바이너리로 실행:
-
-```bash
-.build/debug/ma README.md
 ```
 
 ## Ghostty 설정

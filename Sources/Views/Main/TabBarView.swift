@@ -7,6 +7,7 @@ struct TabBarView: View {
     var isDiffVisible = false
     var onToggleDiff: () -> Void = {}
 
+    @State private var draggedTabID: UUID?
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.terminalAppTheme) private var terminalAppTheme
     
@@ -26,6 +27,18 @@ struct TabBarView: View {
                                     await tabs.closeTab(id: tab.id)
                                 }
                             }
+                        )
+                        .onDrag {
+                            draggedTabID = tab.id
+                            return NSItemProvider(object: tab.id.uuidString as NSString)
+                        }
+                        .onDrop(
+                            of: [.text],
+                            delegate: TabReorderDropDelegate(
+                                targetTabID: tab.id,
+                                draggedTabID: $draggedTabID,
+                                tabs: tabs
+                            )
                         )
 
                         Divider()
@@ -65,5 +78,42 @@ struct TabBarView: View {
 
     private var appColors: TerminalAppColors? {
         terminalAppTheme?.colors(for: colorScheme)
+    }
+}
+
+private struct TabReorderDropDelegate: DropDelegate {
+    let targetTabID: UUID
+    @Binding var draggedTabID: UUID?
+    var tabs: TabCollection
+
+    func dropEntered(info: DropInfo) {
+        guard let draggedTabID,
+              draggedTabID != targetTabID,
+              let sourceIndex = tabs.tabs.firstIndex(where: { $0.id == draggedTabID }),
+              let targetIndex = tabs.tabs.firstIndex(where: { $0.id == targetTabID }) else {
+            return
+        }
+
+        withAnimation(.easeInOut(duration: 0.12)) {
+            tabs.moveTab(
+                fromOffsets: IndexSet(integer: sourceIndex),
+                toOffset: targetIndex > sourceIndex ? targetIndex + 1 : targetIndex
+            )
+        }
+    }
+
+    func dropUpdated(info: DropInfo) -> DropProposal? {
+        DropProposal(operation: .move)
+    }
+
+    func performDrop(info: DropInfo) -> Bool {
+        draggedTabID = nil
+        return true
+    }
+
+    func dropExited(info: DropInfo) {
+        if !info.hasItemsConforming(to: [.text]) {
+            draggedTabID = nil
+        }
     }
 }
