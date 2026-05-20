@@ -4,7 +4,149 @@
 
 # MarkAgent
 
+**A native macOS developer tool that brings Ghostty-based multi-tab terminals and a Markdown workspace into one app.**
+
+한국어 설명은 [아래 섹션](#korean-readme)에서 볼 수 있습니다.
+
+## Read This First
+
+This repository is not a finished, general-purpose OSS product or a factory-style project that keeps accepting PRs to add every requested feature. It is a macOS AI development tool built around my own working environment. The reason it is public is closer to "study the work history and implementation parts, then fork it and reshape it with AI for your own environment" than "install this as-is and expect it to fit everyone."
+
+That means general UX requests such as settings screens, Windows/Linux support, support for a specific `tmux` setup, or compatibility with someone else's personal workflow are not project priorities. If you need those things, fork it, change it, remove pieces, add pieces, and make it yours.
+
+**Fork welcome over PR welcome. Issues are mainly for bug reports and implementation references.**
+
+MarkAgent is a macOS app that gathers the screens you need when developing with CLI-based AI agents such as Codex CLI, Claude Code, and Gemini CLI. You can run agents in Ghostty terminal tabs, browse files in the active working directory, and edit or preview Markdown documents created or modified by the agent in the same window.
+
+![MarkAgent screenshot](screenshot.png)
+
+## Concept
+
+CLI-based AI agents feel most natural in a terminal, but real development often needs more than a terminal. You need to scan changed files, read Markdown output in a readable format, and sometimes edit and save it immediately.
+
+MarkAgent is a visual bridge for that workflow.
+
+- Run AI agents and ordinary CLI tools in Ghostty-based multi-tab terminals.
+- Browse files from the current working directory in the sidebar and open Markdown files directly.
+- Switch between raw Markdown editing and GitHub Flavored Markdown preview.
+- Inspect Git changed files and diffs inside the app to track agent output.
+- Keep the terminal-centered workflow while adding a native GUI for reading and review-heavy screens.
+
+## Features
+
+- **Ghostty terminal tabs:** Embedded terminal tabs powered by `libghostty-spm` for handling multiple work sessions in one window.
+- **Ghostty config integration:** Reads `~/.config/ghostty/config` and reflects your existing terminal preferences such as theme, font family, and font size in the app. It also checks Ghostty's macOS Application Support config path.
+- **Markdown editing and preview:** Supports raw Markdown editing, GFM rendering, tables, checklists, strikethrough, and highlighted code blocks.
+- **Working directory file browser:** Updates the file browser based on the active terminal or Markdown tab's working directory.
+- **Change tracking:** Shows changed files from the Git repository in the sidebar and displays line-based diffs for selected files.
+- **Recent documents:** Reopen frequently used Markdown documents from the recent documents list.
+- **macOS app bundle:** Runs as a `.app` bundle with Dock, menu bar, Cmd+Tab, and normal macOS window behavior.
+
+## Terminal Workflow
+
+MarkAgent is not trying to replace your terminal. It embeds the terminal experience through Ghostty and is designed to work alongside proven CLI tools.
+
+- Use `tmux` if you need a multiplexer.
+- Keep using advanced CLI editors such as `vim`, `nvim`, or `emacs`.
+- Run Git, builds, tests, package managers, and AI agents in terminal tabs.
+- Let MarkAgent's GUI assist with Markdown output, change review, and working directory browsing.
+
+## Built for AI Agent Development
+
+MarkAgent focuses on making AI agent work history and outputs easier for humans to review.
+
+- See files modified by the agent directly in the Git change list.
+- Read plans, reviews, reports, and work logs written in Markdown through the preview.
+- Edit and save documents directly in Raw Edit mode when needed.
+- The repository may include agent-oriented work history and project guides, which help fork authors understand the surrounding context.
+
+## Build and Usage
+
+This repository is set up so you can freely fork it, build it, and adapt it to your own development environment.
+
+Requirements:
+
+- macOS 14 Sonoma or later
+- Swift 6.0 or later
+
+Build:
+
+```bash
+swift build
+```
+
+Create the macOS app bundle:
+
+```bash
+scripts/bundle.sh
+```
+
+Create a release bundle:
+
+```bash
+scripts/bundle.sh release
+```
+
+Install to `~/Applications` and create the `ma` CLI link when possible:
+
+```bash
+scripts/bundle.sh install
+```
+
+Open a Markdown file with the app bundle:
+
+```bash
+open .build/MarkAgent.app --args README.md
+```
+
+Run with the built CLI binary:
+
+```bash
+.build/debug/ma README.md
+```
+
+## Ghostty Config
+
+MarkAgent looks for Ghostty config files in this order:
+
+1. `~/.config/ghostty/config`
+2. `~/Library/Application Support/com.mitchellh.ghostty/config`
+
+The current implementation reads `font-family`, `font-size`, `theme`, `background`, `foreground`, `cursor-color`, `selection-background`, `selection-foreground`, and `palette`, then applies those values to the terminal and app theme.
+
+## Open Source
+
+MarkAgent uses the following open source libraries.
+
+- `swift-markdown` - Apache-2.0
+- `swift-cmark` - BSD-style and MIT notices
+- `HighlightSwift` - MIT, bundled `highlight.js` is BSD-3-Clause
+- `libghostty-spm` - MIT, bundled `libghostty` follows its own license terms
+- `MSDisplayLink` - MIT
+
+## Repository
+
+https://github.com/dspaudio/markAgent
+
+---
+
+<a id="korean-readme"></a>
+
+<p align="center">
+  <img src="Sources/App/Resources/AppIcon.png" alt="MarkAgent icon" width="128" height="128">
+</p>
+
+# MarkAgent
+
 **Ghostty 기반 멀티탭 터미널과 마크다운 작업 공간을 하나로 묶은 macOS 네이티브 개발 도구.**
+
+## 먼저 읽어 주세요
+
+이 저장소는 완성형 범용 OSS 제품이나 PR을 받아 기능을 계속 붙이는 공장형 프로젝트가 아닙니다. 제 작업 환경에 맞춰 만든 macOS용 AI 개발 도구이며, 공개 목적은 "그대로 설치해서 모두가 똑같이 쓰세요"가 아니라 "작업 내역과 구현 부품을 보고, 자기 환경에 맞게 포크해서 AI로 개조하세요"에 가깝습니다.
+
+그래서 설정 화면, Windows/Linux 지원, 특정 `tmux` 구성, 개인 워크플로우 호환성 같은 일반 UX 민원은 프로젝트의 우선순위가 아닙니다. 필요하면 포크해서 고치고, 바꾸고, 덜어내고, 붙여서 쓰면 됩니다.
+
+**PR welcome보다는 Fork welcome. 이슈는 버그 리포트와 구현 참고용으로만 봅니다.**
 
 MarkAgent는 Codex CLI, Claude Code, Gemini CLI 같은 CLI 기반 AI 에이전트로 개발할 때 필요한 작업 화면을 macOS 앱 안에 모아 둔 도구입니다. Ghostty 터미널 탭에서 에이전트를 실행하고, 같은 창에서 작업 경로의 파일을 확인하며, 에이전트가 생성하거나 수정한 Markdown 문서를 바로 편집하고 미리 볼 수 있습니다.
 
