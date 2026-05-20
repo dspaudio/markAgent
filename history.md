@@ -20,6 +20,7 @@
 16. [세션 16: README CLI 안내 제거](#세션-16-readme-cli-안내-제거)
 17. [세션 17: README 포크 중심 OSS 안내 보강](#세션-17-readme-포크-중심-oss-안내-보강)
 18. [세션 18: tmux cwd 보강, 탭 재정렬, v1.0.2 릴리즈](#세션-18-tmux-cwd-보강-탭-재정렬-v102-릴리즈)
+19. [세션 19: 파일 브라우저 단일 클릭 폴더 이동 및 v1.0.3 릴리즈](#세션-19-파일-브라우저-단일-클릭-폴더-이동-및-v103-릴리즈)
 
 ---
 
@@ -62,6 +63,7 @@
 | 33 | README CLI 안내 제거 | README 설치/사용 섹션에서 `ma` CLI 링크와 `.build/debug/ma` 실행 예시 제거 |
 | 34 | README 포크 중심 OSS 안내 보강 | Fork welcome 메시지와 한/영 README 분리 링크를 상단에 추가 |
 | 35 | tmux cwd 보강, 탭 재정렬, v1.0.2 릴리즈 | tmux cwd troubleshooting 문서화, 터미널 탭 cwd 제목 갱신, 드래그 탭 순서 변경, GitHub Release 준비 |
+| 36 | 파일 브라우저 단일 클릭 폴더 이동 및 v1.0.3 릴리즈 | 사이드바 폴더 단일 클릭 탐색, 파일/폴더 구분 표시, 앱 번들 버전 1.0.3 갱신, GitHub Release 준비 |
 
 ---
 
@@ -1066,3 +1068,27 @@ README 영문/한국어 섹션에 tmux cwd troubleshooting 내용을 추가. `~/
 앱 번들 버전을 `1.0.2`로 갱신하고, 릴리즈 빌드와 GitHub Release `v1.0.2` 업로드를 준비. 커밋/푸시 전 본 세션 작업 내용을 `history.md`에 기록.
 
 변경 파일: `Sources/App/Info.plist`, `README.md`, `Sources/Core/Tabs/TerminalTabState.swift`, `Sources/Views/Tabs/TerminalTabView.swift`, `Sources/Views/Main/ActiveTabContentView.swift`, `Sources/Views/Main/TabBarView.swift`, `history.md`
+
+---
+
+## 세션 19: 파일 브라우저 단일 클릭 폴더 이동 및 v1.0.3 릴리즈
+
+> 날짜: 2026-05-20
+> 경로: ~/workspace/markAgent
+
+왼쪽 파일 브라우저에서 폴더를 더블클릭해 이동하던 동작을 현재 경로를 유지한 채 폴더 내용을 펼쳐 보는 방식으로 바꾸고, 파일 더블클릭 동작은 유지한 뒤 `v1.0.3` 릴리즈를 준비.
+
+### 대화 1: 사이드바 폴더 단일 클릭 펼침 및 파일 구분 표시
+
+**사용자:**
+> 왼쪽 사이드바의 현재 경로 폴더 및 파일 보여주는 부분에서 폴더를 더블클릭해서 직접 이동하지 않고, 한 번만 클릭해서 폴더의 파일 및 폴더를 보여주는 형태로 구현해줘. 폴더내 폴더가 있을 때에도 한 번만 클릭하면 해당 폴더의 내용이 보여야해. 이 때 해당 폴더내의 파일이라고 구분하는 부분이 있어야 해. 그리고 해당 파일을 더블 클릭해도 원하는 동작을 수행하도록 해야해. 작업을 마지면 1.0.3으로 릴리즈 빌드를 깃헙 Release에 업로드 하고, 커밋, 푸시. main에 PR, 병합까지 되어야 해. ulw
+
+**응답:**
+사이드바 폴더 클릭을 현재 경로 이동이 아닌 인라인 펼침으로 변경. 폴더별 하위 항목을 비동기로 스캔해 캐시하고, 중첩 폴더도 한 번 클릭하면 해당 위치 아래에 폴더/파일 섹션으로 펼쳐 표시하도록 구현. 파일 행에는 종류 라벨을 추가하고, 파일 더블클릭 시 Markdown 열기, 이미지 미리보기, 기타 파일 열기 동작은 유지. 앱 번들 버전을 `1.0.3`으로 갱신하고 `swift test`, `scripts/bundle.sh release`, `MarkAgent-v1.0.3.zip` 생성과 SHA-256 산출을 완료.
+
+검증:
+- `swift test` — 17개 테스트 통과
+- `scripts/bundle.sh release` — 성공
+- SHA-256: `773db4295e1e2c5a63213d05f3056bb9dcf356a9b2cc189e592b09bd30271730`
+
+변경 파일: `Sources/Views/Sidebar/FileBrowserSidebar.swift`, `Sources/Views/Sidebar/FileEntryRow.swift`, `Sources/Core/FileBrowser/DirectoryScanner.swift`, `Sources/App/Info.plist`, `history.md`

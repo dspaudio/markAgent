@@ -3,6 +3,7 @@ import SwiftUI
 struct FileEntryRow: View {
     let entry: FileEntry
     let isSelected: Bool
+    var depth = 0
     
     var body: some View {
         HStack(spacing: 8) {
@@ -28,6 +29,7 @@ struct FileEntryRow: View {
             Spacer(minLength: 0)
         }
         .padding(.horizontal, 8)
+        .padding(.leading, CGFloat(depth) * 16)
         .padding(.vertical, 5)
         .contentShape(RoundedRectangle(cornerRadius: 6))
         .background(
@@ -55,7 +57,7 @@ struct FileEntryRow: View {
     }
     
     private var secondaryText: String? {
-        var parts: [String] = []
+        var parts: [String] = [kindText]
         
         if let size = entry.sizeBytes, !entry.isDirectory {
             let formatter = ByteCountFormatter()
@@ -71,5 +73,14 @@ struct FileEntryRow: View {
         
         if parts.isEmpty { return nil }
         return parts.joined(separator: " • ")
+    }
+
+    private var kindText: String {
+        switch entry.kind {
+        case .directory: return "폴더"
+        case .markdown: return "Markdown 파일"
+        case .image: return "이미지 파일"
+        case .file: return "파일"
+        }
     }
 }
