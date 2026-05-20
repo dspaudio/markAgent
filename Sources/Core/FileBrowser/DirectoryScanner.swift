@@ -57,7 +57,7 @@ final class DirectoryScanner {
         reload()
     }
 
-    private nonisolated static func scan(directory: URL) throws -> [FileEntry] {
+    nonisolated static func scan(directory: URL) throws -> [FileEntry] {
         let contents = try FileManager.default.contentsOfDirectory(
             at: directory,
             includingPropertiesForKeys: [.contentTypeKey, .fileSizeKey, .contentModificationDateKey],
