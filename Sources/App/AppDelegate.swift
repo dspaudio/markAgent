@@ -85,16 +85,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let pathView = TitlebarPathView(scanner: directoryScanner)
             .frame(minWidth: 360, idealWidth: 560, maxWidth: 720, alignment: .leading)
         let pathController = NSTitlebarAccessoryViewController()
-        pathController.view = NSHostingView(rootView: pathView)
+        pathController.view = titlebarHostingView(rootView: pathView, width: 560)
         pathController.layoutAttribute = .left
         window.addTitlebarAccessoryViewController(pathController)
 
         let branchView = TitlebarGitBranchView(status: gitRepositoryStatus)
             .frame(minWidth: 80, idealWidth: 180, maxWidth: 260, alignment: .trailing)
         let branchController = NSTitlebarAccessoryViewController()
-        branchController.view = NSHostingView(rootView: branchView)
+        branchController.view = titlebarHostingView(rootView: branchView, width: 180)
         branchController.layoutAttribute = .right
         window.addTitlebarAccessoryViewController(branchController)
+    }
+
+    private func titlebarHostingView<Content: View>(rootView: Content, width: CGFloat) -> NSHostingView<Content> {
+        let hostingView = NSHostingView(rootView: rootView)
+        hostingView.frame = NSRect(x: 0, y: 0, width: width, height: 28)
+        hostingView.autoresizingMask = [.width, .height]
+        return hostingView
     }
 
     private func restoreWindowFrame(_ window: NSWindow) {
