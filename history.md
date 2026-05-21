@@ -752,6 +752,26 @@ libghostty surface API에는 font family 전용 필드가 없으므로 사용자
 
 ---
 
+### 대화 5: v1.0.4 타이틀바 표시 패치 유지
+
+**사용자:**
+> 표시가 안되는데???
+>
+> 수정한 패치도 1.0.4를 유지해.
+
+**응답:**
+`NSTitlebarAccessoryViewController`에 SwiftUI `NSHostingView`를 연결할 때 AppKit view frame이 명시되지 않아 타이틀바 accessory가 0 크기로 배치될 수 있는 문제를 수정. titlebar path/branch hosting view에 고정 높이와 폭을 부여해 기존 `v1.0.4` 버전 번호를 유지한 채 GitHub Release asset과 태그를 갱신.
+
+검증:
+- `swift build` — 통과
+- `swift test` — 18개 테스트 통과
+- `scripts/bundle.sh release` — 성공
+- SHA-256: `68836e2bf5e4d4a687979f324f7a7bc8bcd11225011bfe8b91de4bb77e2527a5`
+
+변경 파일: `Sources/App/AppDelegate.swift`, `history.md`
+
+---
+
 ### 대화 4: v0.2.1 font-family 명시 적용 바이너리 교체
 
 **사용자:**
