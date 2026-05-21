@@ -44,18 +44,19 @@ struct TabBarView: View {
                         Divider()
                             .frame(height: 16)
                     }
+
+                    Button(action: onNewTab) {
+                        Image(systemName: "plus")
+                            .font(.system(size: 12, weight: .medium))
+                            .frame(width: 32, height: 28)
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.leading, 4)
+                    .padding(.trailing, 8)
+                    .help("새 탭")
                 }
             }
-            
-            Button(action: onNewTab) {
-                Image(systemName: "plus")
-                    .font(.system(size: 12, weight: .medium))
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 6)
-            }
-            .buttonStyle(.plain)
-            .help("새 탭")
-            
+
             Spacer()
 
             Button(action: onToggleDiff) {
