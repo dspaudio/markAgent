@@ -121,4 +121,20 @@ final class GhosttyConfigTests: XCTestCase {
         XCTAssertEqual(theme?.theme(for: .light)?.name, "Catppuccin Latte")
         XCTAssertEqual(theme?.theme(for: .dark)?.name, "Catppuccin Mocha")
     }
+
+    func testParseTextKeybindsDecodesGhosttyTextEscapes() {
+        let contents = """
+        keybind = cmd+d=text:\\x00d
+        keybind = cmd+shift+g=text:lazygit\\r
+        keybind = cmd+q=quit
+        """
+
+        let keybinds = GhosttyConfig.parseTextKeybinds(from: contents)
+
+        XCTAssertEqual(keybinds.count, 2)
+        XCTAssertTrue(keybinds[0].matches(key: "d", modifiers: [.command]))
+        XCTAssertEqual(keybinds[0].text, "\u{00}d")
+        XCTAssertTrue(keybinds[1].matches(key: "g", modifiers: [.command, .shift]))
+        XCTAssertEqual(keybinds[1].text, "lazygit\r")
+    }
 }

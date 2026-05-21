@@ -21,6 +21,7 @@
 17. [세션 17: README 포크 중심 OSS 안내 보강](#세션-17-readme-포크-중심-oss-안내-보강)
 18. [세션 18: tmux cwd 보강, 탭 재정렬, v1.0.2 릴리즈](#세션-18-tmux-cwd-보강-탭-재정렬-v102-릴리즈)
 19. [세션 19: 파일 브라우저 단일 클릭 폴더 이동 및 v1.0.3 릴리즈](#세션-19-파일-브라우저-단일-클릭-폴더-이동-및-v103-릴리즈)
+20. [세션 20: 타이틀바 경로, Git 브랜치, Ghostty 단축키 및 v1.0.4 릴리즈](#세션-20-타이틀바-경로-git-브랜치-ghostty-단축키-및-v104-릴리즈)
 
 ---
 
@@ -64,6 +65,7 @@
 | 34 | README 포크 중심 OSS 안내 보강 | Fork welcome 메시지와 한/영 README 분리 링크를 상단에 추가 |
 | 35 | tmux cwd 보강, 탭 재정렬, v1.0.2 릴리즈 | tmux cwd troubleshooting 문서화, 터미널 탭 cwd 제목 갱신, 드래그 탭 순서 변경, GitHub Release 준비 |
 | 36 | 파일 브라우저 단일 클릭 폴더 이동 및 v1.0.3 릴리즈 | 사이드바 폴더 단일 클릭 탐색, 파일/폴더 구분 표시, 앱 번들 버전 1.0.3 갱신, GitHub Release 준비 |
+| 37 | 타이틀바 경로, Git 브랜치, Ghostty 단축키 및 v1.0.4 릴리즈 | macOS 타이틀바 경로/Git 브랜치 표시, Ghostty text keybind 전달, 문서 타입/URL scheme 등록, 앱 번들 버전 1.0.4 갱신 |
 
 ---
 
@@ -1092,3 +1094,66 @@ README 영문/한국어 섹션에 tmux cwd troubleshooting 내용을 추가. `~/
 - SHA-256: `773db4295e1e2c5a63213d05f3056bb9dcf356a9b2cc189e592b09bd30271730`
 
 변경 파일: `Sources/Views/Sidebar/FileBrowserSidebar.swift`, `Sources/Views/Sidebar/FileEntryRow.swift`, `Sources/Core/FileBrowser/DirectoryScanner.swift`, `Sources/App/Info.plist`, `history.md`
+
+---
+
+## 세션 20: 타이틀바 경로, Git 브랜치, Ghostty 단축키 및 v1.0.4 릴리즈
+
+> 날짜: 2026-05-21
+> 경로: ~/workspace/markAgent
+
+macOS 타이틀바에 현재 디렉토리 경로와 Git 브랜치를 표시하고, MarkAgent 내장 터미널에서 Ghostty 설정의 `text:` keybind가 동일하게 동작하도록 보강한 뒤 `v1.0.4` 릴리즈를 준비.
+
+### 대화 1: 타이틀바 경로 및 Git 브랜치 표시
+
+**사용자:**
+> 화면 왼쪽 상단에 폴더를 표시하는 부분에 전체 경로도 같이 표시해줬으면 좋겠어. 윈도우 오른쪽 상단에는 만일 현재 디렉토리가 git 디렉토리라면 git branch를 표시해줬으면 좋겠어.
+
+**응답:**
+macOS 타이틀바 accessory를 추가해 왼쪽에는 현재 디렉토리명과 전체 경로를 표시하고, 오른쪽에는 현재 디렉토리가 Git 저장소 내부일 때 브랜치명 또는 detached HEAD 해시를 표시하도록 구현. 디렉토리 변경 시 Git 상태를 비동기로 갱신하도록 연결.
+
+변경 파일: `Sources/App/AppDelegate.swift`, `Sources/App/TitlebarStatusView.swift`, `Sources/Core/GitRepositoryStatus.swift`, `Sources/Views/Main/MainContainerView.swift`
+
+---
+
+### 대화 2: Ghostty keybind 전달
+
+**사용자:**
+> ~/.config/ghostty/config 에서 단축키를 지정한 부분이 있어. MarkAgent 앱에서도 해당 단축키가 Ghostty와 같이 동작하도록 해줘.
+
+**응답:**
+Ghostty config의 활성 `keybind = ... text:` 항목을 파싱하고, 터미널 탭이 활성일 때 앱 메뉴 단축키보다 먼저 해당 텍스트 입력을 내장 터미널 pty로 전달하도록 구현. `cmd+d`, `cmd+s`, `cmd+b`, `cmd+=`, `cmd+shift+y`, `cmd+shift+g` 같은 Ghostty text keybind가 MarkAgent 터미널에서도 동일하게 동작하도록 회귀 테스트를 추가.
+
+변경 파일: `Sources/App/MarkAgentWindow.swift`, `Sources/Core/Tabs/GhosttyConfig.swift`, `Sources/Core/Tabs/TerminalTabState.swift`, `Tests/MarkAgentTests/GhosttyConfigTests.swift`
+
+---
+
+### 대화 3: macOS 앱 등록 정보 보강
+
+**사용자:**
+> mac의 기본 터미널 목록에 MarkAgent가 뜨도록 할 수 있을까? Codex 앱에서도 말야.
+>
+> Info.plist에 등록하는 작업을 해줘.
+
+**응답:**
+MarkAgent 앱 번들 `Info.plist`에 `public.folder`, Markdown/text 문서 타입과 `markagent://` URL scheme을 등록. macOS LaunchServices가 MarkAgent를 폴더/문서 opener 후보로 인식할 수 있도록 앱 메타데이터를 보강.
+
+변경 파일: `Sources/App/Info.plist`
+
+---
+
+### 대화 4: v1.0.4 릴리즈 준비
+
+**사용자:**
+> 버전 1.0.4로 올리고 릴리즈 빌드를 만들어서 깃헙 Release 에 업로드 해줘. 그런 다음 커밋 & 푸시하고 main에 PR, 머지해서 main에도 반영해줘.
+
+**응답:**
+앱 번들 버전을 `1.0.4`로 갱신하고, 커밋/푸시 전 세션 작업 내용을 `history.md`에 기록. 릴리즈 빌드, GitHub Release 업로드, dev 브랜치 푸시, main 대상 PR 생성 및 병합을 진행.
+
+검증:
+- `plutil -lint Sources/App/Info.plist` — 통과
+- `swift test` — 18개 테스트 통과
+- `scripts/bundle.sh release` — 성공
+- SHA-256: `a329617d02aaefba5843ce4c6507732bbaf2476d5a1ab72e287f81afb1207ff6`
+
+변경 파일: `Sources/App/Info.plist`, `history.md`
