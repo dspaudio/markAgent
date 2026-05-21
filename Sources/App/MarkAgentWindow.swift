@@ -1,9 +1,14 @@
 import AppKit
 
 final class MarkAgentWindow: NSWindow {
+    var terminalKeybindHandler: ((NSEvent) -> Bool)?
+
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
         if event.modifierFlags.contains(.command),
            let mainMenu = NSApp.mainMenu {
+            if terminalKeybindHandler?(event) == true {
+                return true
+            }
             if mainMenu.performKeyEquivalent(with: event) {
                 return true
             }

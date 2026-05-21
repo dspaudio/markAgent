@@ -7,6 +7,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     let tabs = TabCollection()
     let recentStore = RecentDocumentStore()
     let directoryScanner: DirectoryScanner
+    let gitRepositoryStatus: GitRepositoryStatus
     let dirtyPrompter: AppDirtyDocumentPrompter
     var isAlwaysOnTop = false
     var window: NSWindow?
@@ -18,6 +19,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     override init() {
         let homeURL = URL(fileURLWithPath: NSHomeDirectory())
         self.directoryScanner = DirectoryScanner(currentDirectory: homeURL)
+        self.gitRepositoryStatus = GitRepositoryStatus(currentDirectory: homeURL)
         self.dirtyPrompter = AppDirtyDocumentPrompter(window: nil)
         super.init()
         tabs.dirtyPrompter = dirtyPrompter
@@ -46,6 +48,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             },
             onDocumentChanged: { [weak self] in
                 self?.updateWindowTitle()
+            },
+            onDirectoryChanged: { [weak self] directory in
+                self?.gitRepositoryStatus.refresh(for: directory)
             }
         )
         .environment(\.terminalAppTheme, appTheme)
@@ -59,15 +64,37 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             defer: false
         )
         window.contentView = hostingView
+        window.titleVisibility = .hidden
         window.collectionBehavior = [.fullScreenPrimary]
         window.level = .normal
         window.delegate = self
+        window.terminalKeybindHandler = { [weak self] event in
+            self?.handleTerminalTextKeybind(event) ?? false
+        }
         self.window = window
         dirtyPrompter.window = window
+        setupTitlebarStatus(for: window)
+        gitRepositoryStatus.refresh(for: directoryScanner.currentDirectory)
 
         restoreWindowFrame(window)
         window.makeKeyAndOrderFront(nil)
         updateWindowTitle()
+    }
+
+    private func setupTitlebarStatus(for window: NSWindow) {
+        let pathView = TitlebarPathView(scanner: directoryScanner)
+            .frame(minWidth: 360, idealWidth: 560, maxWidth: 720, alignment: .leading)
+        let pathController = NSTitlebarAccessoryViewController()
+        pathController.view = NSHostingView(rootView: pathView)
+        pathController.layoutAttribute = .left
+        window.addTitlebarAccessoryViewController(pathController)
+
+        let branchView = TitlebarGitBranchView(status: gitRepositoryStatus)
+            .frame(minWidth: 80, idealWidth: 180, maxWidth: 260, alignment: .trailing)
+        let branchController = NSTitlebarAccessoryViewController()
+        branchController.view = NSHostingView(rootView: branchView)
+        branchController.layoutAttribute = .right
+        window.addTitlebarAccessoryViewController(branchController)
     }
 
     private func restoreWindowFrame(_ window: NSWindow) {
@@ -483,6 +510,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         window?.title = title
         window?.isDocumentEdited = tabs.tabs.contains { $0.isDirty }
         updateViewMenuState()
+    }
+
+    private func handleTerminalTextKeybind(_ event: NSEvent) -> Bool {
+        guard tabs.activeTerminalTab != nil else { return false }
+        guard let key = event.charactersIgnoringModifiers, !key.isEmpty else { return false }
+
+        var modifiers: EventModifierMask = []
+        if event.modifierFlags.contains(.command) { modifiers.insert(.command) }
+        if event.modifierFlags.contains(.shift) { modifiers.insert(.shift) }
+        if event.modifierFlags.contains(.control) { modifiers.insert(.control) }
+        if event.modifierFlags.contains(.option) { modifiers.insert(.option) }
+
+        guard modifiers.contains(EventModifierMask.command) else { return false }
+        return tabs.activeTerminalTab?.state.sendConfiguredTextKeybind(key: key, modifiers: modifiers) == true
     }
 
     private func updateViewMenuState() {

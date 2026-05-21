@@ -6,6 +6,7 @@ struct MainContainerView: View {
     var recentStore: RecentDocumentStore
     var onOpenFile: () -> Void
     var onDocumentChanged: () -> Void
+    var onDirectoryChanged: (URL) -> Void = { _ in }
 
     @State private var isShowingNewTabChooser = false
     @State private var gitDiffState = GitDiffState()
@@ -69,16 +70,19 @@ struct MainContainerView: View {
             syncDirectoryToActiveTab()
             scanner.reload()
             gitDiffState.refresh(for: scanner.currentDirectory)
+            onDirectoryChanged(scanner.currentDirectory)
             setupActiveTabDirectoryObserver()
         }
         .onChange(of: tabs.activeTabID) { _, _ in
             syncDirectoryToActiveTab()
             gitDiffState.refresh(for: scanner.currentDirectory)
+            onDirectoryChanged(scanner.currentDirectory)
             setupActiveTabDirectoryObserver()
             onDocumentChanged()
         }
         .onChange(of: scanner.currentDirectory) { _, directory in
             gitDiffState.refresh(for: directory)
+            onDirectoryChanged(directory)
         }
         .background(appColors?.background ?? Color(nsColor: .windowBackgroundColor))
         .foregroundStyle(appColors?.foreground ?? Color.primary)

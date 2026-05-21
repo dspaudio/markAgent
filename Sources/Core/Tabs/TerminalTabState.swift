@@ -10,6 +10,7 @@ final class TerminalTabState {
 
     var title: String
     private let configFontSize: Float?
+    private let textKeybinds: [GhosttyTextKeybind]
     var didStart: Bool = false
     var onCloseRequested: (() -> Void)?
     var onDirectoryChanged: ((URL) -> Void)?
@@ -22,6 +23,7 @@ final class TerminalTabState {
 
         let userConfig = GhosttyConfig.userConfig()
         self.configFontSize = userConfig?.fontSize
+        self.textKeybinds = userConfig?.textKeybinds ?? []
         let terminalConfiguration = TerminalConfiguration { builder in
             for fontFamily in userConfig?.fontFamilies ?? [] {
                 builder.withFontFamily(fontFamily)
@@ -81,6 +83,15 @@ final class TerminalTabState {
     func close() {
         terminalViewState.onClose = nil
         didStart = false
+    }
+
+    func sendConfiguredTextKeybind(key: String, modifiers: EventModifierMask) -> Bool {
+        guard let keybind = textKeybinds.first(where: { $0.matches(key: key, modifiers: modifiers) }) else {
+            return false
+        }
+
+        terminalView?.sendText(keybind.text)
+        return true
     }
 
     private static func title(for url: URL) -> String {
