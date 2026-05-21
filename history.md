@@ -22,6 +22,7 @@
 18. [세션 18: tmux cwd 보강, 탭 재정렬, v1.0.2 릴리즈](#세션-18-tmux-cwd-보강-탭-재정렬-v102-릴리즈)
 19. [세션 19: 파일 브라우저 단일 클릭 폴더 이동 및 v1.0.3 릴리즈](#세션-19-파일-브라우저-단일-클릭-폴더-이동-및-v103-릴리즈)
 20. [세션 20: 타이틀바 경로, Git 브랜치, Ghostty 단축키 및 v1.0.4 릴리즈](#세션-20-타이틀바-경로-git-브랜치-ghostty-단축키-및-v104-릴리즈)
+21. [세션 21: Git 브랜치 전환, Git Init 확인, 탭바 정렬 및 v1.0.5 릴리즈](#세션-21-git-브랜치-전환-git-init-확인-탭바-정렬-및-v105-릴리즈)
 
 ---
 
@@ -66,6 +67,7 @@
 | 35 | tmux cwd 보강, 탭 재정렬, v1.0.2 릴리즈 | tmux cwd troubleshooting 문서화, 터미널 탭 cwd 제목 갱신, 드래그 탭 순서 변경, GitHub Release 준비 |
 | 36 | 파일 브라우저 단일 클릭 폴더 이동 및 v1.0.3 릴리즈 | 사이드바 폴더 단일 클릭 탐색, 파일/폴더 구분 표시, 앱 번들 버전 1.0.3 갱신, GitHub Release 준비 |
 | 37 | 타이틀바 경로, Git 브랜치, Ghostty 단축키 및 v1.0.4 릴리즈 | macOS 타이틀바 경로/Git 브랜치 표시, Ghostty text keybind 전달, 문서 타입/URL scheme 등록, 앱 번들 버전 1.0.4 갱신 |
+| 38 | Git 브랜치 전환, Git Init 확인, 탭바 정렬 및 v1.0.5 릴리즈 | 타이틀바 브랜치 팝오버, 로컬/리모트 checkout, 비 Git 디렉토리 Git Init 확인 다이얼로그, 마지막 탭 옆 새 탭 버튼 배치, 앱 번들 버전 1.0.5 갱신 |
 
 ---
 
@@ -749,6 +751,63 @@ libghostty surface API에는 font family 전용 필드가 없으므로 사용자
 앱 번들 버전을 `0.2.1`로 갱신하고, 릴리즈 빌드 산출물과 체크섬을 생성해 GitHub Release `v0.2.1`에 업로드. Release notes에는 요청된 macOS Gatekeeper 안내를 포함.
 
 변경 파일: `Sources/App/Info.plist`, `history.md`
+
+---
+
+## 세션 21: Git 브랜치 전환, Git Init 확인, 탭바 정렬 및 v1.0.5 릴리즈
+
+> 날짜: 2026-05-21
+> 경로: ~/workspace/markAgent
+
+타이틀바의 Git 브랜치 표시를 클릭 가능한 브랜치 전환 UI로 확장하고, Git 저장소가 아닌 디렉토리에서는 확인 다이얼로그를 거쳐 `git init`을 실행하도록 보강. 탭 추가 버튼 배치를 마지막 탭 바로 오른쪽으로 조정한 뒤 `v1.0.5` 릴리즈를 준비.
+
+### 대화 1: 타이틀바 Git 브랜치 목록 및 checkout
+
+**사용자:**
+> 해당 브랜치 네임을 클릭하면 로컬과 리모트의 브랜치 목록을 보여주고 해당 브랜치로 체크할 수 있도록 해줘. 더블 클릭하면 체크아웃되도록.
+
+**응답:**
+타이틀바 Git 브랜치 표시를 버튼으로 전환하고, 클릭 시 로컬/리모트 브랜치 목록을 표시하는 팝오버를 추가. 로컬 브랜치는 직접 checkout하고, 리모트 브랜치는 동일 이름 로컬 브랜치가 있으면 해당 브랜치로 checkout, 없으면 tracking branch를 생성하도록 구현. 현재 로컬 브랜치는 체크 표시와 하이라이트로 구분.
+
+변경 파일: `Sources/App/TitlebarStatusView.swift`, `Sources/Core/GitRepositoryStatus.swift`
+
+---
+
+### 대화 2: 비 Git 디렉토리 Git Init 버튼과 확인 다이얼로그
+
+**사용자:**
+> git 저장소가 아닐 때에는 Git Init을 할 수 있는 버튼을 표시해줘.
+>
+> Git Init 버튼을 클릭하면 확인하는 Dialog가 떠야해
+
+**응답:**
+현재 디렉토리가 Git 저장소가 아닐 때 타이틀바 오른쪽에 `Git Init` 버튼을 표시하고, 클릭 시 확인 다이얼로그를 먼저 띄우도록 구현. 사용자가 확인하면 현재 디렉토리에서 `git init`을 실행하고 Git 상태를 다시 읽어 브랜치 표시로 전환.
+
+변경 파일: `Sources/App/TitlebarStatusView.swift`, `Sources/Core/GitRepositoryStatus.swift`
+
+---
+
+### 대화 3: 새 탭 버튼 위치 조정
+
+**사용자:**
+> 탭을 추가하는 + 버튼이 너무 생뚱맞게 오른쪽으로 가 있어. 가장 마지막탭 바로 오른쪽에 약간의 여유가 있게 해서 눈에 안보이는 가상의 버튼 크기 정도의 느낌으로 표시되게 해줘.
+
+**응답:**
+새 탭 `+` 버튼을 탭 목록 바깥 고정 위치에서 `ScrollView` 내부의 마지막 항목으로 이동. 마지막 탭 바로 오른쪽에 일정 크기의 클릭 영역과 여백을 두어 탭 스트립의 자연스러운 후속 버튼처럼 보이도록 조정.
+
+변경 파일: `Sources/Views/Main/TabBarView.swift`
+
+---
+
+### 대화 4: v1.0.5 릴리즈 준비
+
+**사용자:**
+> 1.0.5 빌드를 릴리즈 번들을 만들어서 깃헙 Release에 업로드 하고 커밋, 푸시, main에 PR, 반영까지 해줘.
+
+**응답:**
+앱 번들 버전을 `1.0.5`로 갱신하고, 커밋/푸시 전 본 세션 작업 내용을 `history.md`에 기록. 릴리즈 빌드, GitHub Release 업로드, dev 브랜치 푸시, main 대상 PR 생성 및 병합을 진행.
+
+변경 파일: `Sources/App/Info.plist`, `Sources/App/TitlebarStatusView.swift`, `Sources/Core/GitRepositoryStatus.swift`, `Sources/Views/Main/TabBarView.swift`, `history.md`
 
 ---
 
