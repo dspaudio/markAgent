@@ -47,6 +47,8 @@ final class GitRepositoryStatus {
     private(set) var remoteBranchGroups: [GitRemoteBranchGroup] = []
     private(set) var isLoadingBranches = false
     private(set) var isInitializingRepository = false
+    private(set) var isCheckingOut = false
+    private(set) var checkoutTargetBranch: GitBranch?
     private(set) var checkoutErrorMessage: String?
     private var refreshTask: Task<Void, Never>?
     private var branchTask: Task<Void, Never>?
@@ -147,7 +149,23 @@ final class GitRepositoryStatus {
     }
 
     func checkout(_ branch: GitBranch) {
-        guard let repositoryRoot else { return }
+        guard let repositoryRoot else {
+            checkoutErrorMessage = "Git 저장소가 아닙니다."
+            return
+        }
+
+        if branch.name == branchName {
+            checkoutErrorMessage = "이미 '\(branch.displayName)' 브랜치에 있습니다."
+            return
+        }
+
+        guard !isCheckingOut else {
+            checkoutErrorMessage = "다른 체크아웃 작업이 진행 중입니다."
+            return
+        }
+
+        isCheckingOut = true
+        checkoutTargetBranch = branch
         checkoutErrorMessage = nil
         checkoutTask?.cancel()
 
@@ -158,14 +176,25 @@ final class GitRepositoryStatus {
                 }
             }.value
 
-            guard !Task.isCancelled else { return }
+            guard !Task.isCancelled else {
+                self.isCheckingOut = false
+                self.checkoutTargetBranch = nil
+                return
+            }
+
+            self.isCheckingOut = false
+            self.checkoutTargetBranch = nil
 
             switch result {
             case .success:
                 self.refresh(for: self.currentDirectory)
                 self.loadBranches()
             case .failure(let error):
-                self.checkoutErrorMessage = error.localizedDescription
+                if let gitError = error as? GitRepositoryStatusError, case .commandFailed(let msg) = gitError {
+                    self.checkoutErrorMessage = Self.parseCheckoutError(msg)
+                } else {
+                    self.checkoutErrorMessage = error.localizedDescription
+                }
             }
         }
     }
@@ -254,6 +283,20 @@ final class GitRepositoryStatus {
                 _ = try runGitStrict(["checkout", "--track", branch.checkoutName], repositoryRoot: repositoryRoot)
             }
         }
+    }
+
+    private nonisolated static func parseCheckoutError(_ message: String) -> String {
+        let lowercased = message.lowercased()
+        if lowercased.contains("would be overwritten by checkout") {
+            if lowercased.contains("untracked working tree files") {
+                return "추적되지 않는 파일이 덮어쓰여집니다. 먼저 파일을 커밋하거나 삭제해주세요."
+            } else {
+                return "커밋하지 않은 변경사항이 있습니다. 먼저 커밋하거나 스태시(stash)해주세요."
+            }
+        } else if lowercased.contains("you need to resolve your current index first") || lowercased.contains("unmerged files") {
+            return "병합(merge) 충돌이 있습니다. 먼저 충돌을 해결해주세요."
+        }
+        return message
     }
 
     private nonisolated static func localBranchExists(named branchName: String, repositoryRoot: URL) -> Bool {
