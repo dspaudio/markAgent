@@ -70,6 +70,7 @@
 | 37 | 타이틀바 경로, Git 브랜치, Ghostty 단축키 및 v1.0.4 릴리즈 | macOS 타이틀바 경로/Git 브랜치 표시, Ghostty text keybind 전달, 문서 타입/URL scheme 등록, 앱 번들 버전 1.0.4 갱신 |
 | 38 | Git 브랜치 전환, Git Init 확인, 탭바 정렬 및 v1.0.5 릴리즈 | 타이틀바 브랜치 팝오버, 로컬/리모트 checkout, 비 Git 디렉토리 Git Init 확인 다이얼로그, 마지막 탭 옆 새 탭 버튼 배치, 앱 번들 버전 1.0.5 갱신 |
 | 39 | Diff UX, Ghostty keybind 경로, Markdown 로컬 툴바 및 v1.1.0 릴리즈 | Git 브랜치 checkout 예외 UX, 좌우 리사이즈 가능한 변경 사이드바, Diff 숨김 문맥 확장, Ghostty keybind 전달 경로 보정, Markdown 로컬 툴바, 실행 인자 파일 열기, rawEdit wrap 안정화, 앱 번들 버전 1.1.0 갱신 |
+| 40 | Reload Configuration 메뉴 및 v1.1.1 릴리즈 | MarkAgent 메뉴에 Reload Configuration 추가, 실행 중 Ghostty config 재적용 경로 보강, 앱 번들 버전 1.1.1 갱신 |
 
 ---
 
@@ -1303,5 +1304,34 @@ Preview/Raw Edit 전환과 기존 플로팅 편집 버튼을 `MarkdownTabView` �
 README 기능 소개에 Ghostty keybind 전달, 로컬 Markdown 툴바, 좌우 리사이즈 가능한 사이드바, 확장 가능한 Diff 문맥, 타이틀바 Git UX, `.app --args` 파일 열기, rawEdit wrap 안정화 내용을 반영. `history.md`에 본 세션을 기록하고 `v1.1.0` 릴리즈 빌드/배포 준비를 진행.
 
 변경 파일: `README.md`, `history.md`, `Sources/App/Info.plist`
+
+---
+
+
+## 세션 23: Reload Configuration 메뉴 및 v1.1.1 릴리즈
+
+> 날짜: 2026-05-22
+> 경로: ~/workspace/markAgent
+
+실행 중인 앱에서 Ghostty 설정을 다시 읽을 수 있도록 MarkAgent 메뉴에 Reload Configuration을 추가하고, 기존 터미널 탭에 재적용하는 경로를 보강한 뒤 `v1.1.1` 패치 릴리즈를 준비.
+
+### 대화 1: Reload Configuration 메뉴 추가
+
+**사용자:**
+> shift+cmd+, 키로 설정을 다시 읽는 기능을 추가해야 해
+>
+> 메인 메뉴의 MarkAgent 메뉴에서 Reload Configuration 메뉴를 추가해줘.
+>
+> 앱이 실행될 때 ~/.config/ghostty/config 파일을 읽어서 내부 설정 상태를 수정해야 해.
+
+**응답:**
+`About MarkAgent` 바로 다음에 `Reload Configuration` 메뉴를 추가하고, 단축키 `⇧⌘,`를 연결. 실행 중인 모든 `TerminalTab`에 대해 `reloadConfiguration()`을 호출해 Ghostty config의 keybind/font 설정을 다시 읽고, 앱 루트 뷰도 다시 구성해 테마 변경까지 반영하도록 구현. 앱 시작 시에는 기존 `setupWindow()`와 `TerminalTabState.init()` 경로로 Ghostty config를 읽어 내부 상태를 초기화하는 현재 구조를 유지.
+
+검증:
+- `swift build` — 통과
+- `swift test` — 21개 테스트 통과
+- Oracle review — PASS
+
+변경 파일: `Sources/App/AppDelegate.swift`, `Sources/Core/Tabs/TerminalTabState.swift`, `README.md`, `Sources/App/Info.plist`, `history.md`
 
 ---
