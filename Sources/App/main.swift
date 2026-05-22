@@ -8,9 +8,19 @@ if !executableURL.path.contains(".app/Contents/MacOS/") {
     for _ in 0..<3 {
         let candidate = searchDir.appendingPathComponent("MarkAgent.app")
         if FileManager.default.fileExists(atPath: candidate.path) {
+            let forwardedArguments = CommandLine.arguments.dropFirst().map { argument in
+                guard !argument.hasPrefix("-") else { return argument }
+
+                if argument.hasPrefix("/") || argument.hasPrefix("~") {
+                    return NSString(string: argument).expandingTildeInPath
+                }
+
+                let cwd = FileManager.default.currentDirectoryPath
+                return URL(fileURLWithPath: cwd).appendingPathComponent(argument).path
+            }
             let process = Process()
             process.executableURL = URL(fileURLWithPath: "/usr/bin/open")
-            process.arguments = [candidate.path, "--args"] + Array(CommandLine.arguments.dropFirst())
+            process.arguments = [candidate.path, "--args"] + forwardedArguments
             try? process.run()
             process.waitUntilExit()
             exit(process.terminationStatus)
