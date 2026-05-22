@@ -154,6 +154,14 @@ Open a Markdown file with the app bundle:
 open .build/MarkAgent.app --args README.md
 ```
 
+Project-local release automation for maintainers:
+
+```text
+/release-build
+```
+
+If no version is provided, the project-local command under `.claude/commands/release-build.md` reads the current app version and bumps the patch number automatically.
+
 ## Ghostty Config
 
 MarkAgent looks for Ghostty config files in this order:

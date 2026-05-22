@@ -71,6 +71,7 @@
 | 38 | Git 브랜치 전환, Git Init 확인, 탭바 정렬 및 v1.0.5 릴리즈 | 타이틀바 브랜치 팝오버, 로컬/리모트 checkout, 비 Git 디렉토리 Git Init 확인 다이얼로그, 마지막 탭 옆 새 탭 버튼 배치, 앱 번들 버전 1.0.5 갱신 |
 | 39 | Diff UX, Ghostty keybind 경로, Markdown 로컬 툴바 및 v1.1.0 릴리즈 | Git 브랜치 checkout 예외 UX, 좌우 리사이즈 가능한 변경 사이드바, Diff 숨김 문맥 확장, Ghostty keybind 전달 경로 보정, Markdown 로컬 툴바, 실행 인자 파일 열기, rawEdit wrap 안정화, 앱 번들 버전 1.1.0 갱신 |
 | 40 | Reload Configuration 메뉴 및 v1.1.1 릴리즈 | MarkAgent 메뉴에 Reload Configuration 추가, 실행 중 Ghostty config 재적용 경로 보강, 앱 번들 버전 1.1.1 갱신 |
+| 41 | release-build 자동 patch bump 및 v1.1.2 릴리즈 | 프로젝트 로컬 /release-build 커맨드에 인자 없는 patch 자동 증가 규칙 추가, README 유지보수 안내 보강, 앱 번들 버전 1.1.2 갱신 |
 
 ---
 
@@ -1333,5 +1334,37 @@ README 기능 소개에 Ghostty keybind 전달, 로컬 Markdown 툴바, 좌우 �
 - Oracle review — PASS
 
 변경 파일: `Sources/App/AppDelegate.swift`, `Sources/Core/Tabs/TerminalTabState.swift`, `README.md`, `Sources/App/Info.plist`, `history.md`
+
+---
+
+
+## 세션 24: release-build 자동 patch bump 및 v1.1.2 릴리즈
+
+> 날짜: 2026-05-22
+> 경로: ~/workspace/markAgent
+
+프로젝트 로컬 `/release-build` 커맨드를 자동 patch bump 규칙으로 보강하고, 그 후속 변경과 Ghostty Reload Configuration 기능을 `v1.1.2` 패치 릴리즈로 정리.
+
+### 대화 1: /release-build 자동 patch bump 규칙 추가
+
+**사용자:**
+> 인자가 없으면 patch +1 자동으로 해서 커맨드에도 반영하고, 그렇게 해서 실행해줘
+
+**응답:**
+프로젝트 로컬 `.claude/commands/release-build.md`를 수정해, 인자가 없을 때 현재 `Info.plist` 버전을 읽고 patch를 자동으로 1 올리도록 규칙을 보강. explicit 버전 인자가 있으면 기존처럼 해당 버전을 우선 사용하도록 정리.
+
+변경 파일: `.claude/commands/release-build.md`
+
+---
+
+### 대화 2: v1.1.2 릴리즈 준비
+
+**사용자:**
+> 후속 수정도 반영해줘
+
+**응답:**
+Reload Configuration 기능을 포함한 후속 수정 범위를 `v1.1.2` 패치 릴리즈로 확정. README 유지보수 안내와 `history.md` 세션 24를 추가하고 앱 번들 버전을 `1.1.2`로 갱신한 뒤, 릴리즈 빌드/업로드/PR 머지까지 진행.
+
+변경 파일: `Sources/App/Info.plist`, `README.md`, `history.md`, `.claude/commands/release-build.md`
 
 ---
