@@ -833,73 +833,6 @@ libghostty surface API에는 font family 전용 필드가 없으므로 사용자
 
 ---
 
-## 세션 22: Diff UX, Ghostty keybind 경로, Markdown 로컬 툴바 및 v1.1.0 릴리즈
-
-> 날짜: 2026-05-22
-> 경로: ~/workspace/markAgent
-
-Diff와 사이드바 사용성을 다듬고, Ghostty keybind 전달 경로와 앱 실행 인자 처리 버그를 보강했다. Markdown 편집 모드 전환과 서식 버튼도 로컬 상단 툴바로 옮긴 뒤 `v1.1.0` 릴리즈를 준비.
-
-### 대화 1: Git checkout 예외 UX와 타이틀바 브랜치 표시 보강
-
-**사용자:**
-> 오른쪽 상단에 git checkout할 수 있는 기능에서 예상 가능한 예외 사항을 추론하고 해당 기능을 해결하기 위한 UI 및 기능을 구현해줘.
-
-**응답:**
-Git checkout 진행 상태, 이미 현재 브랜치인 경우, Git 저장소가 아닌 경우, 충돌하는 로컬 변경사항 등에 대해 사용자 메시지와 인라인 상태 표시를 추가. 관련 회귀 테스트도 새로 추가해 checkout 예외 UX를 안정화.
-
-변경 파일: `Sources/Core/GitRepositoryStatus.swift`, `Sources/App/TitlebarStatusView.swift`, `Tests/MarkAgentTests/GitRepositoryStatusTests.swift`
-
----
-
-### 대화 2: Diff 버튼/숨김 문맥/양쪽 사이드바 리사이즈 개선
-
-**사용자:**
-> 오른쪽 DiffView 버튼이 팝오버 버튼처럼 보여서 눈에 잘 들어오지 않아. ... 더 볼 수 있는 기능이 필요해.
-
-**응답:**
-TabBarView의 Diff 버튼을 우측 사이드바 아이콘 중심으로 정리하고, `DiffOverlayView`에 숨겨진 문맥 확장 UI를 추가. 이후 후속 피드백에 따라 우측/좌측 사이드바를 모두 AppKit 기반 리사이즈 핸들로 바꿔 포인터 mismatch와 jitter를 줄였다.
-
-변경 파일: `Sources/Views/Main/TabBarView.swift`, `Sources/Views/DiffOverlayView.swift`, `Sources/Views/Main/MainContainerView.swift`, `Sources/Views/Sidebar/GitChangesSidebar.swift`, `Sources/Views/Sidebar/FileBrowserSidebar.swift`
-
----
-
-### 대화 3: Ghostty keybind 전달 경로 수정
-
-**사용자:**
-> ~/.config/ghostty/config 에서 가져온 단축키 설정 부분의 키 전송 부분을 수정해야해. 명령이 정확히 전달되는게 아니라 단순 텍스트 전송만 되는 문제가 있었어.
-
-**응답:**
-기존 `text:` 전용 파싱과 `sendText(...)` 경로를 버리고, Ghostty config에서 keybind action 전체를 보존한 뒤 매칭된 chord에 대해 원본 `NSEvent`를 `AppTerminalView.keyDown(with:)`로 재전달하도록 수정. Ghostty 자체 keybinding 엔진이 설정을 직접 처리하게 바꿔 raw text 주입 문제를 제거.
-
-변경 파일: `Sources/Core/Tabs/GhosttyConfig.swift`, `Sources/Core/Tabs/TerminalTabState.swift`, `Sources/App/AppDelegate.swift`, `Tests/MarkAgentTests/GhosttyConfigTests.swift`
-
----
-
-### 대화 4: Markdown 로컬 헤더 툴바와 앱 실행 인자/word wrap 보강
-
-**사용자:**
-> 로컬 헤더의 MS 워드식의 툴바로 공간을 잡는게 나을 것 같아.
-
-**응답:**
-Preview/Raw Edit 전환과 기존 플로팅 편집 버튼을 `MarkdownTabView` 상단 로컬 헤더 툴바로 통합. 동시에 `.app --args` 실행 시 파일이 열리지 않던 문제를 고치고, rawEdit에서 창 크기 변화 없이 word wrap이 흔들리던 문제를 `scrollView.bounds.width` 기반의 안정적인 폭 계산으로 보정.
-
-변경 파일: `Sources/Views/EditorView.swift`, `Sources/Views/Tabs/MarkdownTabView.swift`, `Sources/App/main.swift`, `Sources/App/AppDelegate.swift`
-
----
-
-### 대화 5: README 업데이트와 v1.1.0 릴리즈 준비
-
-**사용자:**
-> 이제 릴리즈 앱 빌드를 만들어서 깃헙 Release에 업로드 하고, README.md 파일의 기능 소개 부분에 새로 추가된 기능을 포함해서 수정해줘. 그런 다음 커밋 & 푸시 & main에 PR 생성, 머지해서 반영해줘.
-
-**응답:**
-README 기능 소개에 Ghostty keybind 전달, 로컬 Markdown 툴바, 좌우 리사이즈 가능한 사이드바, 확장 가능한 Diff 문맥, 타이틀바 Git UX, `.app --args` 파일 열기, rawEdit wrap 안정화 내용을 반영. `history.md`에 본 세션을 기록하고 `v1.1.0` 릴리즈 빌드/배포 준비를 진행.
-
-변경 파일: `README.md`, `history.md`, `Sources/App/Info.plist`
-
----
-
 ### 대화 4: v0.2.1 font-family 명시 적용 바이너리 교체
 
 **사용자:**
@@ -1305,3 +1238,70 @@ MarkAgent 앱 번들 `Info.plist`에 `public.folder`, Markdown/text 문서 타�
 - SHA-256: `a329617d02aaefba5843ce4c6507732bbaf2476d5a1ab72e287f81afb1207ff6`
 
 변경 파일: `Sources/App/Info.plist`, `history.md`
+
+## 세션 22: Diff UX, Ghostty keybind 경로, Markdown 로컬 툴바 및 v1.1.0 릴리즈
+
+> 날짜: 2026-05-22
+> 경로: ~/workspace/markAgent
+
+Diff와 사이드바 사용성을 다듬고, Ghostty keybind 전달 경로와 앱 실행 인자 처리 버그를 보강했다. Markdown 편집 모드 전환과 서식 버튼도 로컬 상단 툴바로 옮긴 뒤 `v1.1.0` 릴리즈를 준비.
+
+### 대화 1: Git checkout 예외 UX와 타이틀바 브랜치 표시 보강
+
+**사용자:**
+> 오른쪽 상단에 git checkout할 수 있는 기능에서 예상 가능한 예외 사항을 추론하고 해당 기능을 해결하기 위한 UI 및 기능을 구현해줘.
+
+**응답:**
+Git checkout 진행 상태, 이미 현재 브랜치인 경우, Git 저장소가 아닌 경우, 충돌하는 로컬 변경사항 등에 대해 사용자 메시지와 인라인 상태 표시를 추가. 관련 회귀 테스트도 새로 추가해 checkout 예외 UX를 안정화.
+
+변경 파일: `Sources/Core/GitRepositoryStatus.swift`, `Sources/App/TitlebarStatusView.swift`, `Tests/MarkAgentTests/GitRepositoryStatusTests.swift`
+
+---
+
+### 대화 2: Diff 버튼/숨김 문맥/양쪽 사이드바 리사이즈 개선
+
+**사용자:**
+> 오른쪽 DiffView 버튼이 팝오버 버튼처럼 보여서 눈에 잘 들어오지 않아. ... 더 볼 수 있는 기능이 필요해.
+
+**응답:**
+TabBarView의 Diff 버튼을 우측 사이드바 아이콘 중심으로 정리하고, `DiffOverlayView`에 숨겨진 문맥 확장 UI를 추가. 이후 후속 피드백에 따라 우측/좌측 사이드바를 모두 AppKit 기반 리사이즈 핸들로 바꿔 포인터 mismatch와 jitter를 줄였다.
+
+변경 파일: `Sources/Views/Main/TabBarView.swift`, `Sources/Views/DiffOverlayView.swift`, `Sources/Views/Main/MainContainerView.swift`, `Sources/Views/Sidebar/GitChangesSidebar.swift`, `Sources/Views/Sidebar/FileBrowserSidebar.swift`
+
+---
+
+### 대화 3: Ghostty keybind 전달 경로 수정
+
+**사용자:**
+> ~/.config/ghostty/config 에서 가져온 단축키 설정 부분의 키 전송 부분을 수정해야해. 명령이 정확히 전달되는게 아니라 단순 텍스트 전송만 되는 문제가 있었어.
+
+**응답:**
+기존 `text:` 전용 파싱과 `sendText(...)` 경로를 버리고, Ghostty config에서 keybind action 전체를 보존한 뒤 매칭된 chord에 대해 원본 `NSEvent`를 `AppTerminalView.keyDown(with:)`로 재전달하도록 수정. Ghostty 자체 keybinding 엔진이 설정을 직접 처리하게 바꿔 raw text 주입 문제를 제거.
+
+변경 파일: `Sources/Core/Tabs/GhosttyConfig.swift`, `Sources/Core/Tabs/TerminalTabState.swift`, `Sources/App/AppDelegate.swift`, `Tests/MarkAgentTests/GhosttyConfigTests.swift`
+
+---
+
+### 대화 4: Markdown 로컬 헤더 툴바와 앱 실행 인자/word wrap 보강
+
+**사용자:**
+> 로컬 헤더의 MS 워드식의 툴바로 공간을 잡는게 나을 것 같아.
+
+**응답:**
+Preview/Raw Edit 전환과 기존 플로팅 편집 버튼을 `MarkdownTabView` 상단 로컬 헤더 툴바로 통합. 동시에 `.app --args` 실행 시 파일이 열리지 않던 문제를 고치고, rawEdit에서 창 크기 변화 없이 word wrap이 흔들리던 문제를 `scrollView.bounds.width` 기반의 안정적인 폭 계산으로 보정.
+
+변경 파일: `Sources/Views/EditorView.swift`, `Sources/Views/Tabs/MarkdownTabView.swift`, `Sources/App/main.swift`, `Sources/App/AppDelegate.swift`
+
+---
+
+### 대화 5: README 업데이트와 v1.1.0 릴리즈 준비
+
+**사용자:**
+> 이제 릴리즈 앱 빌드를 만들어서 깃헙 Release에 업로드 하고, README.md 파일의 기능 소개 부분에 새로 추가된 기능을 포함해서 수정해줘. 그런 다음 커밋 & 푸시 & main에 PR 생성, 머지해서 반영해줘.
+
+**응답:**
+README 기능 소개에 Ghostty keybind 전달, 로컬 Markdown 툴바, 좌우 리사이즈 가능한 사이드바, 확장 가능한 Diff 문맥, 타이틀바 Git UX, `.app --args` 파일 열기, rawEdit wrap 안정화 내용을 반영. `history.md`에 본 세션을 기록하고 `v1.1.0` 릴리즈 빌드/배포 준비를 진행.
+
+변경 파일: `README.md`, `history.md`, `Sources/App/Info.plist`
+
+---
