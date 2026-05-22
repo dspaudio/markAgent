@@ -15,6 +15,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var aboutWindow: NSWindow?
     private var isClosingAfterDirtyConfirmation = false
     private let windowFrameDefaultsKey = "MarkAgent.windowFrame"
+    private var rootHostingView: NSHostingView<AnyView>?
 
     override init() {
         let homeURL = URL(fileURLWithPath: NSHomeDirectory())
@@ -39,6 +40,34 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func setupWindow() {
+        let hostingView = NSHostingView(rootView: makeRootView())
+
+        let window = MarkAgentWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 980, height: 700),
+            styleMask: [.titled, .closable, .resizable, .miniaturizable],
+            backing: .buffered,
+            defer: false
+        )
+        window.contentView = hostingView
+        window.titleVisibility = .hidden
+        window.collectionBehavior = [.fullScreenPrimary]
+        window.level = .normal
+        window.delegate = self
+        window.terminalKeybindHandler = { [weak self] event in
+            self?.handleTerminalTextKeybind(event) ?? false
+        }
+        self.window = window
+        self.rootHostingView = hostingView
+        dirtyPrompter.window = window
+        setupTitlebarStatus(for: window)
+        gitRepositoryStatus.refresh(for: directoryScanner.currentDirectory)
+
+        restoreWindowFrame(window)
+        window.makeKeyAndOrderFront(nil)
+        updateWindowTitle()
+    }
+
+    private func makeRootView() -> AnyView {
         let appTheme = GhosttyConfig.userConfig()?.colorTheme
         let contentView = MainContainerView(
             tabs: tabs,
@@ -56,30 +85,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
         .environment(\.terminalAppTheme, appTheme)
         .preferredColorScheme(appTheme?.preferredColorScheme)
-        let hostingView = NSHostingView(rootView: contentView)
-
-        let window = MarkAgentWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 980, height: 700),
-            styleMask: [.titled, .closable, .resizable, .miniaturizable],
-            backing: .buffered,
-            defer: false
-        )
-        window.contentView = hostingView
-        window.titleVisibility = .hidden
-        window.collectionBehavior = [.fullScreenPrimary]
-        window.level = .normal
-        window.delegate = self
-        window.terminalKeybindHandler = { [weak self] event in
-            self?.handleTerminalTextKeybind(event) ?? false
-        }
-        self.window = window
-        dirtyPrompter.window = window
-        setupTitlebarStatus(for: window)
-        gitRepositoryStatus.refresh(for: directoryScanner.currentDirectory)
-
-        restoreWindowFrame(window)
-        window.makeKeyAndOrderFront(nil)
-        updateWindowTitle()
+        return AnyView(contentView)
     }
 
     private func setupTitlebarStatus(for window: NSWindow) {
@@ -160,6 +166,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let aboutItem = NSMenuItem(title: "About MarkAgent", action: #selector(showAbout), keyEquivalent: "")
         aboutItem.target = self
         appMenu.addItem(aboutItem)
+
+        let reloadConfigurationItem = NSMenuItem(title: "Reload Configuration", action: #selector(reloadConfiguration), keyEquivalent: ",")
+        reloadConfigurationItem.keyEquivalentModifierMask = [.command, .shift]
+        reloadConfigurationItem.target = self
+        appMenu.addItem(reloadConfigurationItem)
+
         appMenu.addItem(.separator())
 
         let servicesMenuItem = NSMenuItem(title: "Services", action: nil, keyEquivalent: "")
@@ -308,6 +320,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func newMarkdownTab() {
         tabs.createMarkdownTab(fileURL: nil)
+        updateWindowTitle()
+    }
+
+    @objc private func reloadConfiguration() {
+        for tab in tabs.tabs {
+            guard let terminalTab = tab as? TerminalTab else { continue }
+            terminalTab.state.reloadConfiguration()
+        }
+
+        rootHostingView?.rootView = makeRootView()
         updateWindowTitle()
     }
 
