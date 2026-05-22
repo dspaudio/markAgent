@@ -6,6 +6,7 @@ struct FileBrowserSidebar: View {
     var currentFileURL: URL?
     var onOpenMarkdown: (URL) -> Void
     var onOpenOtherFile: (URL) -> Void
+    var width: Double = 260
     
     @State private var selectedEntryID: String?
     @State private var expandedDirectoryIDs: Set<String> = []
@@ -87,7 +88,7 @@ struct FileBrowserSidebar: View {
             }
             .frame(maxHeight: 200)
         }
-        .frame(width: 260)
+        .frame(width: width)
         .frame(maxHeight: .infinity)
         .background(appColors?.panel ?? Color(NSColor.controlBackgroundColor))
         .foregroundStyle(appColors?.foreground ?? Color.primary)

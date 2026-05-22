@@ -2,6 +2,7 @@ import SwiftUI
 
 struct GitChangesSidebar: View {
     var state: GitDiffState
+    var width: Double
 
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.terminalAppTheme) private var terminalAppTheme
@@ -19,7 +20,7 @@ struct GitChangesSidebar: View {
                 }
             }
         }
-        .frame(width: 420)
+        .frame(width: width)
         .frame(maxHeight: .infinity)
         .background(appColors?.panel ?? Color(NSColor.controlBackgroundColor))
         .foregroundStyle(appColors?.foreground ?? Color.primary)
