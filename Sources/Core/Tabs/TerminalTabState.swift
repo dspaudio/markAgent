@@ -7,7 +7,7 @@ import GhosttyTerminal
 final class TerminalTabState {
     let id: UUID
     var workingDirectory: URL
-    var terminalViewState: TerminalViewState
+    let terminalViewState: TerminalViewState
 
     var title: String
     private var configFontSize: Float?
@@ -29,10 +29,21 @@ final class TerminalTabState {
     }
 
     func reloadConfiguration() {
-        let configuration = Self.makeConfiguration()
-        configFontSize = configuration.configFontSize
-        keybinds = configuration.keybinds
-        terminalViewState = configuration.viewState
+        let userConfig = GhosttyConfig.userConfig()
+        configFontSize = userConfig?.fontSize
+        keybinds = userConfig?.keybinds ?? []
+
+        let terminalConfiguration = Self.makeTerminalConfiguration(userConfig: userConfig)
+        let configSource: TerminalController.ConfigSource = if let userConfig {
+            .file(userConfig.url.path)
+        } else {
+            .none
+        }
+        let theme: TerminalTheme = userConfig != nil ? TerminalTheme() : .default
+
+        _ = terminalViewState.controller.updateConfigSource(configSource)
+        _ = terminalViewState.controller.setTheme(theme)
+        _ = terminalViewState.controller.setTerminalConfiguration(terminalConfiguration)
 
         if didStart {
             terminalViewState.configuration = TerminalSurfaceOptions(
@@ -46,6 +57,9 @@ final class TerminalTabState {
                     self?.onCloseRequested?()
                 }
             }
+
+            terminalView?.controller = terminalViewState.controller
+            terminalView?.configuration = terminalViewState.configuration
         }
     }
 
@@ -53,14 +67,7 @@ final class TerminalTabState {
         let userConfig = GhosttyConfig.userConfig()
         let configFontSize = userConfig?.fontSize
         let keybinds = userConfig?.keybinds ?? []
-        let terminalConfiguration = TerminalConfiguration { builder in
-            for fontFamily in userConfig?.fontFamilies ?? [] {
-                builder.withFontFamily(fontFamily)
-            }
-            if let fontSize = userConfig?.fontSize {
-                builder.withFontSize(fontSize)
-            }
-        }
+        let terminalConfiguration = makeTerminalConfiguration(userConfig: userConfig)
 
         let configSource: TerminalController.ConfigSource = if let userConfig {
             .file(userConfig.url.path)
@@ -76,6 +83,17 @@ final class TerminalTabState {
         )
 
         return (configFontSize, keybinds, viewState)
+    }
+
+    private static func makeTerminalConfiguration(userConfig: GhosttyConfig?) -> TerminalConfiguration {
+        TerminalConfiguration { builder in
+            for fontFamily in userConfig?.fontFamilies ?? [] {
+                builder.withFontFamily(fontFamily)
+            }
+            if let fontSize = userConfig?.fontSize {
+                builder.withFontSize(fontSize)
+            }
+        }
     }
 
     func startIfNeeded() {
