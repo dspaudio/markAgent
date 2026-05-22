@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import GhosttyTerminal
 
@@ -10,7 +11,7 @@ final class TerminalTabState {
 
     var title: String
     private let configFontSize: Float?
-    private let textKeybinds: [GhosttyTextKeybind]
+    private let keybinds: [GhosttyKeybind]
     var didStart: Bool = false
     var onCloseRequested: (() -> Void)?
     var onDirectoryChanged: ((URL) -> Void)?
@@ -23,7 +24,7 @@ final class TerminalTabState {
 
         let userConfig = GhosttyConfig.userConfig()
         self.configFontSize = userConfig?.fontSize
-        self.textKeybinds = userConfig?.textKeybinds ?? []
+        self.keybinds = userConfig?.keybinds ?? []
         let terminalConfiguration = TerminalConfiguration { builder in
             for fontFamily in userConfig?.fontFamilies ?? [] {
                 builder.withFontFamily(fontFamily)
@@ -85,12 +86,14 @@ final class TerminalTabState {
         didStart = false
     }
 
-    func sendConfiguredTextKeybind(key: String, modifiers: EventModifierMask) -> Bool {
-        guard let keybind = textKeybinds.first(where: { $0.matches(key: key, modifiers: modifiers) }) else {
+    func sendConfiguredKeybind(_ event: NSEvent, key: String, modifiers: EventModifierMask) -> Bool {
+        guard keybinds.contains(where: { $0.matches(key: key, modifiers: modifiers) }) else {
             return false
         }
 
-        terminalView?.sendText(keybind.text)
+        guard let terminalView else { return false }
+        terminalView.window?.makeFirstResponder(terminalView)
+        terminalView.keyDown(with: event)
         return true
     }
 

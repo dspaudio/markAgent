@@ -29,6 +29,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         setupMenu()
         setupWindow()
         tabs.createTerminalTab(workingDirectory: URL(fileURLWithPath: NSHomeDirectory()))
+        openLaunchTargetIfNeeded()
         updateWindowTitle()
         NSRunningApplication.current.activate()
     }
@@ -395,6 +396,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         updateWindowTitle()
     }
 
+    private func openLaunchTargetIfNeeded() {
+        guard let fileURL = launchTargetFileURL() else { return }
+        openMarkdownFile(fileURL)
+    }
+
+    private func launchTargetFileURL() -> URL? {
+        let arguments = ProcessInfo.processInfo.arguments.dropFirst()
+
+        for argument in arguments {
+            guard !argument.hasPrefix("-psn_") else { continue }
+            guard !argument.hasPrefix("-") else { continue }
+
+            switch MarkdownDocument.resolveFileURL(from: argument) {
+            case .success(let url):
+                return url
+            case .failure:
+                continue
+            }
+        }
+
+        return nil
+    }
+
     @objc private func saveDocument() {
         _ = saveActiveMarkdownDocument()
     }
@@ -530,7 +554,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if event.modifierFlags.contains(.option) { modifiers.insert(.option) }
 
         guard modifiers.contains(EventModifierMask.command) else { return false }
-        return tabs.activeTerminalTab?.state.sendConfiguredTextKeybind(key: key, modifiers: modifiers) == true
+        return tabs.activeTerminalTab?.state.sendConfiguredKeybind(event, key: key, modifiers: modifiers) == true
     }
 
     private func updateViewMenuState() {

@@ -6,22 +6,17 @@ struct MarkdownTabView: View {
     var onOpenFile: () -> Void
     var onDocumentChanged: () -> Void
 
+    @State private var selectedRange: NSRange = NSRange(location: 0, length: 0)
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.terminalAppTheme) private var terminalAppTheme
 
     var body: some View {
-        detailContent
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .toolbar {
-                ToolbarItemGroup(placement: .automatic) {
-                    if isActive {
-                        if state.document.supportsPreview {
-                            modeButton(.preview, title: "Preview", systemImage: "eye")
-                        }
-                        modeButton(.rawEdit, title: "Raw Edit", systemImage: "square.and.pencil")
-                    }
-                }
-            }
+        VStack(spacing: 0) {
+            localHeaderToolbar
+            Divider()
+            detailContent
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
             .alert(
                 "파일이 외부에서 수정되었습니다",
                 isPresented: Binding(
@@ -71,10 +66,45 @@ struct MarkdownTabView: View {
     private var rawEditor: some View {
         EditorView(
             document: state.document,
-            showsInlineToolbar: state.document.supportsPreview,
+            showsInlineToolbar: false,
             rendersMarkdownStyle: false,
-            isActive: isActive
+            isActive: isActive,
+            externalSelectedRange: $selectedRange
         )
+    }
+
+    private var localHeaderToolbar: some View {
+        HStack(spacing: 12) {
+            HStack(spacing: 6) {
+                if state.document.supportsPreview {
+                    modeButton(.preview, title: "Preview", systemImage: "eye")
+                }
+                modeButton(.rawEdit, title: "Raw Edit", systemImage: "square.and.pencil")
+            }
+
+            Divider()
+                .frame(height: 22)
+
+            HStack(spacing: 6) {
+                editButton("H", help: "제목", action: .heading)
+                editButton("B", help: "굵게", action: .bold)
+                editButton("I", help: "기울임", action: .italic)
+                    .italic()
+                editButton(systemImage: "link", help: "링크", action: .link)
+                editButton(systemImage: "list.bullet", help: "글머리 기호", action: .unorderedList)
+                editButton(systemImage: "list.number", help: "번호 목록", action: .orderedList)
+                editButton(systemImage: "checklist", help: "체크리스트", action: .checklist)
+                editButton(systemImage: "quote.opening", help: "인용", action: .quote)
+                editButton(systemImage: "chevron.left.forwardslash.chevron.right", help: "인라인 코드", action: .inlineCode)
+            }
+            .disabled(state.document.viewMode != .rawEdit)
+            .opacity(state.document.viewMode == .rawEdit ? 1 : 0.45)
+
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(appColors?.panel ?? Color(NSColor.controlBackgroundColor))
     }
 
     private func modeButton(
@@ -87,10 +117,37 @@ struct MarkdownTabView: View {
         return Button {
             state.document.viewMode = mode
         } label: {
-            Label(title, systemImage: systemImage)
+            Image(systemName: systemImage)
+                .frame(width: 28, height: 26)
                 .foregroundStyle(isSelected ? (appColors?.accent ?? Color.accentColor) : (appColors?.foreground ?? Color.primary))
         }
         .help("\(title) 보기")
+    }
+
+    private func editButton(_ title: String, help: String, action: MarkdownEditAction) -> some View {
+        Button {
+            MarkdownEditingController.apply(action, to: state.document, selectedRange: $selectedRange)
+        } label: {
+            Text(title)
+                .font(.system(size: 13, weight: .semibold))
+                .frame(width: 28, height: 26)
+        }
+        .buttonStyle(.plain)
+        .background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 6))
+        .help(help)
+    }
+
+    private func editButton(systemImage: String, help: String, action: MarkdownEditAction) -> some View {
+        Button {
+            MarkdownEditingController.apply(action, to: state.document, selectedRange: $selectedRange)
+        } label: {
+            Image(systemName: systemImage)
+                .font(.system(size: 13, weight: .semibold))
+                .frame(width: 28, height: 26)
+        }
+        .buttonStyle(.plain)
+        .background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 6))
+        .help(help)
     }
 
     private var previewContent: some View {

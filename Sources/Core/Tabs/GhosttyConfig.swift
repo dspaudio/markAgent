@@ -7,7 +7,7 @@ struct GhosttyConfig {
     let fontFamilies: [String]
     let fontSize: Float?
     let colorTheme: TerminalAppTheme?
-    let textKeybinds: [GhosttyTextKeybind]
+    let keybinds: [GhosttyKeybind]
 
     static func userConfig(
         fileManager: FileManager = .default,
@@ -31,7 +31,7 @@ struct GhosttyConfig {
             fontFamilies: parseFontFamilies(from: contents),
             fontSize: parseFontSize(from: contents),
             colorTheme: parseColorTheme(from: contents),
-            textKeybinds: parseTextKeybinds(from: contents)
+            keybinds: parseKeybinds(from: contents)
         )
     }
 
@@ -60,8 +60,8 @@ struct GhosttyConfig {
         return nil
     }
 
-    static func parseTextKeybinds(from contents: String) -> [GhosttyTextKeybind] {
-        parseValues(forKey: "keybind", from: contents).compactMap(GhosttyTextKeybind.init(rawValue:))
+    static func parseKeybinds(from contents: String) -> [GhosttyKeybind] {
+        parseValues(forKey: "keybind", from: contents).compactMap(GhosttyKeybind.init(rawValue:))
     }
 
     private static func parseInlineColorTheme(from contents: String) -> TerminalColorTheme? {
@@ -186,10 +186,10 @@ struct GhosttyConfig {
     }
 }
 
-struct GhosttyTextKeybind: Equatable {
+struct GhosttyKeybind: Equatable {
     let key: String
     let modifiers: EventModifierMask
-    let text: String
+    let action: String
 
     init?(rawValue: String) {
         let parts = rawValue.split(separator: "=", maxSplits: 1, omittingEmptySubsequences: false)
@@ -197,8 +197,6 @@ struct GhosttyTextKeybind: Equatable {
 
         let keyChord = String(parts[0]).trimmingCharacters(in: .whitespacesAndNewlines)
         let action = String(parts[1]).trimmingCharacters(in: .whitespacesAndNewlines)
-        guard action.hasPrefix("text:") else { return nil }
-
         let chordParts = keyChord
             .split(separator: "+")
             .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
@@ -222,7 +220,7 @@ struct GhosttyTextKeybind: Equatable {
 
         self.key = key
         self.modifiers = modifiers
-        self.text = Self.decodeGhosttyText(String(action.dropFirst("text:".count)))
+        self.action = action
     }
 
     func matches(key: String, modifiers: EventModifierMask) -> Bool {
@@ -238,71 +236,6 @@ struct GhosttyTextKeybind: Equatable {
         default:
             return key.lowercased()
         }
-    }
-
-    private static func decodeGhosttyText(_ value: String) -> String {
-        var decoded = ""
-        var index = value.startIndex
-
-        while index < value.endIndex {
-            let character = value[index]
-            guard character == "\\" else {
-                decoded.append(character)
-                index = value.index(after: index)
-                continue
-            }
-
-            let nextIndex = value.index(after: index)
-            guard nextIndex < value.endIndex else {
-                decoded.append(character)
-                index = nextIndex
-                continue
-            }
-
-            switch value[nextIndex] {
-            case "x":
-                let firstHexIndex = value.index(after: nextIndex)
-                guard firstHexIndex < value.endIndex else {
-                    decoded.append("\\x")
-                    index = firstHexIndex
-                    continue
-                }
-
-                let secondHexIndex = value.index(after: firstHexIndex)
-                guard secondHexIndex < value.endIndex else {
-                    decoded.append("\\x")
-                    decoded.append(value[firstHexIndex])
-                    index = secondHexIndex
-                    continue
-                }
-
-                let hex = String(value[firstHexIndex...secondHexIndex])
-                if let scalar = UInt8(hex, radix: 16) {
-                    decoded.append(Character(UnicodeScalar(scalar)))
-                    index = value.index(after: secondHexIndex)
-                } else {
-                    decoded.append("\\x")
-                    index = firstHexIndex
-                }
-            case "r":
-                decoded.append("\r")
-                index = value.index(after: nextIndex)
-            case "n":
-                decoded.append("\n")
-                index = value.index(after: nextIndex)
-            case "t":
-                decoded.append("\t")
-                index = value.index(after: nextIndex)
-            case "\\":
-                decoded.append("\\")
-                index = value.index(after: nextIndex)
-            default:
-                decoded.append(value[nextIndex])
-                index = value.index(after: nextIndex)
-            }
-        }
-
-        return decoded
     }
 }
 

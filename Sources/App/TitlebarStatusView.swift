@@ -38,16 +38,16 @@ struct TitlebarGitBranchView: View {
                 } label: {
                     HStack(spacing: 5) {
                         Image(systemName: "arrow.triangle.branch")
-                            .font(.system(size: 11, weight: .semibold))
+                            .font(.system(size: 12, weight: .semibold))
 
                         Text(branchName)
-                            .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                            .font(.system(size: 12, weight: .semibold, design: .monospaced))
                             .lineLimit(1)
                             .truncationMode(.middle)
                     }
                 }
                 .buttonStyle(.plain)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.blue)
                 .padding(.trailing, 16)
                 .frame(maxWidth: 240, alignment: .trailing)
                 .help(status.repositoryRoot?.path ?? branchName)
@@ -123,7 +123,7 @@ private struct GitBranchPopoverView: View {
                     .font(.system(size: 12, weight: .medium))
             }
             .buttonStyle(.plain)
-            .disabled(status.isLoadingBranches)
+            .disabled(status.isLoadingBranches || status.isCheckingOut)
             .help("브랜치 목록 새로고침")
         }
         .padding(.horizontal, 12)
@@ -167,16 +167,27 @@ private struct GitBranchPopoverView: View {
                         }
                     }
 
-                    if let message = status.checkoutErrorMessage {
+                    if status.isCheckingOut {
+                        HStack(spacing: 8) {
+                            ProgressView()
+                                .controlSize(.small)
+                            Text("체크아웃 진행 중...")
+                                .font(.system(size: 12))
+                                .foregroundStyle(.secondary)
+                        }
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 12)
+                    } else if let message = status.checkoutErrorMessage {
                         Text(message)
                             .font(.system(size: 11))
                             .foregroundStyle(.red)
                             .padding(.horizontal, 12)
-                            .padding(.vertical, 8)
+                            .padding(.vertical, 12)
                     }
                 }
                 .padding(.vertical, 8)
             }
+            .disabled(status.isCheckingOut)
         }
     }
 
@@ -227,6 +238,11 @@ private struct GitBranchPopoverView: View {
                 .truncationMode(.middle)
 
             Spacer()
+            
+            if status.isCheckingOut && status.checkoutTargetBranch == branch {
+                ProgressView()
+                    .controlSize(.mini)
+            }
         }
         .padding(.leading, isRemoteChild ? 46 : 28)
         .padding(.trailing, 12)
@@ -236,6 +252,7 @@ private struct GitBranchPopoverView: View {
         .onTapGesture(count: 2) {
             status.checkout(branch)
         }
+        .disabled(status.isCheckingOut)
         .help("더블 클릭해서 \(branch.checkoutName) 체크아웃")
     }
 }

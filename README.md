@@ -35,11 +35,12 @@ MarkAgent is a visual bridge for that workflow.
 ## Features
 
 - **Ghostty terminal tabs:** Embedded terminal tabs powered by `libghostty-spm` for handling multiple work sessions in one window.
-- **Ghostty config integration:** Reads `~/.config/ghostty/config` and reflects your existing terminal preferences such as theme, font family, and font size in the app. It also checks Ghostty's macOS Application Support config path.
-- **Markdown editing and preview:** Supports raw Markdown editing, GFM rendering, tables, checklists, strikethrough, and highlighted code blocks.
-- **Working directory file browser:** Updates the file browser based on the active terminal or Markdown tab's working directory.
-- **Change tracking:** Shows changed files from the Git repository in the sidebar and displays line-based diffs for selected files.
+- **Ghostty config integration:** Reads `~/.config/ghostty/config` and reflects your existing terminal preferences such as theme, font family, and font size in the app. It also checks Ghostty's macOS Application Support config path and routes configured Ghostty keybind chords back through Ghostty's own key handling path instead of raw text injection.
+- **Markdown editing and preview:** Supports raw Markdown editing, GFM rendering, tables, checklists, strikethrough, highlighted code blocks, and a local markdown toolbar with preview/raw mode switching plus inline formatting actions.
+- **Working directory file browser:** Updates the file browser based on the active terminal or Markdown tab's working directory, and both left and right sidebars can be resized directly in the window.
+- **Change tracking:** Shows changed files from the Git repository in the sidebar, supports branch checkout and Git init from the titlebar, and displays line-based diffs with expandable hidden context for selected files.
 - **Recent documents:** Reopen frequently used Markdown documents from the recent documents list.
+- **App launch file opening:** Opening the app with a file path, including `.app --args` launches, resolves the target file directly into a markdown tab.
 - **macOS app bundle:** Runs as a `.app` bundle with Dock, menu bar, Cmd+Tab, and normal macOS window behavior.
 
 ## Terminal Workflow
@@ -215,11 +216,12 @@ MarkAgent는 이 흐름을 위해 만든 비주얼 브릿지입니다.
 ## 주요 기능
 
 - **Ghostty 터미널 탭:** `libghostty-spm`을 사용한 내장 터미널 탭으로 여러 작업 세션을 한 창에서 다룹니다.
-- **Ghostty 설정 연동:** `~/.config/ghostty/config`를 읽어 테마, 폰트 패밀리, 폰트 크기 등 기존 터미널 취향을 앱에 반영합니다. Ghostty의 macOS Application Support 설정 경로도 함께 확인합니다.
-- **Markdown 편집 및 미리보기:** Markdown 원문 편집, GFM 렌더링, 표, 체크리스트, 취소선, 코드 블록 하이라이팅을 지원합니다.
-- **작업 경로 파일 확인:** 활성 터미널이나 Markdown 탭의 작업 경로에 맞춰 파일 브라우저를 갱신합니다.
-- **변경사항 추적:** Git 저장소의 변경 파일을 사이드바로 보고, 선택한 파일의 줄 단위 Diff를 확인합니다.
+- **Ghostty 설정 연동:** `~/.config/ghostty/config`를 읽어 테마, 폰트 패밀리, 폰트 크기 등 기존 터미널 취향을 앱에 반영합니다. Ghostty의 macOS Application Support 설정 경로도 함께 확인하며, 설정된 Ghostty keybind chord도 raw text 주입이 아니라 Ghostty 자체 키 처리 경로로 전달합니다.
+- **Markdown 편집 및 미리보기:** Markdown 원문 편집, GFM 렌더링, 표, 체크리스트, 취소선, 코드 블록 하이라이팅을 지원하고, 로컬 상단 툴바에서 Preview/Raw Edit 전환과 기본 서식 액션을 제공합니다.
+- **작업 경로 파일 확인:** 활성 터미널이나 Markdown 탭의 작업 경로에 맞춰 파일 브라우저를 갱신하며, 좌우 사이드바를 직접 리사이즈할 수 있습니다.
+- **변경사항 추적:** Git 저장소의 변경 파일을 사이드바로 보고, 선택한 파일의 줄 단위 Diff를 확인하며, 숨겨진 문맥은 단계적으로 더 펼쳐볼 수 있습니다. 타이틀바에서는 Git 브랜치 전환과 Git Init도 처리할 수 있습니다.
 - **최근 문서:** 자주 여는 Markdown 문서를 최근 문서 목록에서 다시 열 수 있습니다.
+- **앱 실행 시 파일 열기:** `.app --args` 또는 CLI wrapper로 파일 경로를 넘겨 실행했을 때 대상 파일을 바로 Markdown 탭으로 엽니다.
 - **macOS 앱 번들:** Dock, 메뉴바, Cmd+Tab, 일반 macOS 윈도우 동작을 지원하는 `.app` 번들로 실행됩니다.
 
 ## 터미널 워크플로우

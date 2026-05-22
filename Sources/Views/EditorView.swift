@@ -7,7 +7,8 @@ struct EditorView: View {
     var rendersMarkdownStyle = false
     var isActive = true
 
-    @State private var selectedRange: NSRange = NSRange(location: 0, length: 0)
+    var externalSelectedRange: Binding<NSRange>? = nil
+    @State private var internalSelectedRange: NSRange = NSRange(location: 0, length: 0)
     @State private var cursorPosition = CursorPosition(line: 1, column: 1)
 
     var body: some View {
@@ -15,13 +16,13 @@ struct EditorView: View {
             ZStack(alignment: .top) {
                 MarkdownTextEditor(
                     text: $document.editableContent,
-                    selectedRange: $selectedRange,
+                    selectedRange: selectedRangeBinding,
                     cursorPosition: $cursorPosition,
                     rendersMarkdownStyle: rendersMarkdownStyle,
                     isActive: isActive
                 )
 
-                if showsInlineToolbar, selectedRange.length > 0 {
+                if showsInlineToolbar, selectedRangeBinding.wrappedValue.length > 0 {
                     InlineEditToolbar { action in
                         apply(action)
                     }
@@ -40,82 +41,11 @@ struct EditorView: View {
     }
 
     private func apply(_ action: MarkdownEditAction) {
-        let text = document.editableContent
-        let nsText = text as NSString
-        let safeRange = NSIntersectionRange(
-            selectedRange,
-            NSRange(location: 0, length: nsText.length)
-        )
-
-        guard safeRange.location != NSNotFound else { return }
-
-        switch action {
-        case .heading:
-            replaceLineRange(in: nsText, selection: safeRange) { lines in
-                lines
-                    .components(separatedBy: "\n")
-                    .map { line in
-                        line.hasPrefix("# ") ? String(line.dropFirst(2)) : "# \(line)"
-                    }
-                    .joined(separator: "\n")
-            }
-        case .bold:
-            wrapSelection(prefix: "**", suffix: "**", placeholder: "굵은 텍스트", range: safeRange)
-        case .italic:
-            wrapSelection(prefix: "*", suffix: "*", placeholder: "기울임 텍스트", range: safeRange)
-        case .link:
-            wrapSelection(prefix: "[", suffix: "](url)", placeholder: "링크", range: safeRange)
-        case .unorderedList:
-            prefixSelectedLines("- ", range: safeRange)
-        case .orderedList:
-            prefixSelectedLines(numbered: true, range: safeRange)
-        case .checklist:
-            prefixSelectedLines("- [ ] ", range: safeRange)
-        case .quote:
-            prefixSelectedLines("> ", range: safeRange)
-        case .inlineCode:
-            wrapSelection(prefix: "`", suffix: "`", placeholder: "code", range: safeRange)
-        }
+        MarkdownEditingController.apply(action, to: document, selectedRange: selectedRangeBinding)
     }
 
-    private func wrapSelection(prefix: String, suffix: String, placeholder: String, range: NSRange) {
-        let nsText = document.editableContent as NSString
-        let selected = range.length > 0 ? nsText.substring(with: range) : placeholder
-        let replacement = "\(prefix)\(selected)\(suffix)"
-        document.editableContent = nsText.replacingCharacters(in: range, with: replacement)
-        selectedRange = NSRange(location: range.location + prefix.count, length: selected.count)
-    }
-
-    private func prefixSelectedLines(_ prefix: String, range: NSRange) {
-        replaceLineRange(in: document.editableContent as NSString, selection: range) { lines in
-            lines
-                .components(separatedBy: "\n")
-                .map { $0.isEmpty ? prefix : "\(prefix)\($0)" }
-                .joined(separator: "\n")
-        }
-    }
-
-    private func prefixSelectedLines(numbered: Bool, range: NSRange) {
-        guard numbered else { return }
-        replaceLineRange(in: document.editableContent as NSString, selection: range) { lines in
-            lines
-                .components(separatedBy: "\n")
-                .enumerated()
-                .map { index, line in "\(index + 1). \(line)" }
-                .joined(separator: "\n")
-        }
-    }
-
-    private func replaceLineRange(
-        in nsText: NSString,
-        selection: NSRange,
-        transform: (String) -> String
-    ) {
-        let lineRange = nsText.lineRange(for: selection)
-        let selectedLines = nsText.substring(with: lineRange)
-        let replacement = transform(selectedLines)
-        document.editableContent = nsText.replacingCharacters(in: lineRange, with: replacement)
-        selectedRange = NSRange(location: lineRange.location, length: (replacement as NSString).length)
+    private var selectedRangeBinding: Binding<NSRange> {
+        externalSelectedRange ?? $internalSelectedRange
     }
 }
 
@@ -160,7 +90,7 @@ private struct EditorStatusBar: View {
     }
 }
 
-private enum MarkdownEditAction {
+enum MarkdownEditAction {
     case heading
     case bold
     case italic
@@ -170,6 +100,107 @@ private enum MarkdownEditAction {
     case checklist
     case quote
     case inlineCode
+}
+
+@MainActor
+enum MarkdownEditingController {
+    static func apply(_ action: MarkdownEditAction, to document: MarkdownDocument, selectedRange: Binding<NSRange>) {
+        let text = document.editableContent
+        let nsText = text as NSString
+        let safeRange = NSIntersectionRange(
+            selectedRange.wrappedValue,
+            NSRange(location: 0, length: nsText.length)
+        )
+
+        guard safeRange.location != NSNotFound else { return }
+
+        switch action {
+        case .heading:
+            replaceLineRange(in: nsText, document: document, selectedRange: selectedRange, selection: safeRange) { lines in
+                lines
+                    .components(separatedBy: "\n")
+                    .map { line in
+                        line.hasPrefix("# ") ? String(line.dropFirst(2)) : "# \(line)"
+                    }
+                    .joined(separator: "\n")
+            }
+        case .bold:
+            wrapSelection(prefix: "**", suffix: "**", placeholder: "굵은 텍스트", in: document, selectedRange: selectedRange, range: safeRange)
+        case .italic:
+            wrapSelection(prefix: "*", suffix: "*", placeholder: "기울임 텍스트", in: document, selectedRange: selectedRange, range: safeRange)
+        case .link:
+            wrapSelection(prefix: "[", suffix: "](url)", placeholder: "링크", in: document, selectedRange: selectedRange, range: safeRange)
+        case .unorderedList:
+            prefixSelectedLines("- ", in: document, selectedRange: selectedRange, range: safeRange)
+        case .orderedList:
+            prefixSelectedLines(numbered: true, in: document, selectedRange: selectedRange, range: safeRange)
+        case .checklist:
+            prefixSelectedLines("- [ ] ", in: document, selectedRange: selectedRange, range: safeRange)
+        case .quote:
+            prefixSelectedLines("> ", in: document, selectedRange: selectedRange, range: safeRange)
+        case .inlineCode:
+            wrapSelection(prefix: "`", suffix: "`", placeholder: "code", in: document, selectedRange: selectedRange, range: safeRange)
+        }
+    }
+
+    private static func wrapSelection(
+        prefix: String,
+        suffix: String,
+        placeholder: String,
+        in document: MarkdownDocument,
+        selectedRange: Binding<NSRange>,
+        range: NSRange
+    ) {
+        let nsText = document.editableContent as NSString
+        let selected = range.length > 0 ? nsText.substring(with: range) : placeholder
+        let replacement = "\(prefix)\(selected)\(suffix)"
+        document.editableContent = nsText.replacingCharacters(in: range, with: replacement)
+        selectedRange.wrappedValue = NSRange(location: range.location + prefix.count, length: selected.count)
+    }
+
+    private static func prefixSelectedLines(
+        _ prefix: String,
+        in document: MarkdownDocument,
+        selectedRange: Binding<NSRange>,
+        range: NSRange
+    ) {
+        replaceLineRange(in: document.editableContent as NSString, document: document, selectedRange: selectedRange, selection: range) { lines in
+            lines
+                .components(separatedBy: "\n")
+                .map { $0.isEmpty ? prefix : "\(prefix)\($0)" }
+                .joined(separator: "\n")
+        }
+    }
+
+    private static func prefixSelectedLines(
+        numbered: Bool,
+        in document: MarkdownDocument,
+        selectedRange: Binding<NSRange>,
+        range: NSRange
+    ) {
+        guard numbered else { return }
+        replaceLineRange(in: document.editableContent as NSString, document: document, selectedRange: selectedRange, selection: range) { lines in
+            lines
+                .components(separatedBy: "\n")
+                .enumerated()
+                .map { index, line in "\(index + 1). \(line)" }
+                .joined(separator: "\n")
+        }
+    }
+
+    private static func replaceLineRange(
+        in nsText: NSString,
+        document: MarkdownDocument,
+        selectedRange: Binding<NSRange>,
+        selection: NSRange,
+        transform: (String) -> String
+    ) {
+        let lineRange = nsText.lineRange(for: selection)
+        let selectedLines = nsText.substring(with: lineRange)
+        let replacement = transform(selectedLines)
+        document.editableContent = nsText.replacingCharacters(in: lineRange, with: replacement)
+        selectedRange.wrappedValue = NSRange(location: lineRange.location, length: (replacement as NSString).length)
+    }
 }
 
 private struct InlineEditToolbar: View {
@@ -327,11 +358,27 @@ private struct MarkdownTextEditor: NSViewRepresentable {
     }
 
     private func configureTextContainer(for textView: NSTextView, in scrollView: NSScrollView) {
-        let availableWidth = max(scrollView.contentSize.width, scrollView.bounds.width - 1, 120)
+        let availableWidth = max(stableEditorWidth(for: scrollView), 120)
         textView.textContainer?.containerSize = NSSize(
             width: availableWidth,
             height: CGFloat.greatestFiniteMagnitude
         )
+    }
+
+    private func stableEditorWidth(for scrollView: NSScrollView) -> CGFloat {
+        let baseWidth = scrollView.bounds.width
+        let reservedScrollerWidth: CGFloat
+
+        if scrollView.hasVerticalScroller, scrollView.scrollerStyle == .legacy {
+            reservedScrollerWidth = NSScroller.scrollerWidth(
+                for: scrollView.verticalScroller?.controlSize ?? .regular,
+                scrollerStyle: scrollView.scrollerStyle
+            )
+        } else {
+            reservedScrollerWidth = 0
+        }
+
+        return baseWidth - reservedScrollerWidth - 1
     }
 
     final class Coordinator: NSObject, NSTextViewDelegate {

@@ -60,15 +60,19 @@ struct TabBarView: View {
             Spacer()
 
             Button(action: onToggleDiff) {
-                Label("Diff", systemImage: isDiffVisible ? "sidebar.right" : "arrow.left.arrow.right.circle")
-                    .labelStyle(.iconOnly)
-                    .font(.system(size: 13, weight: .medium))
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 6)
+                Image(systemName: isDiffVisible ? "sidebar.right" : "sidebar.right")
+                    .font(.system(size: 14, weight: .medium))
+                    .frame(width: 32, height: 28)
             }
             .buttonStyle(.plain)
+            .foregroundStyle(
+                isDiffVisible
+                ? (appColors?.accent ?? Color.accentColor)
+                : (isDiffEnabled ? (appColors?.foreground ?? Color.primary) : Color.secondary)
+            )
             .disabled(!isDiffEnabled)
             .help(isDiffEnabled ? "Git 변경 파일 보기" : "Git 저장소에서만 사용할 수 있습니다")
+            .padding(.trailing, 8)
         }
         .background(appColors?.background ?? Color(nsColor: .windowBackgroundColor))
         .overlay(
