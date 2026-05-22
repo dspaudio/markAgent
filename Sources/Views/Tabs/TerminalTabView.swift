@@ -26,6 +26,9 @@ struct TerminalTabView: NSViewRepresentable {
     func updateNSView(_ nsView: AppTerminalView, context: Context) {
         nsView.controller = state.terminalViewState.controller
         nsView.configuration = state.terminalViewState.configuration
+        nsView.delegate = context.coordinator
+        context.coordinator.observeState(state)
+        state.terminalView = nsView
 
         if isActive {
             DispatchQueue.main.async {

@@ -227,6 +227,11 @@ struct GhosttyKeybind: Equatable {
         self.key == Self.normalizeKey(key) && self.modifiers == modifiers
     }
 
+    var decodedTextAction: String? {
+        guard action.hasPrefix("text:") else { return nil }
+        return Self.decodeGhosttyText(String(action.dropFirst("text:".count)))
+    }
+
     private static func normalizeKey(_ key: String) -> String {
         switch key.lowercased() {
         case "=":
@@ -236,6 +241,71 @@ struct GhosttyKeybind: Equatable {
         default:
             return key.lowercased()
         }
+    }
+
+    private static func decodeGhosttyText(_ value: String) -> String {
+        var decoded = ""
+        var index = value.startIndex
+
+        while index < value.endIndex {
+            let character = value[index]
+            guard character == "\\" else {
+                decoded.append(character)
+                index = value.index(after: index)
+                continue
+            }
+
+            let nextIndex = value.index(after: index)
+            guard nextIndex < value.endIndex else {
+                decoded.append(character)
+                index = nextIndex
+                continue
+            }
+
+            switch value[nextIndex] {
+            case "x":
+                let firstHexIndex = value.index(after: nextIndex)
+                guard firstHexIndex < value.endIndex else {
+                    decoded.append("\\x")
+                    index = firstHexIndex
+                    continue
+                }
+
+                let secondHexIndex = value.index(after: firstHexIndex)
+                guard secondHexIndex < value.endIndex else {
+                    decoded.append("\\x")
+                    decoded.append(value[firstHexIndex])
+                    index = secondHexIndex
+                    continue
+                }
+
+                let hex = String(value[firstHexIndex...secondHexIndex])
+                if let scalar = UInt8(hex, radix: 16) {
+                    decoded.append(Character(UnicodeScalar(scalar)))
+                    index = value.index(after: secondHexIndex)
+                } else {
+                    decoded.append("\\x")
+                    index = firstHexIndex
+                }
+            case "r":
+                decoded.append("\r")
+                index = value.index(after: nextIndex)
+            case "n":
+                decoded.append("\n")
+                index = value.index(after: nextIndex)
+            case "t":
+                decoded.append("\t")
+                index = value.index(after: nextIndex)
+            case "\\":
+                decoded.append("\\")
+                index = value.index(after: nextIndex)
+            default:
+                decoded.append(value[nextIndex])
+                index = value.index(after: nextIndex)
+            }
+        }
+
+        return decoded
     }
 }
 
