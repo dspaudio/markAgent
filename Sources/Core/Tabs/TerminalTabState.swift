@@ -135,11 +135,21 @@ final class TerminalTabState {
     }
 
     func sendConfiguredKeybind(_ event: NSEvent, key: String, modifiers: EventModifierMask) -> Bool {
-        guard keybinds.contains(where: { $0.matches(key: key, modifiers: modifiers) }) else {
+        guard let keybind = keybinds.first(where: { $0.matches(key: key, modifiers: modifiers) }) else {
             return false
         }
 
         guard let terminalView else { return false }
+
+        if terminalView.performBindingAction(keybind.action) {
+            return true
+        }
+
+        if let text = keybind.decodedTextAction {
+            terminalView.sendText(text)
+            return true
+        }
+
         terminalView.window?.makeFirstResponder(terminalView)
         terminalView.keyDown(with: event)
         return true

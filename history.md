@@ -72,6 +72,7 @@
 | 39 | Diff UX, Ghostty keybind 경로, Markdown 로컬 툴바 및 v1.1.0 릴리즈 | Git 브랜치 checkout 예외 UX, 좌우 리사이즈 가능한 변경 사이드바, Diff 숨김 문맥 확장, Ghostty keybind 전달 경로 보정, Markdown 로컬 툴바, 실행 인자 파일 열기, rawEdit wrap 안정화, 앱 번들 버전 1.1.0 갱신 |
 | 40 | Reload Configuration 메뉴 및 v1.1.1 릴리즈 | MarkAgent 메뉴에 Reload Configuration 추가, 실행 중 Ghostty config 재적용 경로 보강, 앱 번들 버전 1.1.1 갱신 |
 | 41 | release-build 자동 patch bump 및 v1.1.2 릴리즈 | 프로젝트 로컬 /release-build 커맨드에 인자 없는 patch 자동 증가 규칙 추가, README 유지보수 안내 보강, 앱 번들 버전 1.1.2 갱신 |
+| 42 | Ghostty keybind action-aware dispatch 복구 및 v1.1.3 릴리즈 | Ghostty text/binding action dispatch 우선 경로 복구, release 앱에서 keybind regression 수정, 앱 번들 버전 1.1.3 갱신 |
 
 ---
 
@@ -1366,5 +1367,30 @@ README 기능 소개에 Ghostty keybind 전달, 로컬 Markdown 툴바, 좌우 �
 Reload Configuration 기능을 포함한 후속 수정 범위를 `v1.1.2` 패치 릴리즈로 확정. README 유지보수 안내와 `history.md` 세션 24를 추가하고 앱 번들 버전을 `1.1.2`로 갱신한 뒤, 릴리즈 빌드/업로드/PR 머지까지 진행.
 
 변경 파일: `Sources/App/Info.plist`, `README.md`, `history.md`, `.claude/commands/release-build.md`
+
+---
+
+
+## 세션 25: Ghostty keybind action-aware dispatch 복구 및 v1.1.3 릴리즈
+
+> 날짜: 2026-05-22
+> 경로: ~/workspace/markAgent
+
+릴리즈 앱에서 Ghostty keybind가 기대대로 동작하지 않던 문제를 분석하고, `text:` / binding action을 구분하는 action-aware dispatch를 복구한 뒤 `v1.1.3` 패치 릴리즈를 준비.
+
+### 대화 1: Ghostty keybind regression 재조사와 복구
+
+**사용자:**
+> cmd+d=text:\x00d 이 코드의 의미는 tmux에서 설정된 prefix인 ctrl+space를 입력하고 d 키를 입력한다거든. 그렇게 해서 tmux에서 지정된 키 값을 받아서 화면을 분할하게 하는건데 실제 동작은 빈 공백 + d라는 텍스트가 입력된거지.
+
+**응답:**
+릴리즈 기준 코드가 keybind의 `action`을 무시하고 무조건 `keyDown(with:)` replay로 보내던 문제를 확인. `text:` action은 `decodedTextAction`으로 복원하고, 먼저 `performBindingAction(keybind.action)`을 시도한 뒤 실패 시 `sendText`와 `keyDown` fallback으로 이어지는 action-aware dispatch로 수정해 release regression을 복구.
+
+검증:
+- `swift build` — 통과
+- `swift test` — 21개 테스트 통과
+- Oracle review — PASS
+
+변경 파일: `Sources/Core/Tabs/GhosttyConfig.swift`, `Sources/Core/Tabs/TerminalTabState.swift`, `Sources/Views/Tabs/TerminalTabView.swift`, `README.md`, `Sources/App/Info.plist`, `history.md`
 
 ---

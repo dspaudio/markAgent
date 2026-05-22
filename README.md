@@ -35,7 +35,7 @@ MarkAgent is a visual bridge for that workflow.
 ## Features
 
 - **Ghostty terminal tabs:** Embedded terminal tabs powered by `libghostty-spm` for handling multiple work sessions in one window.
-- **Ghostty config integration:** Reads `~/.config/ghostty/config` and reflects your existing terminal preferences such as theme, font family, and font size in the app. It also checks Ghostty's macOS Application Support config path, routes configured Ghostty keybind chords back through Ghostty's own key handling path instead of raw text injection, and lets you re-read the current config from the MarkAgent menu.
+- **Ghostty config integration:** Reads `~/.config/ghostty/config` and reflects your existing terminal preferences such as theme, font family, and font size in the app. It also checks Ghostty's macOS Application Support config path, lets you re-read the current config from the MarkAgent menu, and restores action-aware Ghostty keybind dispatch so `text:` payloads and binding actions take the intended path.
 - **Markdown editing and preview:** Supports raw Markdown editing, GFM rendering, tables, checklists, strikethrough, highlighted code blocks, and a local markdown toolbar with preview/raw mode switching plus inline formatting actions.
 - **Working directory file browser:** Updates the file browser based on the active terminal or Markdown tab's working directory, and both left and right sidebars can be resized directly in the window.
 - **Change tracking:** Shows changed files from the Git repository in the sidebar, supports branch checkout and Git init from the titlebar, and displays line-based diffs with expandable hidden context for selected files.
