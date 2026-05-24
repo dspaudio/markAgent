@@ -172,6 +172,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         reloadConfigurationItem.target = self
         appMenu.addItem(reloadConfigurationItem)
 
+        let openGhosttyConfigItem = NSMenuItem(title: "Open Ghostty config", action: #selector(openGhosttyConfig), keyEquivalent: "")
+        openGhosttyConfigItem.target = self
+        appMenu.addItem(openGhosttyConfigItem)
+
         appMenu.addItem(.separator())
 
         let servicesMenuItem = NSMenuItem(title: "Services", action: nil, keyEquivalent: "")
@@ -333,6 +337,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         updateWindowTitle()
     }
 
+    @objc private func openGhosttyConfig() {
+        openMarkdownFile(ghosttyConfigURL())
+    }
+
+    private func ghosttyConfigURL() -> URL {
+        if let userConfig = GhosttyConfig.userConfig() {
+            return userConfig.url
+        }
+
+        return FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent(".config/ghostty/config")
+    }
+
+    private func shouldReloadConfiguration(for url: URL?) -> Bool {
+        guard let url else { return false }
+        return url.resolvingSymlinksInPath().standardizedFileURL == ghosttyConfigURL().resolvingSymlinksInPath().standardizedFileURL
+    }
+
     @objc private func gotoTab1() {
         tabs.selectTab(at: 0)
         updateWindowTitle()
@@ -448,15 +470,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @discardableResult
     private func saveActiveMarkdownDocument() -> Bool {
         guard let markdownTab = tabs.activeMarkdownTab else { return false }
+
+        let document = markdownTab.state.document
+        let wasDirty = document.isDirty
+        let currentFileURL = markdownTab.state.fileURL
+
         do {
-            if markdownTab.state.fileURL == nil {
+            let savedURL: URL
+            if currentFileURL == nil {
                 guard let url = chooseSaveURL(suggestedName: markdownTab.title) else { return false }
                 try markdownTab.state.save(to: url)
                 recentStore.record(url: url)
                 directoryScanner.setDirectory(url.deletingLastPathComponent())
+                savedURL = url
             } else {
                 try markdownTab.state.save()
+                guard let resolvedURL = markdownTab.state.fileURL ?? currentFileURL else {
+                    return false
+                }
+                savedURL = resolvedURL
             }
+
+            if wasDirty, shouldReloadConfiguration(for: savedURL) {
+                reloadConfiguration()
+            }
+
             updateWindowTitle()
             return true
         } catch {
@@ -658,7 +696,8 @@ extension AppDelegate: NSMenuItemValidation {
              #selector(openFile),
              #selector(toggleAlwaysOnTop),
              #selector(showAbout),
-             #selector(showHelp):
+             #selector(showHelp),
+             #selector(openGhosttyConfig):
             return true
         case #selector(toggleFullScreen):
             updateFullScreenMenuItem(menuItem)
