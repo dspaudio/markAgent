@@ -24,6 +24,10 @@
 20. [세션 20: 타이틀바 경로, Git 브랜치, Ghostty 단축키 및 v1.0.4 릴리즈](#세션-20-타이틀바-경로-git-브랜치-ghostty-단축키-및-v104-릴리즈)
 21. [세션 21: Git 브랜치 전환, Git Init 확인, 탭바 정렬 및 v1.0.5 릴리즈](#세션-21-git-브랜치-전환-git-init-확인-탭바-정렬-및-v105-릴리즈)
 22. [세션 22: Diff UX, Ghostty keybind 경로, Markdown 로컬 툴바 및 v1.1.0 릴리즈](#세션-22-diff-ux-ghostty-keybind-경로-markdown-로컬-툴바-및-v110-릴리즈)
+23. [세션 23: Reload Configuration 메뉴 및 v1.1.1 릴리즈](#세션-23-reload-configuration-메뉴-및-v111-릴리즈)
+24. [세션 24: release-build 자동 patch bump 및 v1.1.2 릴리즈](#세션-24-release-build-자동-patch-bump-및-v112-릴리즈)
+25. [세션 25: Ghostty keybind action-aware dispatch 복구 및 v1.1.3 릴리즈](#세션-25-ghostty-keybind-action-aware-dispatch-복구-및-v113-릴리즈)
+26. [세션 26: Ghostty config 편집 흐름, non-md 툴바 정리 및 v1.1.4 릴리즈](#세션-26-ghostty-config-편집-흐름-non-md-툴바-정리-및-v114-릴리즈)
 
 ---
 
@@ -73,6 +77,7 @@
 | 40 | Reload Configuration 메뉴 및 v1.1.1 릴리즈 | MarkAgent 메뉴에 Reload Configuration 추가, 실행 중 Ghostty config 재적용 경로 보강, 앱 번들 버전 1.1.1 갱신 |
 | 41 | release-build 자동 patch bump 및 v1.1.2 릴리즈 | 프로젝트 로컬 /release-build 커맨드에 인자 없는 patch 자동 증가 규칙 추가, README 유지보수 안내 보강, 앱 번들 버전 1.1.2 갱신 |
 | 42 | Ghostty keybind action-aware dispatch 복구 및 v1.1.3 릴리즈 | Ghostty text/binding action dispatch 우선 경로 복구, release 앱에서 keybind regression 수정, 앱 번들 버전 1.1.3 갱신 |
+| 43 | Ghostty config 편집 흐름, non-md 툴바 정리 및 v1.1.4 릴리즈 | Open Ghostty config 메뉴, 저장 후 Reload Configuration 연동, non-md 편집 툴바 숨김, 최신 HighlightSwift 로컬 패치 고정, 앱 번들 버전 1.1.4 갱신 |
 
 ---
 
@@ -1392,5 +1397,43 @@ Reload Configuration 기능을 포함한 후속 수정 범위를 `v1.1.2` 패치
 - Oracle review — PASS
 
 변경 파일: `Sources/Core/Tabs/GhosttyConfig.swift`, `Sources/Core/Tabs/TerminalTabState.swift`, `Sources/Views/Tabs/TerminalTabView.swift`, `README.md`, `Sources/App/Info.plist`, `history.md`
+
+---
+
+## 세션 26: Ghostty config 편집 흐름, non-md 툴바 정리 및 v1.1.4 릴리즈
+
+> 날짜: 2026-05-25
+> 경로: ~/workspace/markAgent
+
+Ghostty 설정 파일을 앱 메뉴에서 직접 열고 저장 시 실행 중인 터미널 설정에 다시 반영하는 흐름을 추가했다. 동시에 non-markdown 파일에서는 markdown 전용 편집 아이콘을 숨기고, 최신 HighlightSwift 1.1.0 코드를 로컬 패치 의존성으로 고정해 SwiftPM/Xcode toolchain 환경에서 빌드가 재현되도록 정리한 뒤 `v1.1.4` 패치 릴리즈를 준비.
+
+### 대화 1: Ghostty config 편집 흐름과 non-md 편집 툴바 정리
+
+**사용자:**
+> ~/.config/ghostty/config 파일을 읽어 rawEdit로 편집할 수 있는 Preferences 메뉴를 추가해야 해. 단축키는 없어도 돼. md 파일이 아닌 경우, md 편집 툴바의 편집 아이콘들은 표시하면 안돼.
+
+**응답:**
+App 메뉴에 `Open Ghostty config` 항목을 추가하고, 현재 Ghostty config 경로(`~/.config/ghostty/config` 또는 macOS Application Support 경로)를 rawEdit 흐름으로 여는 액션을 구현. 해당 파일을 dirty 상태에서 저장했을 때만 `reloadConfiguration()`이 실행되도록 저장 경로 비교를 추가했고, non-markdown 파일에서는 로컬 markdown 편집 아이콘과 인라인 편집 툴바가 모두 숨겨지도록 `supportsPreview` 조건을 연결.
+
+변경 파일: `Sources/App/AppDelegate.swift`, `Sources/Views/EditorView.swift`, `Sources/Views/Tabs/MarkdownTabView.swift`
+
+---
+
+### 대화 2: 최신 HighlightSwift 유지 빌드 복구 및 v1.1.4 릴리즈 준비
+
+**사용자:**
+> 버전을 올리고, README와 history.md를 이번 변경분에 맞게 갱신한 뒤 릴리즈 빌드 생성, GitHub Release 업로드, 커밋 & 푸시, main 대상 PR 생성/머지까지 진행해줘. 버전은 인자 없이 현재 patch + 1로 해.
+
+**응답:**
+`Sources/App/Info.plist` 기준 버전 `1.1.3`에서 patch를 올려 `1.1.4`로 갱신. README 기능 소개에 `Open Ghostty config`, 저장 후 설정 재적용, non-markdown 툴바 숨김을 반영했다. SwiftPM에서 최신 HighlightSwift 1.1.0의 `@Entry` / `#Preview` 매크로 빌드 실패가 반복되던 문제는 최신 코드를 `Vendor/highlightswift`로 고정하고 `CodeText`, `HighlightEntry.swift`를 제외하는 로컬 패치 패키지로 전환해 해결했다.
+
+검증:
+- `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer swift build` — 통과
+- `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer swift test` — 21개 테스트 통과
+- `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer scripts/bundle.sh release` — 성공
+- `open .build/MarkAgent.app --args ~/.config/ghostty/config` — 실행 확인
+- SHA-256: `f6c5ae971297d72ece771e20362ef685b2c8138a2ed8272abe59fce3ab97a6c3`
+
+변경 파일: `Package.swift`, `Package.resolved`, `Vendor/highlightswift/Package.swift`, `Vendor/highlightswift/Sources/HighlightSwift/`, `Vendor/highlightswift/Sources/HighlightSwift/HighlightJS/`, `Vendor/highlightswift/LICENSE.md`, `Vendor/highlightswift/README.md`, `Sources/App/Info.plist`, `README.md`, `history.md`
 
 ---
