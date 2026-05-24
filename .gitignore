@@ -30,7 +30,10 @@ playground.xcworkspace
 # .swiftpm
 
 .build/
+.index-build/
+.sisyphus/
 .serena/
+Vendor/highlightswift/.index-build/
 
 # Build artifacts
 *.o

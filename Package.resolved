@@ -1,22 +1,13 @@
 {
-  "originHash" : "57008c8b81de677cc8090c0acc1d09a294883d09324ed2d5e69b51e3d8520c87",
+  "originHash" : "28a4bf9934a6f2b41ce8f341acb165f7f404190c149c71af10e51ff203d375fd",
   "pins" : [
-    {
-      "identity" : "highlightswift",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/appstefan/highlightswift.git",
-      "state" : {
-        "revision" : "784ca3ccfc8a2cf724fbb2f06cb6ec3329424da3",
-        "version" : "1.1.0"
-      }
-    },
     {
       "identity" : "libghostty-spm",
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/Lakr233/libghostty-spm.git",
       "state" : {
-        "revision" : "ad2bf1ec4518edff3ab68bbaf7b0d5ea51852676",
-        "version" : "1.0.1779107935"
+        "revision" : "6bad24fd1499388d9e952ff115d529676ca422b2",
+        "version" : "1.1.8"
       }
     },
     {

@@ -22,7 +22,9 @@ struct EditorView: View {
                     isActive: isActive
                 )
 
-                if showsInlineToolbar, selectedRangeBinding.wrappedValue.length > 0 {
+                if showsInlineToolbar,
+                   document.supportsPreview,
+                   selectedRangeBinding.wrappedValue.length > 0 {
                     InlineEditToolbar { action in
                         apply(action)
                     }

@@ -82,23 +82,25 @@ struct MarkdownTabView: View {
                 modeButton(.rawEdit, title: "Raw Edit", systemImage: "square.and.pencil")
             }
 
-            Divider()
-                .frame(height: 22)
+            if state.document.supportsPreview {
+                Divider()
+                    .frame(height: 22)
 
-            HStack(spacing: 6) {
-                editButton("H", help: "제목", action: .heading)
-                editButton("B", help: "굵게", action: .bold)
-                editButton("I", help: "기울임", action: .italic)
-                    .italic()
-                editButton(systemImage: "link", help: "링크", action: .link)
-                editButton(systemImage: "list.bullet", help: "글머리 기호", action: .unorderedList)
-                editButton(systemImage: "list.number", help: "번호 목록", action: .orderedList)
-                editButton(systemImage: "checklist", help: "체크리스트", action: .checklist)
-                editButton(systemImage: "quote.opening", help: "인용", action: .quote)
-                editButton(systemImage: "chevron.left.forwardslash.chevron.right", help: "인라인 코드", action: .inlineCode)
+                HStack(spacing: 6) {
+                    editButton("H", help: "제목", action: .heading)
+                    editButton("B", help: "굵게", action: .bold)
+                    editButton("I", help: "기울임", action: .italic)
+                        .italic()
+                    editButton(systemImage: "link", help: "링크", action: .link)
+                    editButton(systemImage: "list.bullet", help: "글머리 기호", action: .unorderedList)
+                    editButton(systemImage: "list.number", help: "번호 목록", action: .orderedList)
+                    editButton(systemImage: "checklist", help: "체크리스트", action: .checklist)
+                    editButton(systemImage: "quote.opening", help: "인용", action: .quote)
+                    editButton(systemImage: "chevron.left.forwardslash.chevron.right", help: "인라인 코드", action: .inlineCode)
+                }
+                .disabled(state.document.viewMode != .rawEdit)
+                .opacity(state.document.viewMode == .rawEdit ? 1 : 0.45)
             }
-            .disabled(state.document.viewMode != .rawEdit)
-            .opacity(state.document.viewMode == .rawEdit ? 1 : 0.45)
 
             Spacer(minLength: 0)
         }
