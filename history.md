@@ -1432,7 +1432,7 @@ App 메뉴에 `Open Ghostty config` 항목을 추가하고, 현재 Ghostty confi
 - `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer swift test` — 21개 테스트 통과
 - `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer scripts/bundle.sh release` — 성공
 - `open .build/MarkAgent.app --args ~/.config/ghostty/config` — 실행 확인
-- SHA-256: `f6c5ae971297d72ece771e20362ef685b2c8138a2ed8272abe59fce3ab97a6c3`
+- SHA-256: `a0306c8468414fe49a5606c313231564a5b8fa0364108d36743be80962b348de`
 
 변경 파일: `Package.swift`, `Package.resolved`, `Vendor/highlightswift/Package.swift`, `Vendor/highlightswift/Sources/HighlightSwift/`, `Vendor/highlightswift/Sources/HighlightSwift/HighlightJS/`, `Vendor/highlightswift/LICENSE.md`, `Vendor/highlightswift/README.md`, `Sources/App/Info.plist`, `README.md`, `history.md`
 
