@@ -39,6 +39,10 @@ struct GhosttyConfig {
         parseValues(forKey: "font-family", from: contents)
     }
 
+    static func parseFontFamilyNames(from contents: String) -> [String] {
+        parseFontFamilies(from: contents).map(stripQuotes)
+    }
+
     static func parseFontSize(from contents: String) -> Float? {
         parseValues(forKey: "font-size", from: contents)
             .reversed()
@@ -58,6 +62,15 @@ struct GhosttyConfig {
         }
 
         return nil
+    }
+
+    static func parseThemeName(from contents: String) -> String? {
+        parseValues(forKey: "theme", from: contents)
+            .reversed()
+            .compactMap { value in
+                themeName(from: value)
+            }
+            .first
     }
 
     static func parseKeybinds(from contents: String) -> [GhosttyKeybind] {
@@ -166,7 +179,60 @@ struct GhosttyConfig {
         }
     }
 
-    private static func stripQuotes(_ value: String) -> String {
+    static func preferences(
+        fileManager: FileManager = .default,
+        homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser
+    ) -> GhosttyPreferences {
+        let config = userConfig(fileManager: fileManager, homeDirectory: homeDirectory)
+        let contents = config?.contents ?? ""
+        let fontFamilies = parseFontFamilyNames(from: contents)
+
+        return GhosttyPreferences(
+            configURL: config?.url ?? defaultConfigURL(homeDirectory: homeDirectory),
+            themeName: parseThemeName(from: contents) ?? "Dark Modern",
+            fontSize: Double(parseFontSize(from: contents) ?? 14),
+            primaryFontFamily: fontFamilies.first ?? "Menlo",
+            fallbackFontFamily: fontFamilies.dropFirst().first ?? "SF Mono"
+        )
+    }
+
+    static func writePreferences(
+        _ preferences: GhosttyPreferences,
+        fileManager: FileManager = .default
+    ) throws {
+        let url = preferences.configURL
+        let contents = (try? String(contentsOf: url, encoding: .utf8)) ?? ""
+        let updated = updatingPreferences(preferences, in: contents)
+
+        try fileManager.createDirectory(
+            at: url.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        try updated.write(to: url, atomically: true, encoding: .utf8)
+    }
+
+    static func updatingPreferences(_ preferences: GhosttyPreferences, in contents: String) -> String {
+        var lines = contents.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
+        let generatedLines = [
+            "theme = \(preferences.themeName)",
+            "font-size = \(formatFontSize(preferences.fontSize))",
+        ] + preferences.fontFamilyLines
+
+        lines = replacingActiveLines(forKeys: ["theme", "font-size", "font-family"], in: lines, with: generatedLines)
+
+        var updated = lines.joined(separator: "\n")
+        if !updated.isEmpty, !updated.hasSuffix("\n") {
+            updated.append("\n")
+        }
+        return updated
+    }
+
+    static func defaultConfigURL(homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser) -> URL {
+        homeDirectory
+            .appendingPathComponent(".config/ghostty/config")
+    }
+
+    static func stripQuotes(_ value: String) -> String {
         let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
         guard trimmed.count >= 2 else { return trimmed }
 
@@ -179,10 +245,87 @@ struct GhosttyConfig {
         return trimmed
     }
 
+    private static func themeName(from value: String) -> String? {
+        let trimmed = stripQuotes(value)
+        let components = trimmed
+            .split(separator: ",")
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+
+        for preferredKey in ["dark", "light"] {
+            for component in components {
+                let parts = component.split(separator: ":", maxSplits: 1, omittingEmptySubsequences: false)
+                guard parts.count == 2 else { continue }
+                let key = parts[0].trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+                guard key == preferredKey else { continue }
+                return stripQuotes(String(parts[1]))
+            }
+        }
+
+        return trimmed.isEmpty ? nil : trimmed
+    }
+
+    private static func replacingActiveLines(forKeys keys: Set<String>, in lines: [String], with replacement: [String]) -> [String] {
+        var result: [String] = []
+        var didInsert = false
+
+        for line in lines {
+            guard let key = activeKey(in: line), keys.contains(key) else {
+                result.append(line)
+                continue
+            }
+
+            if !didInsert {
+                result.append(contentsOf: replacement)
+                didInsert = true
+            }
+        }
+
+        if !didInsert {
+            if !result.isEmpty, result.last?.isEmpty == false {
+                result.append("")
+            }
+            result.append(contentsOf: replacement)
+        }
+
+        return result
+    }
+
+    private static func activeKey(in line: String) -> String? {
+        let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, !trimmed.hasPrefix("#") else { return nil }
+
+        let parts = trimmed.split(separator: "=", maxSplits: 1, omittingEmptySubsequences: false)
+        guard parts.count == 2 else { return nil }
+        return parts[0].trimmingCharacters(in: .whitespaces)
+    }
+
+    private static func formatFontSize(_ value: Double) -> String {
+        let rounded = (value * 10).rounded() / 10
+        if rounded.rounded() == rounded {
+            return String(Int(rounded))
+        }
+        return String(format: "%.1f", rounded)
+    }
+
     private static func normalizeThemeName(_ name: String) -> String {
         stripQuotes(name)
             .lowercased()
             .filter { $0.isLetter || $0.isNumber }
+    }
+}
+
+struct GhosttyPreferences: Equatable {
+    let configURL: URL
+    var themeName: String
+    var fontSize: Double
+    var primaryFontFamily: String
+    var fallbackFontFamily: String
+
+    var fontFamilyLines: [String] {
+        [primaryFontFamily, fallbackFontFamily]
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+            .map { "font-family = \"\($0)\"" }
     }
 }
 

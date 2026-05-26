@@ -28,6 +28,7 @@
 24. [세션 24: release-build 자동 patch bump 및 v1.1.2 릴리즈](#세션-24-release-build-자동-patch-bump-및-v112-릴리즈)
 25. [세션 25: Ghostty keybind action-aware dispatch 복구 및 v1.1.3 릴리즈](#세션-25-ghostty-keybind-action-aware-dispatch-복구-및-v113-릴리즈)
 26. [세션 26: Ghostty config 편집 흐름, non-md 툴바 정리 및 v1.1.4 릴리즈](#세션-26-ghostty-config-편집-흐름-non-md-툴바-정리-및-v114-릴리즈)
+27. [세션 27: Settings 화면, 브랜치명 전체 표시 및 v1.2.0 릴리즈](#세션-27-settings-화면-브랜치명-전체-표시-및-v120-릴리즈)
 
 ---
 
@@ -78,6 +79,7 @@
 | 41 | release-build 자동 patch bump 및 v1.1.2 릴리즈 | 프로젝트 로컬 /release-build 커맨드에 인자 없는 patch 자동 증가 규칙 추가, README 유지보수 안내 보강, 앱 번들 버전 1.1.2 갱신 |
 | 42 | Ghostty keybind action-aware dispatch 복구 및 v1.1.3 릴리즈 | Ghostty text/binding action dispatch 우선 경로 복구, release 앱에서 keybind regression 수정, 앱 번들 버전 1.1.3 갱신 |
 | 43 | Ghostty config 편집 흐름, non-md 툴바 정리 및 v1.1.4 릴리즈 | Open Ghostty config 메뉴, 저장 후 Reload Configuration 연동, non-md 편집 툴바 숨김, 최신 HighlightSwift 로컬 패치 고정, 앱 번들 버전 1.1.4 갱신 |
+| 44 | Settings 화면, 브랜치명 전체 표시 및 v1.2.0 릴리즈 | Ghostty theme/font 설정 UI와 미리보기, config 자동 저장/재적용, 타이틀바 브랜치명 전체 표시, 앱 번들 버전 1.2.0 갱신 |
 
 ---
 
@@ -1435,5 +1437,55 @@ App 메뉴에 `Open Ghostty config` 항목을 추가하고, 현재 Ghostty confi
 - SHA-256: `a0306c8468414fe49a5606c313231564a5b8fa0364108d36743be80962b348de`
 
 변경 파일: `Package.swift`, `Package.resolved`, `Vendor/highlightswift/Package.swift`, `Vendor/highlightswift/Sources/HighlightSwift/`, `Vendor/highlightswift/Sources/HighlightSwift/HighlightJS/`, `Vendor/highlightswift/LICENSE.md`, `Vendor/highlightswift/README.md`, `Sources/App/Info.plist`, `README.md`, `history.md`
+
+---
+
+## 세션 27: Settings 화면, 브랜치명 전체 표시 및 v1.2.0 릴리즈
+
+> 날짜: 2026-05-26
+> 경로: ~/workspace/markAgent
+
+Ghostty 설정을 파일 직접 편집뿐 아니라 전용 Settings 화면에서 다룰 수 있도록 확장하고, 긴 Git 브랜치명이 타이틀바에서 축약되지 않도록 보강한 뒤 `v1.2.0` 릴리즈를 준비.
+
+### 대화 1: 타이틀바 브랜치명 전체 표시와 Ghostty 재적용 누수 확인
+
+**사용자:**
+> 오른쪽 상단의 브랜치 이름을 축약하지 말고 전체가 다 표시되게 수정해줘. 그리고 ~/.config/ghostty/config 파일을 열고 수정해서 환경설정을 재 반영했을 때 메모리 누수가 없는지 확인해봐.
+
+**응답:**
+타이틀바 Git branch accessory 폭을 넓히고 브랜치명 `Text`의 중간 축약을 제거해 긴 브랜치 이름이 전체 표시되도록 수정. Ghostty 설정 재적용은 같은 파일 경로라도 내용 변경이 반영되도록 config source를 파일 경로가 아닌 generated contents 기준으로 주입하게 바꾸고, 재적용 후 `TerminalTabState`가 해제되는지 weak reference 테스트로 확인.
+
+검증:
+- `swift test` — 통과
+
+변경 파일: `Sources/App/AppDelegate.swift`, `Sources/App/TitlebarStatusView.swift`, `Sources/Core/Tabs/TerminalTabState.swift`, `Tests/MarkAgentTests/TerminalTabStateTests.swift`
+
+---
+
+### 대화 2: Ghostty Settings 화면 추가
+
+**사용자:**
+> 환경 설정 화면을 만들어줘. Theme 선택, font-size 선택, 코딩용 모노사이즈 font 선택, fallback 폰트 선택이 기본으로 들어가야 하고 해당 설정에서 변경된 내용은 ~/.config/ghostty/config 에도 반영되어야해. 반대로 해당 파일에서 읽은 내용이 환경 설정 화면에도 표시 되어야 해. Theme 미리보기, Font 미리보기도 적용되어야 해.
+
+**응답:**
+MarkAgent 메뉴의 `Settings…` 창을 추가하고, Ghostty theme/font-size/coding font/fallback font를 선택할 수 있는 SwiftUI 설정 화면을 구현. 설정 화면은 기존 `~/.config/ghostty/config` 또는 Ghostty Application Support config에서 값을 읽어 초기 상태로 표시하고, 값 변경 시 `theme`, `font-size`, `font-family` 라인만 교체해 다른 Ghostty 설정은 보존하면서 즉시 파일에 저장한다. 저장 성공 후에는 실행 중인 터미널 탭 설정을 reload한다. Theme preview와 Font preview를 추가하고, 헤더 문구는 `Settings`로 정리했다.
+
+검증:
+- `swift build` — 통과
+- `swift test` — 26개 테스트 통과
+
+변경 파일: `Sources/App/AppDelegate.swift`, `Sources/App/PreferencesView.swift`, `Sources/Core/Tabs/GhosttyConfig.swift`, `Tests/MarkAgentTests/GhosttyConfigTests.swift`, `README.md`, `history.md`
+
+---
+
+### 대화 3: `/release-build 1.2.0`
+
+**사용자:**
+> /release-build 1.2.0
+
+**응답:**
+명시 버전 `1.2.0`으로 앱 번들 버전을 갱신하고, README 기능 소개와 `history.md` 세션 기록을 이번 변경분에 맞게 업데이트한 뒤 릴리즈 빌드, GitHub Release, 커밋/푸시, main 대상 PR 생성 및 머지를 진행.
+
+변경 파일: `Sources/App/Info.plist`, `README.md`, `history.md`
 
 ---

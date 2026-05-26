@@ -43,13 +43,13 @@ struct TitlebarGitBranchView: View {
                         Text(branchName)
                             .font(.system(size: 12, weight: .semibold, design: .monospaced))
                             .lineLimit(1)
-                            .truncationMode(.middle)
+                            .fixedSize(horizontal: true, vertical: false)
                     }
                 }
                 .buttonStyle(.plain)
                 .foregroundStyle(.blue)
                 .padding(.trailing, 16)
-                .frame(maxWidth: 240, alignment: .trailing)
+                .frame(maxWidth: 640, alignment: .trailing)
                 .help(status.repositoryRoot?.path ?? branchName)
                 .popover(isPresented: $isShowingBranches, arrowEdge: .top) {
                     GitBranchPopoverView(status: status)

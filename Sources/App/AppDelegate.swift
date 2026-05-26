@@ -13,6 +13,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var window: NSWindow?
 
     private var aboutWindow: NSWindow?
+    private var preferencesWindow: NSWindow?
     private var isClosingAfterDirtyConfirmation = false
     private let windowFrameDefaultsKey = "MarkAgent.windowFrame"
     private var rootHostingView: NSHostingView<AnyView>?
@@ -97,9 +98,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         window.addTitlebarAccessoryViewController(pathController)
 
         let branchView = TitlebarGitBranchView(status: gitRepositoryStatus)
-            .frame(minWidth: 80, idealWidth: 180, maxWidth: 260, alignment: .trailing)
+            .frame(minWidth: 80, idealWidth: 420, maxWidth: 640, alignment: .trailing)
         let branchController = NSTitlebarAccessoryViewController()
-        branchController.view = titlebarHostingView(rootView: branchView, width: 180)
+        branchController.view = titlebarHostingView(rootView: branchView, width: 420)
         branchController.layoutAttribute = .right
         window.addTitlebarAccessoryViewController(branchController)
     }
@@ -166,6 +167,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let aboutItem = NSMenuItem(title: "About MarkAgent", action: #selector(showAbout), keyEquivalent: "")
         aboutItem.target = self
         appMenu.addItem(aboutItem)
+
+        appMenu.addItem(.separator())
+
+        let settingsItem = NSMenuItem(title: "Settings…", action: #selector(showPreferences), keyEquivalent: ",")
+        settingsItem.target = self
+        appMenu.addItem(settingsItem)
 
         let reloadConfigurationItem = NSMenuItem(title: "Reload Configuration", action: #selector(reloadConfiguration), keyEquivalent: ",")
         reloadConfigurationItem.keyEquivalentModifierMask = [.command, .shift]
@@ -589,6 +596,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSRunningApplication.current.activate()
     }
 
+    @objc private func showPreferences() {
+        if let preferencesWindow {
+            preferencesWindow.makeKeyAndOrderFront(nil)
+            NSRunningApplication.current.activate()
+            return
+        }
+
+        let contentView = PreferencesView { [weak self] in
+            self?.reloadConfiguration()
+        }
+        let hostingView = NSHostingView(rootView: contentView)
+        let preferencesWindow = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 820, height: 560),
+            styleMask: [.titled, .closable],
+            backing: .buffered,
+            defer: false
+        )
+        preferencesWindow.title = "Settings"
+        preferencesWindow.contentView = hostingView
+        preferencesWindow.level = isAlwaysOnTop ? .floating : .normal
+        preferencesWindow.isReleasedWhenClosed = false
+        preferencesWindow.center()
+        preferencesWindow.makeKeyAndOrderFront(nil)
+        self.preferencesWindow = preferencesWindow
+        NSRunningApplication.current.activate()
+    }
+
     @objc private func showHelp() {
         guard let url = URL(string: AboutView.githubURLString) else { return }
         NSWorkspace.shared.open(url)
@@ -696,6 +730,7 @@ extension AppDelegate: NSMenuItemValidation {
              #selector(openFile),
              #selector(toggleAlwaysOnTop),
              #selector(showAbout),
+             #selector(showPreferences),
              #selector(showHelp),
              #selector(openGhosttyConfig):
             return true

@@ -16,29 +16,31 @@ final class TerminalTabState {
     var onCloseRequested: (() -> Void)?
     var onDirectoryChanged: ((URL) -> Void)?
     weak var terminalView: AppTerminalView?
+    private let userConfigProvider: () -> GhosttyConfig?
 
-    init(id: UUID = UUID(), workingDirectory: URL) {
+    init(
+        id: UUID = UUID(),
+        workingDirectory: URL,
+        userConfigProvider: @escaping () -> GhosttyConfig? = { GhosttyConfig.userConfig() }
+    ) {
         self.id = id
         self.workingDirectory = workingDirectory
         self.title = Self.title(for: workingDirectory)
+        self.userConfigProvider = userConfigProvider
 
-        let configuration = Self.makeConfiguration()
+        let configuration = Self.makeConfiguration(userConfig: userConfigProvider())
         self.configFontSize = configuration.configFontSize
         self.keybinds = configuration.keybinds
         self.terminalViewState = configuration.viewState
     }
 
     func reloadConfiguration() {
-        let userConfig = GhosttyConfig.userConfig()
+        let userConfig = userConfigProvider()
         configFontSize = userConfig?.fontSize
         keybinds = userConfig?.keybinds ?? []
 
         let terminalConfiguration = Self.makeTerminalConfiguration(userConfig: userConfig)
-        let configSource: TerminalController.ConfigSource = if let userConfig {
-            .file(userConfig.url.path)
-        } else {
-            .none
-        }
+        let configSource = Self.configSource(for: userConfig)
         let theme: TerminalTheme = userConfig != nil ? TerminalTheme() : .default
 
         _ = terminalViewState.controller.updateConfigSource(configSource)
@@ -63,17 +65,12 @@ final class TerminalTabState {
         }
     }
 
-    private static func makeConfiguration() -> (configFontSize: Float?, keybinds: [GhosttyKeybind], viewState: TerminalViewState) {
-        let userConfig = GhosttyConfig.userConfig()
+    private static func makeConfiguration(userConfig: GhosttyConfig?) -> (configFontSize: Float?, keybinds: [GhosttyKeybind], viewState: TerminalViewState) {
         let configFontSize = userConfig?.fontSize
         let keybinds = userConfig?.keybinds ?? []
         let terminalConfiguration = makeTerminalConfiguration(userConfig: userConfig)
 
-        let configSource: TerminalController.ConfigSource = if let userConfig {
-            .file(userConfig.url.path)
-        } else {
-            .none
-        }
+        let configSource = configSource(for: userConfig)
         let theme: TerminalTheme = userConfig != nil ? TerminalTheme() : .default
 
         let viewState = TerminalViewState(
@@ -94,6 +91,11 @@ final class TerminalTabState {
                 builder.withFontSize(fontSize)
             }
         }
+    }
+
+    static func configSource(for userConfig: GhosttyConfig?) -> TerminalController.ConfigSource {
+        guard let userConfig else { return .none }
+        return .generated(userConfig.contents)
     }
 
     func startIfNeeded() {
