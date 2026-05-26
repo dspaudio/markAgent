@@ -5,6 +5,7 @@ struct ActiveTabContentView: View {
     var onOpenFile: () -> Void
     var onNewTab: () -> Void
     var onDocumentChanged: () -> Void
+    var onConfigurationSaved: () -> Void
 
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.terminalAppTheme) private var terminalAppTheme
@@ -42,6 +43,8 @@ struct ActiveTabContentView: View {
                     onDocumentChanged()
                 }
             )
+        } else if tab is SettingsTab {
+            PreferencesView(onSaved: onConfigurationSaved)
         } else {
             Text("알 수 없는 탭 유형입니다.")
                 .foregroundStyle(.secondary)

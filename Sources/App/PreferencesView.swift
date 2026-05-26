@@ -8,7 +8,7 @@ struct PreferencesView: View {
 
     let onSaved: () -> Void
 
-    private let themes = GhosttyThemeCatalog.search("").sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+    private let themes = GhosttyThemeCatalog.allThemes.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
     private let fontSizes = stride(from: 10.0, through: 28.0, by: 0.5).map { $0 }
     private let codingFonts = FontCatalog.codingFonts()
     private let fallbackFonts = FontCatalog.allFonts()
@@ -33,7 +33,7 @@ struct PreferencesView: View {
                 previewPane
             }
         }
-        .frame(width: 820, height: 560)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color(nsColor: .windowBackgroundColor))
         .onChange(of: preferences) { _, newValue in
             save(newValue)
@@ -65,9 +65,16 @@ struct PreferencesView: View {
     private var settingsPane: some View {
         Form {
             Section("Terminal") {
-                Picker("Theme", selection: $preferences.themeName) {
-                    ForEach(themes) { theme in
-                        Text(theme.name).tag(theme.name)
+                LabeledContent("Theme") {
+                    VStack(alignment: .trailing, spacing: 3) {
+                        Text(preferences.themeName)
+                            .font(.system(size: 13, weight: .medium))
+                            .lineLimit(2)
+                            .multilineTextAlignment(.trailing)
+
+                        Text("Choose from preview")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
                     }
                 }
 
@@ -106,11 +113,22 @@ struct PreferencesView: View {
 
     private var previewPane: some View {
         VStack(alignment: .leading, spacing: 18) {
-            Text("Theme Preview")
-                .font(.headline)
+            HStack(alignment: .firstTextBaseline) {
+                Text("Theme Preview")
+                    .font(.headline)
 
-            ThemePreview(theme: selectedTheme)
-                .frame(height: 220)
+                Text(preferences.themeName)
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+
+                Spacer()
+            }
+
+            selectedThemeBanner
+
+            themePreviewList
+                .frame(height: 300)
 
             Text("Font Preview")
                 .font(.headline)
@@ -126,6 +144,60 @@ struct PreferencesView: View {
             Spacer()
         }
         .padding(24)
+    }
+
+    private var selectedThemeBanner: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "checkmark.circle.fill")
+                .foregroundStyle(.white, Color.accentColor)
+
+            Text("Selected")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(.secondary)
+
+            Text(selectedTheme.name)
+                .font(.system(size: 13, weight: .semibold))
+                .lineLimit(1)
+
+            Spacer()
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 9)
+        .background(Color.accentColor.opacity(0.10))
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(Color.accentColor.opacity(0.28), lineWidth: 1)
+        )
+    }
+
+    private var themePreviewList: some View {
+        ScrollViewReader { proxy in
+            ScrollView {
+                LazyVStack(spacing: 12) {
+                    ForEach(themes) { theme in
+                        Button {
+                            preferences.themeName = theme.name
+                        } label: {
+                            ThemePreview(
+                                theme: theme,
+                                isSelected: theme.name == selectedTheme.name
+                            )
+                        }
+                        .buttonStyle(.plain)
+                        .id(theme.name)
+                    }
+                }
+                .padding(.vertical, 2)
+                .padding(.trailing, 8)
+            }
+            .onAppear {
+                proxy.scrollTo(selectedTheme.name, anchor: .center)
+            }
+            .onChange(of: preferences.themeName) { _, _ in
+                proxy.scrollTo(selectedTheme.name, anchor: .center)
+            }
+        }
     }
 
     private var selectedTheme: GhosttyThemeDefinition {
@@ -161,6 +233,7 @@ struct PreferencesView: View {
 
 private struct ThemePreview: View {
     let theme: GhosttyThemeDefinition
+    let isSelected: Bool
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -168,9 +241,19 @@ private struct ThemePreview: View {
                 Text(theme.name)
                     .font(.system(size: 16, weight: .semibold, design: .monospaced))
                 Spacer()
-                Text(theme.background.hasPrefix("#") ? theme.background : "#\(theme.background)")
-                    .font(.system(size: 12, design: .monospaced))
-                    .opacity(0.72)
+                if isSelected {
+                    Label("Selected", systemImage: "checkmark.circle.fill")
+                        .font(.system(size: 12, weight: .semibold))
+                        .padding(.horizontal, 9)
+                        .padding(.vertical, 5)
+                        .foregroundStyle(.white)
+                        .background(Color.accentColor)
+                        .clipShape(Capsule())
+                } else {
+                    Text(theme.background.hasPrefix("#") ? theme.background : "#\(theme.background)")
+                        .font(.system(size: 12, design: .monospaced))
+                        .opacity(0.72)
+                }
             }
 
             HStack(spacing: 8) {
@@ -190,11 +273,16 @@ private struct ThemePreview: View {
         }
         .foregroundStyle(color(theme.foreground))
         .padding(18)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .background(color(theme.background))
         .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .shadow(color: isSelected ? Color.accentColor.opacity(0.28) : .clear, radius: 8, x: 0, y: 2)
         .overlay(
             RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .stroke(color(theme.foreground).opacity(0.18))
+                .stroke(isSelected ? Color.accentColor : color(theme.foreground).opacity(0.18), lineWidth: isSelected ? 3 : 1)
+        )
+        .contentShape(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
         )
     }
 

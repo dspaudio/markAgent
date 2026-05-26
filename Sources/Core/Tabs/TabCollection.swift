@@ -19,6 +19,10 @@ final class TabCollection {
         activeTab as? MarkdownTab
     }
 
+    var activeSettingsTab: SettingsTab? {
+        activeTab as? SettingsTab
+    }
+
     var hasTabs: Bool { !tabs.isEmpty }
 
     @discardableResult
@@ -43,6 +47,19 @@ final class TabCollection {
         let id = UUID()
         let state = MarkdownTabState(id: id, fileURL: fileURL)
         let tab = MarkdownTab(id: id, fileURL: fileURL, state: state, dirtyPrompter: dirtyPrompter)
+        tabs.append(tab)
+        activeTabID = tab.id
+        return tab
+    }
+
+    @discardableResult
+    func showSettingsTab() -> SettingsTab {
+        if let tab = tabs.first(where: { $0 is SettingsTab }) as? SettingsTab {
+            activeTabID = tab.id
+            return tab
+        }
+
+        let tab = SettingsTab()
         tabs.append(tab)
         activeTabID = tab.id
         return tab
