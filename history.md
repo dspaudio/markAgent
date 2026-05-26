@@ -29,6 +29,7 @@
 25. [세션 25: Ghostty keybind action-aware dispatch 복구 및 v1.1.3 릴리즈](#세션-25-ghostty-keybind-action-aware-dispatch-복구-및-v113-릴리즈)
 26. [세션 26: Ghostty config 편집 흐름, non-md 툴바 정리 및 v1.1.4 릴리즈](#세션-26-ghostty-config-편집-흐름-non-md-툴바-정리-및-v114-릴리즈)
 27. [세션 27: Settings 화면, 브랜치명 전체 표시 및 v1.2.0 릴리즈](#세션-27-settings-화면-브랜치명-전체-표시-및-v120-릴리즈)
+28. [세션 28: Settings 탭 전환 및 v1.2.1 릴리즈](#세션-28-settings-탭-전환-및-v121-릴리즈)
 
 ---
 
@@ -80,6 +81,7 @@
 | 42 | Ghostty keybind action-aware dispatch 복구 및 v1.1.3 릴리즈 | Ghostty text/binding action dispatch 우선 경로 복구, release 앱에서 keybind regression 수정, 앱 번들 버전 1.1.3 갱신 |
 | 43 | Ghostty config 편집 흐름, non-md 툴바 정리 및 v1.1.4 릴리즈 | Open Ghostty config 메뉴, 저장 후 Reload Configuration 연동, non-md 편집 툴바 숨김, 최신 HighlightSwift 로컬 패치 고정, 앱 번들 버전 1.1.4 갱신 |
 | 44 | Settings 화면, 브랜치명 전체 표시 및 v1.2.0 릴리즈 | Ghostty theme/font 설정 UI와 미리보기, config 자동 저장/재적용, 타이틀바 브랜치명 전체 표시, 앱 번들 버전 1.2.0 갱신 |
+| 45 | Settings 탭 전환 및 v1.2.1 릴리즈 | Settings를 별도 창 대신 앱 내부 탭으로 열도록 변경, 테마 카드 선택/선택 표시 보강, 앱 번들 버전 1.2.1 갱신 |
 
 ---
 
@@ -1485,6 +1487,58 @@ MarkAgent 메뉴의 `Settings…` 창을 추가하고, Ghostty theme/font-size/c
 
 **응답:**
 명시 버전 `1.2.0`으로 앱 번들 버전을 갱신하고, README 기능 소개와 `history.md` 세션 기록을 이번 변경분에 맞게 업데이트한 뒤 릴리즈 빌드, GitHub Release, 커밋/푸시, main 대상 PR 생성 및 머지를 진행.
+
+변경 파일: `Sources/App/Info.plist`, `README.md`, `history.md`
+
+---
+
+## 세션 28: Settings 탭 전환 및 v1.2.1 릴리즈
+
+> 날짜: 2026-05-26
+> 경로: ~/workspace/markAgent
+
+Settings 화면을 별도 창이 아니라 앱 내부 탭으로 열도록 전환하고, 테마 선택 UX를 스크롤 가능한 미리보기 카드 선택 방식으로 보강한 뒤 `v1.2.1` 패치 릴리즈를 준비.
+
+### 대화 1: Settings 화면 상단 가림과 테마 카드 선택 보정
+
+**사용자:**
+> Settings 상단이 가려진 문제가 있어. 해당 부분을 수정하고, Theme에 선택한 테마 이름이 표시되지 않았어. 테마를 선택할 때 Select List 로 이름만을 선택하는게 아니라 Theme Preview를 스크롤해서 마음에 드는 테마를 클릭해서 선택하는 방식으로 변경해야 해.
+
+**응답:**
+Theme picker를 제거하고 `GhosttyThemeCatalog.allThemes` 기반의 스크롤 가능한 테마 미리보기 카드 목록을 추가. 선택된 테마는 상단 배너와 카드 내 `Selected` 배지, 강조 테두리로 표시되도록 보강했다. Settings 화면은 고정 창 크기 대신 탭 콘텐츠 영역을 채우도록 조정했다.
+
+검증:
+- `swift build` — 통과
+- `swift test` — 26개 테스트 통과
+
+변경 파일: `Sources/App/PreferencesView.swift`
+
+---
+
+### 대화 2: Settings를 별도 창 대신 탭으로 전환
+
+**사용자:**
+> 새 창을 띄우는게 아니라 Settings 가 별도의 탭으로 열리게 해줘.
+
+**응답:**
+`SettingsTab`을 추가하고 `TabKind.settings` 및 `TabCollection.showSettingsTab()`을 구현. `Settings…` 메뉴와 `⌘,`는 기존 별도 `NSWindow` 생성 대신 이미 열린 Settings 탭을 선택하거나 새 Settings 탭을 생성하도록 변경했다. `ActiveTabContentView`는 Settings 탭에서 `PreferencesView`를 렌더링하고, 저장 후 터미널 설정 reload 콜백을 유지한다. 확인용으로 추가했던 탭바 기어 버튼은 후속 요청에 따라 제거했다.
+
+검증:
+- `swift build` — 통과
+- `swift test` — 26개 테스트 통과
+- `scripts/bundle.sh` — 성공
+
+변경 파일: `Sources/App/AppDelegate.swift`, `Sources/Core/Tabs/SettingsTab.swift`, `Sources/Core/Tabs/TabCollection.swift`, `Sources/Core/Tabs/TabKind.swift`, `Sources/Views/Main/ActiveTabContentView.swift`, `Sources/Views/Main/MainContainerView.swift`, `Sources/Views/Main/TabBarView.swift`
+
+---
+
+### 대화 3: `/release-build 1.2.1`
+
+**사용자:**
+> /release-build 1.2.1
+
+**응답:**
+명시 버전 `1.2.1`로 앱 번들 버전을 갱신하고, README 기능 소개와 `history.md` 세션 기록을 이번 변경분에 맞게 업데이트한 뒤 릴리즈 빌드, 커밋/푸시, GitHub Release, main 대상 PR 생성 및 머지를 진행.
 
 변경 파일: `Sources/App/Info.plist`, `README.md`, `history.md`
 

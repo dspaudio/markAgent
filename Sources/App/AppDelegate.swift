@@ -13,7 +13,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var window: NSWindow?
 
     private var aboutWindow: NSWindow?
-    private var preferencesWindow: NSWindow?
     private var isClosingAfterDirtyConfirmation = false
     private let windowFrameDefaultsKey = "MarkAgent.windowFrame"
     private var rootHostingView: NSHostingView<AnyView>?
@@ -79,6 +78,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             },
             onDocumentChanged: { [weak self] in
                 self?.updateWindowTitle()
+            },
+            onConfigurationSaved: { [weak self] in
+                self?.reloadConfiguration()
             },
             onDirectoryChanged: { [weak self] directory in
                 self?.gitRepositoryStatus.refresh(for: directory)
@@ -597,29 +599,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func showPreferences() {
-        if let preferencesWindow {
-            preferencesWindow.makeKeyAndOrderFront(nil)
-            NSRunningApplication.current.activate()
-            return
-        }
-
-        let contentView = PreferencesView { [weak self] in
-            self?.reloadConfiguration()
-        }
-        let hostingView = NSHostingView(rootView: contentView)
-        let preferencesWindow = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 820, height: 560),
-            styleMask: [.titled, .closable],
-            backing: .buffered,
-            defer: false
-        )
-        preferencesWindow.title = "Settings"
-        preferencesWindow.contentView = hostingView
-        preferencesWindow.level = isAlwaysOnTop ? .floating : .normal
-        preferencesWindow.isReleasedWhenClosed = false
-        preferencesWindow.center()
-        preferencesWindow.makeKeyAndOrderFront(nil)
-        self.preferencesWindow = preferencesWindow
+        tabs.showSettingsTab()
+        updateWindowTitle()
+        window?.makeKeyAndOrderFront(nil)
         NSRunningApplication.current.activate()
     }
 

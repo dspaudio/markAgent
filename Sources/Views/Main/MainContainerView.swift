@@ -6,6 +6,7 @@ struct MainContainerView: View {
     var recentStore: RecentDocumentStore
     var onOpenFile: () -> Void
     var onDocumentChanged: () -> Void
+    var onConfigurationSaved: () -> Void = {}
     var onDirectoryChanged: (URL) -> Void = { _ in }
 
     @State private var isShowingNewTabChooser = false
@@ -59,7 +60,8 @@ struct MainContainerView: View {
                         tabs: tabs,
                         onOpenFile: onOpenFile,
                         onNewTab: { isShowingNewTabChooser = true },
-                        onDocumentChanged: onDocumentChanged
+                        onDocumentChanged: onDocumentChanged,
+                        onConfigurationSaved: onConfigurationSaved
                     )
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
 
