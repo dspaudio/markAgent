@@ -70,6 +70,63 @@ final class GhosttyConfigTests: XCTestCase {
         XCTAssertTrue(config?.contents.contains("font-family = \"Noto Sans CJK KR\"") == true)
     }
 
+    func testPreferencesReadThemeAndFontChoices() throws {
+        let home = FileManager.default.temporaryDirectory
+            .appendingPathComponent("GhosttyConfigTests-\(UUID().uuidString)")
+        let xdgConfig = home.appendingPathComponent(".config/ghostty/config")
+        defer { try? FileManager.default.removeItem(at: home) }
+
+        try FileManager.default.createDirectory(
+            at: xdgConfig.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        try """
+        theme = Dracula
+        font-family = "JetBrains Mono"
+        font-family = "Noto Sans CJK KR"
+        font-size = 16
+        """.write(to: xdgConfig, atomically: true, encoding: .utf8)
+
+        let preferences = GhosttyConfig.preferences(homeDirectory: home)
+
+        XCTAssertEqual(preferences.configURL.path, xdgConfig.path)
+        XCTAssertEqual(preferences.themeName, "Dracula")
+        XCTAssertEqual(preferences.primaryFontFamily, "JetBrains Mono")
+        XCTAssertEqual(preferences.fallbackFontFamily, "Noto Sans CJK KR")
+        XCTAssertEqual(preferences.fontSize, 16)
+    }
+
+    func testUpdatingPreferencesReplacesManagedLinesAndPreservesOtherConfig() {
+        let preferences = GhosttyPreferences(
+            configURL: URL(fileURLWithPath: "/tmp/config"),
+            themeName: "Dark Modern",
+            fontSize: 15.5,
+            primaryFontFamily: "SF Mono",
+            fallbackFontFamily: "Apple SD Gothic Neo"
+        )
+        let contents = """
+        # theme = Dracula
+        shell-integration = zsh
+        theme = Dracula
+        font-family = "JetBrains Mono"
+        font-size = 13
+        keybind = cmd+d=text:\\x00d
+        font-family = "Noto Sans CJK KR"
+        """
+
+        let updated = GhosttyConfig.updatingPreferences(preferences, in: contents)
+
+        XCTAssertTrue(updated.contains("# theme = Dracula"))
+        XCTAssertTrue(updated.contains("shell-integration = zsh"))
+        XCTAssertTrue(updated.contains("keybind = cmd+d=text:\\x00d"))
+        XCTAssertTrue(updated.contains("theme = Dark Modern"))
+        XCTAssertTrue(updated.contains("font-size = 15.5"))
+        XCTAssertTrue(updated.contains("font-family = \"SF Mono\""))
+        XCTAssertTrue(updated.contains("font-family = \"Apple SD Gothic Neo\""))
+        XCTAssertFalse(updated.contains("theme = Dracula\nfont-family"))
+        XCTAssertFalse(updated.contains("font-size = 13"))
+    }
+
     func testParseFontFamiliesPreservesOrderAndQuotes() {
         let contents = """
         font-family = "JetBrains Mono"
@@ -120,6 +177,14 @@ final class GhosttyConfigTests: XCTestCase {
 
         XCTAssertEqual(theme?.theme(for: .light)?.name, "Catppuccin Latte")
         XCTAssertEqual(theme?.theme(for: .dark)?.name, "Catppuccin Mocha")
+    }
+
+    func testParseThemeNameUsesDarkThemeFromLightDarkPair() {
+        let contents = """
+        theme = light:Catppuccin Latte,dark:Catppuccin Mocha
+        """
+
+        XCTAssertEqual(GhosttyConfig.parseThemeName(from: contents), "Catppuccin Mocha")
     }
 
     func testParseKeybindsPreserveGhosttyActions() {
