@@ -10,6 +10,7 @@ struct TerminalTabView: NSViewRepresentable {
         view.controller = state.terminalViewState.controller
         view.configuration = state.terminalViewState.configuration
         view.delegate = context.coordinator
+        view.setSurfaceVisible(isActive)
         context.coordinator.observeState(state)
         state.terminalView = view
 
@@ -24,9 +25,14 @@ struct TerminalTabView: NSViewRepresentable {
     }
 
     func updateNSView(_ nsView: AppTerminalView, context: Context) {
-        nsView.controller = state.terminalViewState.controller
+        if nsView.controller !== state.terminalViewState.controller {
+            nsView.controller = state.terminalViewState.controller
+        }
         nsView.configuration = state.terminalViewState.configuration
-        nsView.delegate = context.coordinator
+        if nsView.delegate !== context.coordinator {
+            nsView.delegate = context.coordinator
+        }
+        nsView.setSurfaceVisible(isActive)
         context.coordinator.observeState(state)
         state.terminalView = nsView
 
