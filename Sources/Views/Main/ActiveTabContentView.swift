@@ -45,6 +45,8 @@ struct ActiveTabContentView: View {
             )
         } else if tab is SettingsTab {
             PreferencesView(onSaved: onConfigurationSaved)
+        } else if tab is AboutTab {
+            AboutView()
         } else {
             Text("알 수 없는 탭 유형입니다.")
                 .foregroundStyle(.secondary)

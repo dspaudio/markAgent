@@ -12,7 +12,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var isAlwaysOnTop = false
     var window: NSWindow?
 
-    private var aboutWindow: NSWindow?
     private var isClosingAfterDirtyConfirmation = false
     private let windowFrameDefaultsKey = "MarkAgent.windowFrame"
     private var rootHostingView: NSHostingView<AnyView>?
@@ -417,6 +416,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func closeTab() {
         Task { [weak self] in
             guard let self else { return }
+            if tabs.activeTerminalTab != nil {
+                guard await confirmCloseActiveTerminalTab() else { return }
+            }
             _ = await tabs.closeActiveTab()
             updateWindowTitle()
         }
@@ -574,27 +576,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func showAbout() {
-        if let aboutWindow {
-            aboutWindow.makeKeyAndOrderFront(nil)
-            NSRunningApplication.current.activate()
-            return
-        }
-
-        let contentView = AboutView()
-        let hostingView = NSHostingView(rootView: contentView)
-        let aboutWindow = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 560, height: 620),
-            styleMask: [.titled, .closable],
-            backing: .buffered,
-            defer: false
-        )
-        aboutWindow.title = "About MarkAgent"
-        aboutWindow.contentView = hostingView
-        aboutWindow.level = isAlwaysOnTop ? .floating : .normal
-        aboutWindow.isReleasedWhenClosed = false
-        aboutWindow.center()
-        aboutWindow.makeKeyAndOrderFront(nil)
-        self.aboutWindow = aboutWindow
+        tabs.showAboutTab()
+        updateWindowTitle()
+        window?.makeKeyAndOrderFront(nil)
         NSRunningApplication.current.activate()
     }
 
@@ -630,6 +614,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if event.modifierFlags.contains(.option) { modifiers.insert(.option) }
 
         guard modifiers.contains(EventModifierMask.command) else { return false }
+        if key.lowercased() == "w", modifiers == [.command] {
+            return false
+        }
         return tabs.activeTerminalTab?.state.sendConfiguredKeybind(event, key: key, modifiers: modifiers) == true
     }
 
@@ -656,6 +643,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             guard await markdownTab.state.prepareForClose(prompt: dirtyPrompter) else { return false }
         }
         return true
+    }
+
+    private func confirmCloseActiveTerminalTab() async -> Bool {
+        let alert = NSAlert()
+        alert.messageText = "Close terminal tab?"
+        alert.informativeText = "Closing this terminal tab will end its session. Do you want to close it?"
+        alert.alertStyle = .warning
+        alert.addButton(withTitle: "Close Tab")
+        alert.addButton(withTitle: "Cancel")
+
+        let response: NSApplication.ModalResponse
+        if let window {
+            response = await withCheckedContinuation { continuation in
+                alert.beginSheetModal(for: window) { response in
+                    continuation.resume(returning: response)
+                }
+            }
+        } else {
+            response = alert.runModal()
+        }
+
+        return response == .alertFirstButtonReturn
     }
 }
 

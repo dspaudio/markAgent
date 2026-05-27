@@ -23,6 +23,10 @@ final class TabCollection {
         activeTab as? SettingsTab
     }
 
+    var activeAboutTab: AboutTab? {
+        activeTab as? AboutTab
+    }
+
     var hasTabs: Bool { !tabs.isEmpty }
 
     @discardableResult
@@ -60,6 +64,19 @@ final class TabCollection {
         }
 
         let tab = SettingsTab()
+        tabs.append(tab)
+        activeTabID = tab.id
+        return tab
+    }
+
+    @discardableResult
+    func showAboutTab() -> AboutTab {
+        if let tab = tabs.first(where: { $0 is AboutTab }) as? AboutTab {
+            activeTabID = tab.id
+            return tab
+        }
+
+        let tab = AboutTab()
         tabs.append(tab)
         activeTabID = tab.id
         return tab
