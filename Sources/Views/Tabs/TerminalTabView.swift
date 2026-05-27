@@ -57,8 +57,7 @@ struct TerminalTabView: NSViewRepresentable {
         }
 
         func terminalDidChangeWorkingDirectory(_ path: String) {
-            let url = URL(fileURLWithPath: path)
-            state?.updateWorkingDirectory(url)
+            state?.updateWorkingDirectory(path)
         }
     }
 }

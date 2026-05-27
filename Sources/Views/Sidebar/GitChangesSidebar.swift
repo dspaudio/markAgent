@@ -12,11 +12,16 @@ struct GitChangesSidebar: View {
             header
             Divider()
             fileList
-            if let diffResult = state.selectedDiffResult {
+            if state.isLoadingSelectedDiff {
+                Divider()
+                ProgressView("Diff 불러오는 중...")
+                    .font(.system(size: 12))
+                    .padding()
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            } else if let diffResult = state.selectedDiffResult {
                 Divider()
                 DiffOverlayView(diffResult: diffResult, baseURL: state.selectedFile?.url.deletingLastPathComponent()) {
-                    state.selectedFile = nil
-                    state.selectedDiffResult = nil
+                    state.clearSelection()
                 }
             }
         }
@@ -37,6 +42,11 @@ struct GitChangesSidebar: View {
             Text("Git 변경 파일")
                 .font(.system(size: 13, weight: .bold))
             Spacer()
+            if state.isRefreshing {
+                ProgressView()
+                    .scaleEffect(0.45)
+                    .frame(width: 14, height: 14)
+            }
             Button {
                 if let root = state.repositoryRoot {
                     state.refresh(for: root)
@@ -46,6 +56,7 @@ struct GitChangesSidebar: View {
             }
             .buttonStyle(.plain)
             .help("새로고침")
+            .disabled(state.isRefreshing)
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 10)
@@ -84,6 +95,7 @@ struct GitChangesSidebar: View {
                 .padding(.vertical, 6)
             }
             .frame(maxHeight: state.selectedDiffResult == nil ? .infinity : 220)
+            .opacity(state.isRefreshing ? 0.72 : 1)
         }
     }
 }

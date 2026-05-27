@@ -57,4 +57,29 @@ final class TerminalTabStateTests: XCTestCase {
 
         XCTAssertNil(weakState)
     }
+
+    func testNormalizedWorkingDirectoryAcceptsFileURLFromOSC7() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("TerminalTabStateTests-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let fileURLString = directory.absoluteString
+        let resolved = TerminalTabState.normalizedWorkingDirectory(from: fileURLString)
+
+        XCTAssertEqual(resolved?.standardizedFileURL, directory.resolvingSymlinksInPath().standardizedFileURL)
+    }
+
+    @MainActor
+    func testWorkingDirectoryIgnoresInvalidPathUpdates() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("TerminalTabStateTests-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let state = TerminalTabState(workingDirectory: directory)
+        state.updateWorkingDirectory("file:///definitely/missing/markagent/path")
+
+        XCTAssertEqual(state.workingDirectory, directory)
+    }
 }
