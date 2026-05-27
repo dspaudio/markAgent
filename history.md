@@ -32,6 +32,7 @@
 28. [세션 28: Settings 탭 전환 및 v1.2.1 릴리즈](#세션-28-settings-탭-전환-및-v121-릴리즈)
 29. [세션 29: tmux cwd 및 Git Diff 갱신 안정화와 v1.2.2 릴리즈](#세션-29-tmux-cwd-및-git-diff-갱신-안정화와-v122-릴리즈)
 30. [세션 30: Ghostty 비활성 탭 렌더링 절감 및 v1.2.3 릴리즈](#세션-30-ghostty-비활성-탭-렌더링-절감-및-v123-릴리즈)
+31. [세션 31: 닫기 확인 및 About 탭 개선과 v1.2.4 릴리즈](#세션-31-닫기-확인-및-about-탭-개선과-v124-릴리즈)
 
 ---
 
@@ -86,6 +87,7 @@
 | 45 | Settings 탭 전환 및 v1.2.1 릴리즈 | Settings를 별도 창 대신 앱 내부 탭으로 열도록 변경, 테마 카드 선택/선택 표시 보강, 앱 번들 버전 1.2.1 갱신 |
 | 46 | tmux cwd 및 Git Diff 갱신 안정화와 v1.2.2 릴리즈 | OSC 7 file URL cwd 정규화, 유효하지 않은 cwd 업데이트 무시, 변경 파일 새로고침 후 선택 Diff 유지, 앱 번들 버전 1.2.2 갱신 |
 | 47 | Ghostty 비활성 탭 렌더링 절감 및 v1.2.3 릴리즈 | 비활성 터미널 탭 surface 숨김 처리, 불필요한 터미널 view 업데이트 축소, 앱 번들 버전 1.2.3 갱신 |
+| 48 | 닫기 확인 및 About 탭 개선과 v1.2.4 릴리즈 | 터미널/수정 문서 닫기 확인 UX, About 탭 전환, 오픈소스 원 저작자/클릭 가능한 링크 표시, 앱 번들 버전 1.2.4 갱신 |
 
 ---
 
@@ -1612,6 +1614,71 @@ GitHub Issue #17의 내용을 확인해, 여러 터미널 탭이 열린 상태�
 
 **응답:**
 명시 버전 `1.2.3`으로 앱 번들 버전을 갱신하고, README 기능 소개와 `history.md` 세션 기록을 이번 에너지 사용량 개선에 맞게 업데이트한 뒤 릴리즈 빌드, 커밋/푸시, GitHub Release, main 대상 PR 생성 및 머지를 진행.
+
+변경 파일: `Sources/App/Info.plist`, `README.md`, `history.md`
+
+---
+
+## 세션 31: 닫기 확인 및 About 탭 개선과 v1.2.4 릴리즈
+
+> 날짜: 2026-05-27
+> 경로: ~/workspace/markAgent
+
+터미널 탭과 수정 중인 Markdown 문서의 닫기 동작을 더 안전하게 만들고, About 화면을 앱 내부 탭으로 옮기면서 오픈소스 라이선스/저작자 정보를 더 확인하기 쉽게 정리한 뒤 `v1.2.4` 패치 릴리즈를 준비.
+
+### 대화 1: 탭 닫기 확인 UX 보강
+
+**사용자:**
+> 터미널 탭이 활성 상태일 때 cmd+w 를 입력하면 경고 윈도우를 표시하고 닫을지, 취소할지 선택할 수 있게 해야 해. 수정중인 파일을 닫을 때에는 저장할지, 수정한 내용을 취소할지 선택할 수 있게 해야해. 이 내용을 영어로 표시해줘.
+
+**응답:**
+터미널 탭에서 `cmd+w`가 터미널 keybind로 전달되지 않고 앱의 Close Tab 액션으로 처리되도록 조정하고, `Close terminal tab?` 확인창을 추가했다. 수정 중인 Markdown 문서를 닫을 때는 영어 프롬프트에서 `Save`, `Discard Changes`, `Cancel`을 선택할 수 있도록 dirty document prompting 인터페이스를 확장했으며, 새 문서는 저장 경로 선택 후 저장되도록 처리했다.
+
+검증:
+- `swift test` — 29개 테스트 통과
+
+변경 파일: `Sources/App/AppDelegate.swift`, `Sources/App/AppDirtyDocumentPrompter.swift`, `Sources/Core/Tabs/DirtyDocumentPrompting.swift`, `Sources/Core/Tabs/MarkdownTabState.swift`
+
+---
+
+### 대화 2: About 탭 전환 및 오픈소스 정보 개선
+
+**사용자:**
+> About 화면에 표시되는 이 앱의 한국어 설명은 의미가 없으니 빼줘. 그리고, About을 선택했을 때, 탭에서 표시되게 해줘. 해당 탭에서 라이센스 관련 정보는 더 상세한 내용을 표기해야해.
+
+**응답:**
+기존 별도 About 윈도우를 제거하고 `AboutTab`을 추가해 `About MarkAgent` 메뉴가 앱 내부 탭을 열도록 변경했다. About 화면의 한국어 설명 문장을 제거하고, 오픈소스 패키지별 역할과 라이선스 정보를 확장해 표시하도록 정리했다.
+
+검증:
+- `swift test` — 29개 테스트 통과
+
+변경 파일: `Sources/App/AboutView.swift`, `Sources/App/AppDelegate.swift`, `Sources/Core/Tabs/AboutTab.swift`, `Sources/Core/Tabs/TabCollection.swift`, `Sources/Core/Tabs/TabKind.swift`, `Sources/Views/Main/ActiveTabContentView.swift`
+
+---
+
+### 대화 3: 오픈소스 원 저작자 및 저장소 링크 UX 정리
+
+**사용자:**
+> 해당 오픈소스의 원 저작자를 표시하고, 재배포시 유의 사항은 필요가 없을 것 같아.
+
+**응답:**
+About의 각 오픈소스 항목에 원 저작자/저작권자 정보를 추가하고, 재배포 유의사항 문구는 제거했다. 이후 각 패키지 저장소 주소를 클릭 가능한 링크로 바꾸고, hover 시 밑줄/강조색과 손가락 커서를 표시하되 URL 오른쪽 빈 공간은 클릭 대상이 되지 않도록 hit area를 텍스트 영역으로 제한했다.
+
+검증:
+- `swift test` — 29개 테스트 통과
+- `scripts/bundle.sh` — 성공
+
+변경 파일: `Sources/App/AboutView.swift`
+
+---
+
+### 대화 4: `/release-build 1.2.4`
+
+**사용자:**
+> /release-build 1.2.4
+
+**응답:**
+명시 버전 `1.2.4`로 앱 번들 버전을 갱신하고, README 기능 소개와 `history.md` 세션 기록을 이번 닫기 확인/오픈소스 정보 개선에 맞게 업데이트한 뒤 릴리즈 빌드, 커밋/푸시, GitHub Release, main 대상 PR 생성 및 머지를 진행.
 
 변경 파일: `Sources/App/Info.plist`, `README.md`, `history.md`
 
