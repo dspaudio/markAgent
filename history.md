@@ -31,6 +31,7 @@
 27. [세션 27: Settings 화면, 브랜치명 전체 표시 및 v1.2.0 릴리즈](#세션-27-settings-화면-브랜치명-전체-표시-및-v120-릴리즈)
 28. [세션 28: Settings 탭 전환 및 v1.2.1 릴리즈](#세션-28-settings-탭-전환-및-v121-릴리즈)
 29. [세션 29: tmux cwd 및 Git Diff 갱신 안정화와 v1.2.2 릴리즈](#세션-29-tmux-cwd-및-git-diff-갱신-안정화와-v122-릴리즈)
+30. [세션 30: Ghostty 비활성 탭 렌더링 절감 및 v1.2.3 릴리즈](#세션-30-ghostty-비활성-탭-렌더링-절감-및-v123-릴리즈)
 
 ---
 
@@ -84,6 +85,7 @@
 | 44 | Settings 화면, 브랜치명 전체 표시 및 v1.2.0 릴리즈 | Ghostty theme/font 설정 UI와 미리보기, config 자동 저장/재적용, 타이틀바 브랜치명 전체 표시, 앱 번들 버전 1.2.0 갱신 |
 | 45 | Settings 탭 전환 및 v1.2.1 릴리즈 | Settings를 별도 창 대신 앱 내부 탭으로 열도록 변경, 테마 카드 선택/선택 표시 보강, 앱 번들 버전 1.2.1 갱신 |
 | 46 | tmux cwd 및 Git Diff 갱신 안정화와 v1.2.2 릴리즈 | OSC 7 file URL cwd 정규화, 유효하지 않은 cwd 업데이트 무시, 변경 파일 새로고침 후 선택 Diff 유지, 앱 번들 버전 1.2.2 갱신 |
+| 47 | Ghostty 비활성 탭 렌더링 절감 및 v1.2.3 릴리즈 | 비활성 터미널 탭 surface 숨김 처리, 불필요한 터미널 view 업데이트 축소, 앱 번들 버전 1.2.3 갱신 |
 
 ---
 
@@ -1575,6 +1577,41 @@ tmux 또는 OSC 7 cwd 전달 환경에서 사이드바 현재 경로가 깨지�
 
 **응답:**
 명시 버전 `1.2.2`로 앱 번들 버전을 갱신하고, README 기능 소개와 `history.md` 세션 기록을 이번 버그픽스에 맞게 업데이트한 뒤 릴리즈 빌드, 커밋/푸시, GitHub Release, main 대상 PR 생성 및 머지를 진행.
+
+변경 파일: `Sources/App/Info.plist`, `README.md`, `history.md`
+
+---
+
+## 세션 30: Ghostty 비활성 탭 렌더링 절감 및 v1.2.3 릴리즈
+
+> 날짜: 2026-05-27
+> 경로: ~/workspace/markAgent
+
+GitHub Issue #17에서 보고된 MarkAgent 에너지 사용량 문제를 확인하고, Ghostty 기반 터미널 탭의 비활성 surface 렌더링을 줄이는 패치와 `v1.2.3` 릴리즈를 준비.
+
+### 대화 1: GitHub Issue #17 확인 및 에너지 사용량 개선
+
+**사용자:**
+> github Issue 등록된것 확인하고 수정해줘.
+
+**응답:**
+GitHub Issue #17의 내용을 확인해, 여러 터미널 탭이 열린 상태에서 비활성 탭도 Ghostty Metal 렌더링 wakeup 대상이 될 수 있음을 파악했다. `TerminalTabView`에서 `AppTerminalView.setSurfaceVisible(isActive)`를 생성/갱신 시점에 호출해 비활성 터미널 surface를 숨김으로 표시하고, `updateNSView`에서 controller/delegate는 변경된 경우에만 재할당하도록 줄였다.
+
+검증:
+- `swift build` — 통과
+- `swift test` — 29개 테스트 통과
+
+변경 파일: `Sources/Views/Tabs/TerminalTabView.swift`
+
+---
+
+### 대화 2: `.claude/commands/release-build.md 1.2.3`
+
+**사용자:**
+> .claude/commands/release-build.md 1.2.3
+
+**응답:**
+명시 버전 `1.2.3`으로 앱 번들 버전을 갱신하고, README 기능 소개와 `history.md` 세션 기록을 이번 에너지 사용량 개선에 맞게 업데이트한 뒤 릴리즈 빌드, 커밋/푸시, GitHub Release, main 대상 PR 생성 및 머지를 진행.
 
 변경 파일: `Sources/App/Info.plist`, `README.md`, `history.md`
 
