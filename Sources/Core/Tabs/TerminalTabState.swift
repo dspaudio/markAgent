@@ -126,9 +126,35 @@ final class TerminalTabState {
     }
 
     func updateWorkingDirectory(_ url: URL) {
-        workingDirectory = url
-        title = Self.title(for: url)
-        onDirectoryChanged?(url)
+        let resolvedURL = Self.normalizedWorkingDirectory(from: url.path) ?? url
+        title = Self.title(for: resolvedURL)
+        workingDirectory = resolvedURL
+        onDirectoryChanged?(resolvedURL)
+    }
+
+    func updateWorkingDirectory(_ path: String) {
+        guard let url = Self.normalizedWorkingDirectory(from: path) else { return }
+        updateWorkingDirectory(url)
+    }
+
+    nonisolated static func normalizedWorkingDirectory(from rawPath: String) -> URL? {
+        let trimmed = rawPath.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+
+        let expandedPath: String
+        if let url = URL(string: trimmed), url.isFileURL {
+            expandedPath = url.path
+        } else {
+            expandedPath = NSString(string: trimmed).expandingTildeInPath
+        }
+
+        var isDirectory: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: expandedPath, isDirectory: &isDirectory),
+              isDirectory.boolValue else {
+            return nil
+        }
+
+        return URL(fileURLWithPath: expandedPath).resolvingSymlinksInPath().standardizedFileURL
     }
 
     func close() {

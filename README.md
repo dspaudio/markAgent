@@ -38,7 +38,7 @@ MarkAgent is a visual bridge for that workflow.
 - **Ghostty config integration:** Reads `~/.config/ghostty/config` and reflects your existing terminal preferences such as theme, font family, and font size in the app. The Settings tab lets you choose a Ghostty theme from scrollable preview cards, font size, coding font, and fallback font with live previews; changes are saved back to the Ghostty config file and immediately reloaded into open terminal tabs. It also checks Ghostty's macOS Application Support config path, lets you re-read the current config from the MarkAgent menu, opens the current Ghostty config file directly from the app menu, reloads the live terminal configuration after saving that file, and restores action-aware Ghostty keybind dispatch so `text:` payloads and binding actions take the intended path.
 - **Markdown editing and preview:** Supports raw Markdown editing, GFM rendering, tables, checklists, strikethrough, highlighted code blocks, and a local markdown toolbar with preview/raw mode switching plus inline formatting actions. When the opened file is not Markdown, markdown-only editing controls stay hidden so raw text files keep a cleaner editor UI.
 - **Working directory file browser:** Updates the file browser based on the active terminal or Markdown tab's working directory, and both left and right sidebars can be resized directly in the window.
-- **Change tracking:** Shows changed files from the Git repository in the sidebar, supports branch checkout and Git init from the titlebar, keeps the full current branch name visible in the titlebar, and displays line-based diffs with expandable hidden context for selected files.
+- **Change tracking:** Shows changed files from the Git repository in the sidebar, supports branch checkout and Git init from the titlebar, keeps the full current branch name visible in the titlebar, and displays line-based diffs with expandable hidden context for selected files. Refreshing the change list preserves a selected file's diff when that file is still changed.
 - **Recent documents:** Reopen frequently used Markdown documents from the recent documents list.
 - **App launch file opening:** Opening the app with a file path, including `.app --args` launches, resolves the target file directly into a markdown tab.
 - **macOS app bundle:** Runs as a `.app` bundle with Dock, menu bar, Cmd+Tab, and normal macOS window behavior.
@@ -54,7 +54,7 @@ MarkAgent is not trying to replace your terminal. It embeds the terminal experie
 
 ## tmux cwd Troubleshooting
 
-The Diff button is enabled only when MarkAgent knows that the active working directory is inside a Git repository. Normal shells can report cwd changes to Ghostty through OSC 7, but tmux may block or fail to forward those updates. If you start tmux from a non-Git directory and then `cd` into a Git project inside tmux, the Diff button can remain disabled because MarkAgent still sees the old directory.
+The Diff button is enabled only when MarkAgent knows that the active working directory is inside a Git repository. Normal shells can report cwd changes to Ghostty through OSC 7, but tmux may block or fail to forward those updates. MarkAgent accepts regular paths and `file://` OSC 7 paths, ignores invalid cwd updates, and keeps the previous valid directory instead of switching the sidebar to a broken path.
 
 Add passthrough support to `~/.tmux.conf`:
 
@@ -227,7 +227,7 @@ MarkAgent는 이 흐름을 위해 만든 비주얼 브릿지입니다.
 - **Ghostty 설정 연동:** `~/.config/ghostty/config`를 읽어 테마, 폰트 패밀리, 폰트 크기 등 기존 터미널 취향을 앱에 반영합니다. Ghostty의 macOS Application Support 설정 경로도 함께 확인하며, 설정된 Ghostty keybind chord도 raw text 주입이 아니라 Ghostty 자체 키 처리 경로로 전달합니다. MarkAgent 메뉴의 Reload Configuration으로 현재 설정을 다시 읽을 수 있고, Open Ghostty config 메뉴로 현재 설정 파일을 바로 열어 저장 후 실행 중 터미널 설정에 다시 반영할 수도 있습니다.
 - **Markdown 편집 및 미리보기:** Markdown 원문 편집, GFM 렌더링, 표, 체크리스트, 취소선, 코드 블록 하이라이팅을 지원하고, 로컬 상단 툴바에서 Preview/Raw Edit 전환과 기본 서식 액션을 제공합니다. Markdown이 아닌 파일을 열면 마크다운 전용 편집 아이콘은 숨겨져 raw text 편집 화면이 더 단순하게 유지됩니다.
 - **작업 경로 파일 확인:** 활성 터미널이나 Markdown 탭의 작업 경로에 맞춰 파일 브라우저를 갱신하며, 좌우 사이드바를 직접 리사이즈할 수 있습니다.
-- **변경사항 추적:** Git 저장소의 변경 파일을 사이드바로 보고, 선택한 파일의 줄 단위 Diff를 확인하며, 숨겨진 문맥은 단계적으로 더 펼쳐볼 수 있습니다. 타이틀바에서는 Git 브랜치 전환과 Git Init도 처리할 수 있습니다.
+- **변경사항 추적:** Git 저장소의 변경 파일을 사이드바로 보고, 선택한 파일의 줄 단위 Diff를 확인하며, 숨겨진 문맥은 단계적으로 더 펼쳐볼 수 있습니다. 변경 파일 목록을 새로고침해도 해당 파일이 계속 변경된 상태라면 선택한 Diff를 유지합니다. 타이틀바에서는 Git 브랜치 전환과 Git Init도 처리할 수 있습니다.
 - **최근 문서:** 자주 여는 Markdown 문서를 최근 문서 목록에서 다시 열 수 있습니다.
 - **앱 실행 시 파일 열기:** `.app --args` 또는 CLI wrapper로 파일 경로를 넘겨 실행했을 때 대상 파일을 바로 Markdown 탭으로 엽니다.
 - **macOS 앱 번들:** Dock, 메뉴바, Cmd+Tab, 일반 macOS 윈도우 동작을 지원하는 `.app` 번들로 실행됩니다.
@@ -243,7 +243,7 @@ MarkAgent는 터미널을 대체하려는 앱이 아닙니다. Ghostty를 기반
 
 ## tmux cwd 문제 해결
 
-Diff 버튼은 MarkAgent가 현재 활성 작업 경로가 Git 저장소 안이라고 판단할 때만 활성화됩니다. 일반 쉘은 OSC 7로 cwd 변경을 Ghostty에 전달할 수 있지만, tmux는 이 업데이트를 막거나 전달하지 않을 수 있습니다. Git 저장소가 아닌 경로에서 tmux를 시작한 뒤 tmux 안에서 Git 프로젝트로 `cd`하면, MarkAgent가 여전히 이전 경로를 보고 있어서 Diff 버튼이 비활성화된 상태로 남을 수 있습니다.
+Diff 버튼은 MarkAgent가 현재 활성 작업 경로가 Git 저장소 안이라고 판단할 때만 활성화됩니다. 일반 쉘은 OSC 7로 cwd 변경을 Ghostty에 전달할 수 있지만, tmux는 이 업데이트를 막거나 전달하지 않을 수 있습니다. MarkAgent는 일반 경로와 `file://` OSC 7 경로를 받아들이고, 유효하지 않은 cwd 업데이트는 무시해 사이드바가 깨진 경로로 바뀌지 않도록 합니다.
 
 `~/.tmux.conf`에 passthrough 설정을 추가합니다:
 

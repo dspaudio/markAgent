@@ -30,6 +30,7 @@
 26. [세션 26: Ghostty config 편집 흐름, non-md 툴바 정리 및 v1.1.4 릴리즈](#세션-26-ghostty-config-편집-흐름-non-md-툴바-정리-및-v114-릴리즈)
 27. [세션 27: Settings 화면, 브랜치명 전체 표시 및 v1.2.0 릴리즈](#세션-27-settings-화면-브랜치명-전체-표시-및-v120-릴리즈)
 28. [세션 28: Settings 탭 전환 및 v1.2.1 릴리즈](#세션-28-settings-탭-전환-및-v121-릴리즈)
+29. [세션 29: tmux cwd 및 Git Diff 갱신 안정화와 v1.2.2 릴리즈](#세션-29-tmux-cwd-및-git-diff-갱신-안정화와-v122-릴리즈)
 
 ---
 
@@ -82,6 +83,7 @@
 | 43 | Ghostty config 편집 흐름, non-md 툴바 정리 및 v1.1.4 릴리즈 | Open Ghostty config 메뉴, 저장 후 Reload Configuration 연동, non-md 편집 툴바 숨김, 최신 HighlightSwift 로컬 패치 고정, 앱 번들 버전 1.1.4 갱신 |
 | 44 | Settings 화면, 브랜치명 전체 표시 및 v1.2.0 릴리즈 | Ghostty theme/font 설정 UI와 미리보기, config 자동 저장/재적용, 타이틀바 브랜치명 전체 표시, 앱 번들 버전 1.2.0 갱신 |
 | 45 | Settings 탭 전환 및 v1.2.1 릴리즈 | Settings를 별도 창 대신 앱 내부 탭으로 열도록 변경, 테마 카드 선택/선택 표시 보강, 앱 번들 버전 1.2.1 갱신 |
+| 46 | tmux cwd 및 Git Diff 갱신 안정화와 v1.2.2 릴리즈 | OSC 7 file URL cwd 정규화, 유효하지 않은 cwd 업데이트 무시, 변경 파일 새로고침 후 선택 Diff 유지, 앱 번들 버전 1.2.2 갱신 |
 
 ---
 
@@ -1539,6 +1541,40 @@ Theme picker를 제거하고 `GhosttyThemeCatalog.allThemes` 기반의 스크롤
 
 **응답:**
 명시 버전 `1.2.1`로 앱 번들 버전을 갱신하고, README 기능 소개와 `history.md` 세션 기록을 이번 변경분에 맞게 업데이트한 뒤 릴리즈 빌드, 커밋/푸시, GitHub Release, main 대상 PR 생성 및 머지를 진행.
+
+변경 파일: `Sources/App/Info.plist`, `README.md`, `history.md`
+
+---
+
+## 세션 29: tmux cwd 및 Git Diff 갱신 안정화와 v1.2.2 릴리즈
+
+> 날짜: 2026-05-27
+> 경로: ~/workspace/markAgent
+
+tmux 또는 OSC 7 cwd 전달 환경에서 사이드바 현재 경로가 깨지는 문제와, Git 변경 파일 목록 새로고침 이후 선택 파일의 Diff가 하단에 뜨지 않는 갱신 타이밍 문제를 수정하고 `v1.2.2` 패치 릴리즈를 준비.
+
+### 대화 1: tmux cwd 및 Git Diff 선택 갱신 오류 수정
+
+**사용자:**
+> tmux 환경이나 특정 상황에서 왼쪽 사이드바 현재 디렉토리 표시에서 경로는 못찾는 문제도 있어. 그리고 오른쪽 사이드바에 변경된 파일 목록에서 변경된 파일은 새로 고침 버튼으로 변경이 되는데, 변경된 파일을 클릭하면 하단에 diff보기가 안뜨는 경우가 있어. 갱신 시점의 문제인 것 같아. 이 오류를 수정해야해.
+
+**응답:**
+터미널 cwd 콜백에서 들어오는 일반 경로와 `file://` OSC 7 경로를 정규화하고, 실제 존재하는 디렉토리일 때만 작업 경로로 반영하도록 보강했다. Git Diff 상태에는 refresh/select 토큰과 로딩 상태를 추가해 새로고침과 선택 작업이 서로 덮어쓰는 중간 상태를 방지하고, 새로고침 후에도 선택 파일이 변경 목록에 남아 있으면 해당 Diff를 다시 계산해 유지하도록 수정했다.
+
+검증:
+- `swift test` — 29개 테스트 통과
+
+변경 파일: `Sources/Core/Tabs/TerminalTabState.swift`, `Sources/Views/Tabs/TerminalTabView.swift`, `Sources/Core/GitDiffState.swift`, `Sources/Views/Sidebar/GitChangesSidebar.swift`, `Tests/MarkAgentTests/TerminalTabStateTests.swift`, `Tests/MarkAgentTests/GitDiffStateTests.swift`
+
+---
+
+### 대화 2: `/release-build 1.2.2`
+
+**사용자:**
+> /release-build 1.2.2
+
+**응답:**
+명시 버전 `1.2.2`로 앱 번들 버전을 갱신하고, README 기능 소개와 `history.md` 세션 기록을 이번 버그픽스에 맞게 업데이트한 뒤 릴리즈 빌드, 커밋/푸시, GitHub Release, main 대상 PR 생성 및 머지를 진행.
 
 변경 파일: `Sources/App/Info.plist`, `README.md`, `history.md`
 

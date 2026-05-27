@@ -19,10 +19,13 @@ final class GitDiffState {
     var selectedFile: GitChangedFile?
     var selectedDiffResult: DiffResult?
     private(set) var errorMessage: String?
+    private(set) var isRefreshing = false
+    private(set) var isLoadingSelectedDiff = false
     var isShowingSidebar = false
     private var refreshTask: Task<Void, Never>?
     private var selectTask: Task<Void, Never>?
     private var refreshToken = 0
+    private var selectToken = 0
 
     var isInGitRepository: Bool { repositoryRoot != nil }
 
@@ -30,9 +33,8 @@ final class GitDiffState {
         refreshToken += 1
         let token = refreshToken
         refreshTask?.cancel()
-        selectedFile = nil
-        selectedDiffResult = nil
         errorMessage = nil
+        isRefreshing = true
 
         refreshTask = Task { [directory, token] in
             let result = await Task.detached(priority: .utility) {
@@ -65,8 +67,24 @@ final class GitDiffState {
             self.repositoryRoot = result.repositoryRoot
             self.changedFiles = result.changedFiles
             self.errorMessage = result.errorMessage
+            self.isRefreshing = false
             if result.repositoryRoot == nil {
                 self.isShowingSidebar = false
+                self.clearSelection()
+                return
+            }
+
+            guard let selectedFile = self.selectedFile else { return }
+
+            if let refreshedSelection = result.changedFiles.first(where: { $0.id == selectedFile.id }) {
+                if refreshedSelection != selectedFile {
+                    self.selectedFile = refreshedSelection
+                }
+                if self.selectedDiffResult == nil {
+                    self.select(refreshedSelection)
+                }
+            } else {
+                self.clearSelection()
             }
         }
     }
@@ -78,12 +96,15 @@ final class GitDiffState {
     }
 
     func select(_ file: GitChangedFile) {
+        selectToken += 1
+        let token = selectToken
         selectedFile = file
         selectedDiffResult = nil
+        isLoadingSelectedDiff = true
         errorMessage = nil
         selectTask?.cancel()
 
-        selectTask = Task { [file] in
+        selectTask = Task { [file, token] in
             do {
                 let diffResult = try await Task.detached(priority: .userInitiated) {
                     let oldContent = try Self.gitShowHead(file: file)
@@ -94,15 +115,26 @@ final class GitDiffState {
                         emptyOldIsAllAdded: true
                     )
                 }.value
-                guard !Task.isCancelled, self.selectedFile == file else { return }
+                guard !Task.isCancelled, token == self.selectToken, self.selectedFile?.id == file.id else { return }
+                self.selectedFile = file
                 self.selectedDiffResult = diffResult
+                self.isLoadingSelectedDiff = false
                 self.errorMessage = nil
             } catch {
-                guard !Task.isCancelled, self.selectedFile == file else { return }
+                guard !Task.isCancelled, token == self.selectToken, self.selectedFile?.id == file.id else { return }
                 self.selectedDiffResult = nil
+                self.isLoadingSelectedDiff = false
                 self.errorMessage = error.localizedDescription
             }
         }
+    }
+
+    func clearSelection() {
+        selectToken += 1
+        selectTask?.cancel()
+        selectedFile = nil
+        selectedDiffResult = nil
+        isLoadingSelectedDiff = false
     }
 
     private nonisolated static func findRepositoryRoot(from directory: URL) -> URL? {
