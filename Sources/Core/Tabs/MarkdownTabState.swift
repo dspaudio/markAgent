@@ -58,8 +58,12 @@ final class MarkdownTabState {
     func prepareForClose(prompt: DirtyDocumentPrompting?) async -> Bool {
         if isDirty {
             guard let prompt = prompt else { return false }
-            let confirmed = await prompt.confirmCloseDirtyDocument(title: title) { [weak self] in
-                try self?.save()
+            let confirmed = await prompt.confirmCloseDirtyDocument(title: title, fileURL: fileURL) { url in
+                if let url {
+                    try self.save(to: url)
+                } else {
+                    try self.save()
+                }
             }
             if confirmed {
                 await stopWatching()

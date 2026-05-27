@@ -9,30 +9,40 @@ struct AboutView: View {
             name: "swift-markdown",
             role: "GitHub Flavored Markdown parsing",
             license: "Apache-2.0",
+            author: "Apple Inc. and the Swift Project authors",
+            details: "Used to parse Markdown and GFM into a Swift syntax tree.",
             url: "https://github.com/swiftlang/swift-markdown"
         ),
         OpenSourceLibrary(
             name: "swift-cmark",
             role: "CommonMark and GFM parsing engine used by swift-markdown",
             license: "BSD-style and MIT notices",
+            author: "John MacFarlane, with derived components by Vicent Martí, GitHub, Public Software Group e. V., and Karl Dubost",
+            details: "Used transitively by swift-markdown for CommonMark/GFM behavior.",
             url: "https://github.com/swiftlang/swift-cmark"
         ),
         OpenSourceLibrary(
             name: "HighlightSwift",
             role: "Code block syntax highlighting",
             license: "MIT; includes highlight.js under BSD-3-Clause",
+            author: "Stefan Britton; highlight.js by Ivan Sagalaev",
+            details: "Used for syntax-highlighted code blocks.",
             url: "https://github.com/appstefan/HighlightSwift"
         ),
         OpenSourceLibrary(
             name: "libghostty-spm",
             role: "Embedded terminal surface and Ghostty integration",
             license: "MIT; bundles libghostty under its own MIT terms",
+            author: "@Lakr233; wraps Ghostty's terminal emulator library",
+            details: "Used to host the embedded terminal tab.",
             url: "https://github.com/Lakr233/libghostty-spm"
         ),
         OpenSourceLibrary(
             name: "MSDisplayLink",
             role: "Display refresh support used by libghostty-spm",
             license: "MIT",
+            author: "Lakr Aream",
+            details: "Used by the terminal integration for display refresh scheduling.",
             url: "https://github.com/Lakr233/MSDisplayLink"
         ),
     ]
@@ -73,16 +83,16 @@ struct AboutView: View {
                     }
 
                     section(title: "License Notice") {
-                        Text("MarkAgent includes and links against the open source components listed above. Each component remains governed by its respective license.")
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                            .fixedSize(horizontal: false, vertical: true)
+                        VStack(alignment: .leading, spacing: 8) {
+                            licenseLine("MarkAgent includes and links against the open source components listed above.")
+                            licenseLine("Package versions are resolved by Swift Package Manager through Package.resolved.")
+                        }
                     }
                 }
                 .padding(24)
             }
         }
-        .frame(width: 560, height: 620)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color(nsColor: .windowBackgroundColor))
     }
 
@@ -108,12 +118,6 @@ struct AboutView: View {
                     .foregroundStyle(.primary)
                     .multilineTextAlignment(.center)
                     .padding(.top, 4)
-
-                Text("CLI AI 에이전트가 만든 마크다운을 macOS에서 바로 읽고 편집하는 네이티브 브릿지입니다.")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-                    .fixedSize(horizontal: false, vertical: true)
             }
         }
     }
@@ -152,6 +156,18 @@ struct AboutView: View {
         }
     }
 
+    private func licenseLine(_ text: String) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Text("•")
+                .foregroundStyle(.secondary)
+            Text(text)
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+                .textSelection(.enabled)
+        }
+    }
+
     private func open(_ urlString: String) {
         guard let url = URL(string: urlString) else { return }
         NSWorkspace.shared.open(url)
@@ -160,6 +176,7 @@ struct AboutView: View {
 
 private struct LibraryRow: View {
     let library: OpenSourceLibrary
+    @State private var isHoveringURL = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -180,16 +197,47 @@ private struct LibraryRow: View {
                 .font(.callout)
                 .foregroundStyle(.secondary)
 
-            Text(library.url)
-                .font(.system(.caption, design: .monospaced))
+            Text("Original author: \(library.author)")
+                .font(.footnote.weight(.medium))
                 .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
                 .textSelection(.enabled)
-                .lineLimit(1)
-                .truncationMode(.middle)
+
+            Text(library.details)
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+                .textSelection(.enabled)
+
+            Button {
+                open(library.url)
+            } label: {
+                Text(library.url)
+                    .font(.system(.caption, design: .monospaced))
+                    .underline(isHoveringURL)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            }
+            .buttonStyle(.link)
+            .foregroundStyle(isHoveringURL ? Color.accentColor : Color.secondary)
+            .help("Open repository")
+            .onHover { hovering in
+                isHoveringURL = hovering
+                if hovering {
+                    NSCursor.pointingHand.push()
+                } else {
+                    NSCursor.pop()
+                }
+            }
         }
         .padding(12)
         .background(Color(nsColor: .controlBackgroundColor))
         .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+    }
+
+    private func open(_ urlString: String) {
+        guard let url = URL(string: urlString) else { return }
+        NSWorkspace.shared.open(url)
     }
 }
 
@@ -197,6 +245,8 @@ private struct OpenSourceLibrary: Identifiable {
     let name: String
     let role: String
     let license: String
+    let author: String
+    let details: String
     let url: String
 
     var id: String { name }

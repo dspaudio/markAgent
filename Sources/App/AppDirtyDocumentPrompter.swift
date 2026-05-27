@@ -1,4 +1,5 @@
 import AppKit
+import UniformTypeIdentifiers
 
 @MainActor
 final class AppDirtyDocumentPrompter: DirtyDocumentPrompting {
@@ -10,28 +11,28 @@ final class AppDirtyDocumentPrompter: DirtyDocumentPrompting {
 
     func confirmCloseDirtyDocument(
         title: String,
-        saveAction: @escaping () throws -> Void
+        fileURL: URL?,
+        saveAction: @escaping (URL?) throws -> Void
     ) async -> Bool {
         let alert = NSAlert()
-        alert.messageText = "저장되지 않은 변경사항이 있습니다."
-        alert.informativeText = "\(title)에 저장되지 않은 변경사항이 있습니다. 저장하시겠습니까?"
-        alert.addButton(withTitle: "저장")
-        alert.addButton(withTitle: "저장 안 함")
-        alert.addButton(withTitle: "취소")
+        alert.messageText = "Save changes before closing?"
+        alert.informativeText = "Do you want to save the changes you made to \"\(title)\"?"
+        alert.addButton(withTitle: "Save")
+        alert.addButton(withTitle: "Discard Changes")
+        alert.addButton(withTitle: "Cancel")
         alert.alertStyle = .warning
 
-        let response = await withCheckedContinuation { continuation in
-            DispatchQueue.main.async {
-                continuation.resume(returning: alert.runModal())
-            }
-        }
+        let response = await runAlert(alert)
 
         switch response {
         case .alertFirstButtonReturn:
             do {
-                try saveAction()
+                let saveURL = fileURL ?? chooseSaveURL(suggestedName: title)
+                guard fileURL != nil || saveURL != nil else { return false }
+                try saveAction(saveURL)
                 return true
             } catch {
+                showSaveError(error)
                 return false
             }
         case .alertSecondButtonReturn:
@@ -39,5 +40,40 @@ final class AppDirtyDocumentPrompter: DirtyDocumentPrompting {
         default:
             return false
         }
+    }
+
+    private func runAlert(_ alert: NSAlert) async -> NSApplication.ModalResponse {
+        guard let window else { return alert.runModal() }
+        return await withCheckedContinuation { continuation in
+            alert.beginSheetModal(for: window) { response in
+                continuation.resume(returning: response)
+            }
+        }
+    }
+
+    private func chooseSaveURL(suggestedName: String) -> URL? {
+        let panel = NSSavePanel()
+        panel.title = "Save Markdown Document"
+        panel.prompt = "Save"
+        panel.nameFieldStringValue = suggestedName
+        panel.allowedContentTypes = [
+            UTType(filenameExtension: "md"),
+            UTType(filenameExtension: "markdown"),
+            UTType(filenameExtension: "txt"),
+            .plainText
+        ].compactMap { $0 }
+        panel.canCreateDirectories = true
+        panel.isExtensionHidden = false
+
+        return panel.runModal() == .OK ? panel.url : nil
+    }
+
+    private func showSaveError(_ error: Error) {
+        let alert = NSAlert()
+        alert.messageText = "Could Not Save Document"
+        alert.informativeText = error.localizedDescription
+        alert.alertStyle = .critical
+        alert.addButton(withTitle: "OK")
+        _ = alert.runModal()
     }
 }

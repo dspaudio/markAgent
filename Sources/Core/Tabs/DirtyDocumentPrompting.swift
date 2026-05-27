@@ -4,6 +4,7 @@ import Foundation
 protocol DirtyDocumentPrompting: AnyObject {
     func confirmCloseDirtyDocument(
         title: String,
-        saveAction: @escaping () throws -> Void
+        fileURL: URL?,
+        saveAction: @escaping (URL?) throws -> Void
     ) async -> Bool
 }
