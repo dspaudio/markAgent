@@ -4,6 +4,7 @@ struct MainContainerView: View {
     var tabs: TabCollection
     var scanner: DirectoryScanner
     var recentStore: RecentDocumentStore
+    var snippetStore: PromptSnippetStore
     var onOpenFile: () -> Void
     var onDocumentChanged: () -> Void
     var onConfigurationSaved: () -> Void = {}
@@ -87,8 +88,9 @@ struct MainContainerView: View {
                             onDragEnded: { isDraggingSidebarResizeHandle = false },
                             dragDirection: .trailing
                         )
-                        GitChangesSidebar(
-                            state: gitDiffState,
+                        RightSidebarView(
+                            gitDiffState: gitDiffState,
+                            snippetStore: snippetStore,
                             width: clampedSidebarWidth(for: geometry.size.width),
                             onSelectFile: openGitDiffFile
                         )
