@@ -33,6 +33,7 @@
 29. [세션 29: tmux cwd 및 Git Diff 갱신 안정화와 v1.2.2 릴리즈](#세션-29-tmux-cwd-및-git-diff-갱신-안정화와-v122-릴리즈)
 30. [세션 30: Ghostty 비활성 탭 렌더링 절감 및 v1.2.3 릴리즈](#세션-30-ghostty-비활성-탭-렌더링-절감-및-v123-릴리즈)
 31. [세션 31: 닫기 확인 및 About 탭 개선과 v1.2.4 릴리즈](#세션-31-닫기-확인-및-about-탭-개선과-v124-릴리즈)
+32. [세션 32: GitHub식 Diff 탭, 사이드바 토글 및 v1.3.0 릴리즈](#세션-32-github식-diff-탭-사이드바-토글-및-v130-릴리즈)
 
 ---
 
@@ -88,6 +89,7 @@
 | 46 | tmux cwd 및 Git Diff 갱신 안정화와 v1.2.2 릴리즈 | OSC 7 file URL cwd 정규화, 유효하지 않은 cwd 업데이트 무시, 변경 파일 새로고침 후 선택 Diff 유지, 앱 번들 버전 1.2.2 갱신 |
 | 47 | Ghostty 비활성 탭 렌더링 절감 및 v1.2.3 릴리즈 | 비활성 터미널 탭 surface 숨김 처리, 불필요한 터미널 view 업데이트 축소, 앱 번들 버전 1.2.3 갱신 |
 | 48 | 닫기 확인 및 About 탭 개선과 v1.2.4 릴리즈 | 터미널/수정 문서 닫기 확인 UX, About 탭 전환, 오픈소스 원 저작자/클릭 가능한 링크 표시, 앱 번들 버전 1.2.4 갱신 |
+| 49 | GitHub식 Diff 탭, 사이드바 토글 및 v1.3.0 릴리즈 | 전체 변경 파일 diff 탭, 파일별 증감 요약, 왼쪽 사이드바 토글/설정/View 메뉴 제어, 앱 번들 버전 1.3.0 갱신 |
 
 ---
 
@@ -1679,6 +1681,93 @@ About의 각 오픈소스 항목에 원 저작자/저작권자 정보를 추가�
 
 **응답:**
 명시 버전 `1.2.4`로 앱 번들 버전을 갱신하고, README 기능 소개와 `history.md` 세션 기록을 이번 닫기 확인/오픈소스 정보 개선에 맞게 업데이트한 뒤 릴리즈 빌드, 커밋/푸시, GitHub Release, main 대상 PR 생성 및 머지를 진행.
+
+변경 파일: `Sources/App/Info.plist`, `README.md`, `history.md`
+
+---
+
+## 세션 32: GitHub식 Diff 탭, 사이드바 토글 및 v1.3.0 릴리즈
+
+> 날짜: 2026-05-28
+> 경로: ~/workspace/markAgent
+
+Git 변경사항 검토 흐름을 GitHub Files changed 화면에 가깝게 바꾸고, 왼쪽 파일 사이드바 표시 상태를 사용자가 직접 제어할 수 있도록 확장한 뒤 `v1.3.0` 릴리즈를 준비.
+
+### 대화 1: GitHub식 전체 Diff 탭 전환
+
+**사용자:**
+> 우측 사이드 바의 diffView에서 파일을 하나하나 클릭해서 변경점을 보는게 아니라, 변경된 파일 목록을 표시하고, 해당 파일을 클릭하면 탭에서 전체 파일의 diffView가 표시되는 형식으로 변경해줘. 첨부한 github의 Files changed 화면과 같이. 그래서 우측 사이드 바의 diffView에서 변경된 파일을 클릭하면 diffView 탭에서 해당 파일의 위치로 자동 스크롤되면 좋겠어.
+
+**응답:**
+우측 사이드바를 변경 파일 목록 전용으로 바꾸고, `Git Diff` 탭을 추가해 전체 변경 파일 diff를 파일 섹션 단위로 렌더링하도록 구현했다. 사이드바에서 파일을 선택하면 같은 `Git Diff` 탭으로 전환하고 해당 파일 섹션으로 자동 스크롤되도록 포커스 상태를 추가했다.
+
+검증:
+- `swift test` — 30개 테스트 통과
+
+변경 파일: `Sources/Core/GitDiffState.swift`, `Sources/Core/Tabs/GitDiffTab.swift`, `Sources/Core/Tabs/TabCollection.swift`, `Sources/Core/Tabs/TabKind.swift`, `Sources/Views/DiffOverlayView.swift`, `Sources/Views/Main/ActiveTabContentView.swift`, `Sources/Views/Main/MainContainerView.swift`, `Sources/Views/Sidebar/GitChangesSidebar.swift`, `Sources/Views/Tabs/GitDiffTabView.swift`, `Tests/MarkAgentTests/GitDiffStateTests.swift`
+
+---
+
+### 대화 2: 변경 파일별 증감 요약 표시
+
+**사용자:**
+> 우측 사이드바의 파일 목록의 파일 이름 옆에  +23 -32 와 같이 수정한 내역을 표시하면 좋을 것 같아.
+
+**응답:**
+우측 변경 파일 목록에서 각 파일명 옆에 파일별 추가/삭제 줄 수를 `+N -N` 형식으로 표시하도록 보강했다. 사이드바가 열리면 전체 diff 통계를 미리 계산하고, 계산 중에는 임시 로딩 표시를 보여주도록 연결했다.
+
+검증:
+- `swift test` — 30개 테스트 통과
+
+변경 파일: `Sources/Views/Sidebar/GitChangesSidebar.swift`
+
+---
+
+### 대화 3: 왼쪽 사이드바 토글과 기본 상태 설정
+
+**사용자:**
+> 왼쪽 사이드 바를 토글로 표시또는 숨김할 수 있도록 하고, Settings 에서도 기본 상태를 지정할 수 있게 해줘.
+
+**응답:**
+탭바에 왼쪽 사이드바 토글 버튼을 추가하고, 표시 여부를 `UserDefaults`/`@AppStorage`에 저장해 앱 재실행 후에도 유지되도록 했다. Settings 탭에는 `Workspace` 섹션을 추가해 왼쪽 사이드바 기본 표시 상태를 지정할 수 있게 했다.
+
+검증:
+- `swift test` — 30개 테스트 통과
+
+변경 파일: `Sources/Views/Main/TabBarView.swift`, `Sources/Views/Main/MainContainerView.swift`, `Sources/App/PreferencesView.swift`
+
+---
+
+### 대화 4: View 메뉴 단축키와 시스템 Tab Bar 메뉴 정리
+
+**사용자:**
+> View 메뉴에도 단축키로 제어할 수 있게 메뉴를 추가해야해.
+
+**응답:**
+View 메뉴에 `Toggle Left Sidebar` 항목을 추가하고 `⌘⌥S` 단축키로 왼쪽 사이드바 표시 상태를 제어하도록 연결했다. 메뉴 체크 상태는 저장된 사이드바 표시 상태와 동기화되도록 했다.
+
+변경 파일: `Sources/App/AppDelegate.swift`
+
+**사용자:**
+> View 메뉴에 Show Tab bar 라는 의미 없는 부분이 있는데, 해당 부분을 빼줘.
+
+**응답:**
+AppKit의 자동 윈도우 탭 기능이 View 메뉴에 삽입하는 `Show Tab Bar` 항목이 나타나지 않도록 자동 탭 기능과 창 탭 모드를 비활성화하고, 이미 삽입된 항목도 제거하도록 보강했다.
+
+검증:
+- `swift test` — 30개 테스트 통과
+
+변경 파일: `Sources/App/AppDelegate.swift`
+
+---
+
+### 대화 5: `/release-build 1.3.0`
+
+**사용자:**
+> /release-build 1.3.0
+
+**응답:**
+명시 버전 `1.3.0`으로 앱 번들 버전을 갱신하고, README 기능 소개와 `history.md` 세션 기록을 이번 변경분에 맞게 업데이트한 뒤 릴리즈 빌드, 커밋/푸시, GitHub Release, main 대상 PR 생성 및 머지를 진행.
 
 변경 파일: `Sources/App/Info.plist`, `README.md`, `history.md`
 

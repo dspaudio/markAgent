@@ -5,22 +5,13 @@ struct DiffOverlayView: View {
     var baseURL: URL?
     let onClose: () -> Void
 
-    @State private var expandedTopCounts: [Int: Int] = [:]
-    @State private var expandedBottomCounts: [Int: Int] = [:]
-
-    private let collapsedContextThreshold = 6
-    private let expansionStep = 20
-    private let visibleContextLines = 3
-
     var body: some View {
         VStack(spacing: 0) {
             summaryHeader
             Divider()
-            diffList
-        }
-        .onAppear(perform: resetExpandedState)
-        .onChange(of: diffSignature) { _, _ in
-            resetExpandedState()
+            ScrollView {
+                DiffContentView(diffResult: diffResult, baseURL: baseURL)
+            }
         }
     }
 
@@ -47,32 +38,6 @@ struct DiffOverlayView: View {
         .background(.regularMaterial)
     }
 
-    private var diffList: some View {
-        ScrollView {
-            LazyVStack(spacing: 0) {
-                ForEach(sections) { section in
-                    switch section {
-                    case .rows(let id, let rows):
-                        ForEach(rows) { row in
-                            switch row.kind {
-                            case .line(let line):
-                                DiffHighlighter(line: line, baseURL: baseURL)
-                                    .id("line-\(id)-\(row.id)")
-                            case .imagePair(let before, let after):
-                                ImageDiffPairView(before: before, after: after)
-                                    .id("image-\(id)-\(row.id)")
-                            }
-                            Divider().opacity(0.3)
-                        }
-                    case .collapsed(let context):
-                        collapsedContextView(context)
-                    }
-                }
-            }
-            .padding(.vertical, 4)
-        }
-    }
-
     // MARK: - 헬퍼
 
     private var summaryText: String {
@@ -85,6 +50,54 @@ struct DiffOverlayView: View {
         }
         return parts.isEmpty ? "변경 없음" : parts.joined(separator: ", ")
     }
+}
+
+struct DiffContentView: View {
+    let diffResult: DiffResult
+    var baseURL: URL?
+
+    @State private var expandedTopCounts: [Int: Int] = [:]
+    @State private var expandedBottomCounts: [Int: Int] = [:]
+
+    private let collapsedContextThreshold = 6
+    private let expansionStep = 20
+    private let visibleContextLines = 3
+
+    var body: some View {
+        diffList
+        .onAppear(perform: resetExpandedState)
+        .onChange(of: diffSignature) { _, _ in
+            resetExpandedState()
+        }
+    }
+
+    // MARK: - 하위 뷰
+
+    private var diffList: some View {
+        LazyVStack(spacing: 0) {
+            ForEach(sections) { section in
+                switch section {
+                case .rows(let id, let rows):
+                    ForEach(rows) { row in
+                        switch row.kind {
+                        case .line(let line):
+                            DiffHighlighter(line: line, baseURL: baseURL)
+                                .id("line-\(id)-\(row.id)")
+                        case .imagePair(let before, let after):
+                            ImageDiffPairView(before: before, after: after)
+                                .id("image-\(id)-\(row.id)")
+                        }
+                        Divider().opacity(0.3)
+                    }
+                case .collapsed(let context):
+                    collapsedContextView(context)
+                }
+            }
+        }
+        .padding(.vertical, 4)
+    }
+
+    // MARK: - 헬퍼
 
     private var sections: [DiffSection] {
         buildSections(from: diffResult.lines)

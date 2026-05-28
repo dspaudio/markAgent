@@ -11,6 +11,7 @@ struct MainContainerView: View {
 
     @State private var isShowingNewTabChooser = false
     @State private var gitDiffState = GitDiffState()
+    @AppStorage("isLeftSidebarVisible") private var isLeftSidebarVisible = true
     @AppStorage("leftSidebarWidth") private var leftSidebarWidth: Double = 260
     @AppStorage("rightSidebarWidth") private var rightSidebarWidth: Double = 420
     @State private var isHoveringLeftSidebarResizeHandle = false
@@ -25,6 +26,12 @@ struct MainContainerView: View {
             TabBarView(
                 tabs: tabs,
                 onNewTab: { isShowingNewTabChooser = true },
+                isLeftSidebarVisible: isLeftSidebarVisible,
+                onToggleLeftSidebar: {
+                    withAnimation(.easeInOut(duration: 0.16)) {
+                        isLeftSidebarVisible.toggle()
+                    }
+                },
                 isDiffEnabled: gitDiffState.isInGitRepository,
                 isDiffVisible: gitDiffState.isShowingSidebar,
                 onToggleDiff: {
@@ -34,27 +41,29 @@ struct MainContainerView: View {
             
             GeometryReader { geometry in
                 HStack(spacing: 0) {
-                    FileBrowserSidebar(
-                        scanner: scanner,
-                        recentStore: recentStore,
-                        currentFileURL: tabs.activeMarkdownTab?.fileURL,
-                        onOpenMarkdown: openMarkdownFromSidebar,
-                        onOpenOtherFile: openFileFromSidebar,
-                        width: clampedLeftSidebarWidth(for: geometry.size.width)
-                    )
+                    if isLeftSidebarVisible {
+                        FileBrowserSidebar(
+                            scanner: scanner,
+                            recentStore: recentStore,
+                            currentFileURL: tabs.activeMarkdownTab?.fileURL,
+                            onOpenMarkdown: openMarkdownFromSidebar,
+                            onOpenOtherFile: openFileFromSidebar,
+                            width: clampedLeftSidebarWidth(for: geometry.size.width)
+                        )
 
-                    sidebarResizeHandle(
-                        currentWidth: leftSidebarWidth,
-                        isHovering: isHoveringLeftSidebarResizeHandle,
-                        isDragging: isDraggingLeftSidebarResizeHandle,
-                        onHoverChanged: { isHoveringLeftSidebarResizeHandle = $0 },
-                        onDragStarted: { isDraggingLeftSidebarResizeHandle = true },
-                        onDragChanged: { proposedWidth in
-                            leftSidebarWidth = clampedLeftSidebarWidth(for: geometry.size.width, proposedWidth: proposedWidth)
-                        },
-                        onDragEnded: { isDraggingLeftSidebarResizeHandle = false },
-                        dragDirection: .leading
-                    )
+                        sidebarResizeHandle(
+                            currentWidth: leftSidebarWidth,
+                            isHovering: isHoveringLeftSidebarResizeHandle,
+                            isDragging: isDraggingLeftSidebarResizeHandle,
+                            onHoverChanged: { isHoveringLeftSidebarResizeHandle = $0 },
+                            onDragStarted: { isDraggingLeftSidebarResizeHandle = true },
+                            onDragChanged: { proposedWidth in
+                                leftSidebarWidth = clampedLeftSidebarWidth(for: geometry.size.width, proposedWidth: proposedWidth)
+                            },
+                            onDragEnded: { isDraggingLeftSidebarResizeHandle = false },
+                            dragDirection: .leading
+                        )
+                    }
 
                     ActiveTabContentView(
                         tabs: tabs,
@@ -78,7 +87,11 @@ struct MainContainerView: View {
                             onDragEnded: { isDraggingSidebarResizeHandle = false },
                             dragDirection: .trailing
                         )
-                        GitChangesSidebar(state: gitDiffState, width: clampedSidebarWidth(for: geometry.size.width))
+                        GitChangesSidebar(
+                            state: gitDiffState,
+                            width: clampedSidebarWidth(for: geometry.size.width),
+                            onSelectFile: openGitDiffFile
+                        )
                     }
                 }
                 .coordinateSpace(name: "main-container")
@@ -208,6 +221,12 @@ struct MainContainerView: View {
         tabs.createMarkdownTab(fileURL: url)
         recentStore.record(url: url)
         scanner.setDirectory(url.deletingLastPathComponent())
+        onDocumentChanged()
+    }
+
+    private func openGitDiffFile(_ file: GitChangedFile) {
+        tabs.showGitDiffTab(state: gitDiffState)
+        gitDiffState.focus(file)
         onDocumentChanged()
     }
 
