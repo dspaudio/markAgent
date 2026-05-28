@@ -217,6 +217,10 @@ struct MarkdownRenderer: MarkupVisitor {
                         Divider().opacity(0.5)
                     }
                 }
+                .overlay(
+                    RoundedRectangle(cornerRadius: 6)
+                        .stroke(Color.secondary.opacity(0.18), lineWidth: 1)
+                )
             }
             .padding(.bottom, 8)
         )
@@ -244,13 +248,21 @@ struct MarkdownRenderer: MarkupVisitor {
         let cellData: [(Int, Markdown.Table.Cell)] = Array(cells.enumerated()).map { ($0.offset, $0.element) }
         let columnAlignments = alignments
         return AnyView(
-            HStack(spacing: 0) {
+            HStack(alignment: .top, spacing: 0) {
                 ForEach(cellData, id: \.0) { index, cell in
-                    let colAlignment: Markdown.Table.ColumnAlignment? = index < columnAlignments.count ? columnAlignments[index] : nil
-                    Self.renderTableCell(cell, alignment: colAlignment, isHeader: isHeader)
-                        .frame(minWidth: 80, alignment: colAlignment.swiftUIAlignment)
+                    let alignment: Markdown.Table.ColumnAlignment? = index < columnAlignments.count ? columnAlignments[index] : nil
+                    Self.renderTableCell(cell, alignment: alignment, isHeader: isHeader)
+                        .frame(minWidth: 80, alignment: alignment.swiftUIAlignment)
                         .padding(.horizontal, 8)
                         .padding(.vertical, 6)
+                        .background(isHeader ? Color.secondary.opacity(0.08) : Color.clear)
+
+                    if index < cellData.count - 1 {
+                        Rectangle()
+                            .fill(Color.secondary.opacity(0.22))
+                            .frame(width: 1)
+                            .frame(maxHeight: .infinity)
+                    }
                 }
             }
         )
@@ -440,10 +452,14 @@ private enum PreviewBlock {
     case table(ParsedMarkdownTable)
 }
 
+private struct ParsedMarkdownTableCell {
+    let text: SwiftUI.Text
+}
+
 private struct ParsedMarkdownTable {
-    let headers: [String]
+    let headers: [ParsedMarkdownTableCell]
     let alignments: [Markdown.Table.ColumnAlignment?]
-    let rows: [[String]]
+    let rows: [[ParsedMarkdownTableCell]]
 }
 
 private struct ManualMarkdownTableView: View {
@@ -454,40 +470,52 @@ private struct ManualMarkdownTableView: View {
             VStack(alignment: .leading, spacing: 0) {
                 row(table.headers, isHeader: true)
                 Divider()
-                ForEach(Array(table.rows.enumerated()), id: \.offset) { _, cells in
-                    row(cells, isHeader: false)
-                    Divider().opacity(0.5)
+                LazyVStack(alignment: .leading, spacing: 0) {
+                    ForEach(Array(table.rows.enumerated()), id: \.offset) { _, cells in
+                        row(cells, isHeader: false)
+                        Divider().opacity(0.5)
+                    }
                 }
             }
-            .fixedSize(horizontal: true, vertical: false)
+            .overlay(
+                RoundedRectangle(cornerRadius: 6)
+                    .stroke(Color.secondary.opacity(0.18), lineWidth: 1)
+            )
         }
         .padding(.bottom, 8)
     }
 
-    private func row(_ cells: [String], isHeader: Bool) -> some View {
-        HStack(spacing: 0) {
+    private func row(_ cells: [ParsedMarkdownTableCell], isHeader: Bool) -> some View {
+        HStack(alignment: .top, spacing: 0) {
             ForEach(0..<columnCount, id: \.self) { index in
-                cellText(cells[safe: index] ?? "", isHeader: isHeader)
-                    .font(.body)
-                    .multilineTextAlignment(alignment(at: index).textAlignment)
-                    .frame(minWidth: 80, alignment: alignment(at: index).swiftUIAlignment)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 6)
+                let cell = cells[safe: index] ?? ParsedMarkdownTableCell(text: SwiftUI.Text(""))
+
+                Group {
+                    if isHeader {
+                        cell.text.bold()
+                    } else {
+                        cell.text
+                    }
+                }
+                .font(.body)
+                .multilineTextAlignment(alignment(at: index).textAlignment)
+                .frame(minWidth: 80, maxWidth: 320, alignment: alignment(at: index).swiftUIAlignment)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 6)
+                .background(isHeader ? Color.secondary.opacity(0.08) : Color.clear)
+
+                if index < columnCount - 1 {
+                    Rectangle()
+                        .fill(Color.secondary.opacity(0.22))
+                        .frame(width: 1)
+                        .frame(maxHeight: .infinity)
+                }
             }
         }
     }
 
     private var columnCount: Int {
         max(table.headers.count, table.rows.map(\.count).max() ?? 0)
-    }
-
-    private func cellText(_ source: String, isHeader: Bool) -> SwiftUI.Text {
-        let document = Document(parsing: source, options: [.parseBlockDirectives, .disableSmartOpts])
-        var visitor = InlineOnlyMarkdownVisitor()
-        let text = document.children.reduce(SwiftUI.Text("")) { result, child in
-            result + visitor.visit(child)
-        }
-        return isHeader ? text.bold() : text
     }
 
     private func alignment(at index: Int) -> Markdown.Table.ColumnAlignment? {
@@ -599,20 +627,29 @@ private func isFenceStart(_ trimmedLine: String) -> Bool {
     trimmedLine.hasPrefix("```") || trimmedLine.hasPrefix("~~~")
 }
 
+private func parseInlineTableCell(_ source: String) -> ParsedMarkdownTableCell {
+    let document = Document(parsing: source, options: [.parseBlockDirectives, .disableSmartOpts])
+    var visitor = InlineOnlyMarkdownVisitor()
+    let text = document.children.reduce(SwiftUI.Text("")) { result, child in
+        result + visitor.visit(child)
+    }
+    return ParsedMarkdownTableCell(text: text)
+}
+
 private func parseTable(lines: [String], start: Int) -> (value: ParsedMarkdownTable, nextIndex: Int)? {
     guard start + 1 < lines.count else { return nil }
     guard isTableCandidate(lines[start]), isTableSeparator(lines[start + 1]) else { return nil }
 
-    let headers = splitTableRow(lines[start])
+    let headers = splitTableRow(lines[start]).map(parseInlineTableCell)
     let alignments = splitTableRow(lines[start + 1]).map(tableAlignment)
     guard headers.count >= 2, alignments.count >= 2 else { return nil }
 
-    var rows: [[String]] = []
+    var rows: [[ParsedMarkdownTableCell]] = []
     var index = start + 2
     while index < lines.count {
         let line = lines[index]
         guard isTableCandidate(line), !isTableSeparator(line) else { break }
-        rows.append(splitTableRow(line))
+        rows.append(splitTableRow(line).map(parseInlineTableCell))
         index += 1
     }
 

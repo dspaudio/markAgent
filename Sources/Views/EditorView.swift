@@ -355,6 +355,20 @@ private struct MarkdownTextEditor: NSViewRepresentable {
         }
     }
 
+    static func dismantleNSView(_ scrollView: NSScrollView, coordinator: Coordinator) {
+        guard let textView = scrollView.documentView as? NSTextView else {
+            scrollView.documentView = nil
+            return
+        }
+
+        textView.delegate = nil
+        textView.undoManager?.removeAllActions()
+        textView.textStorage?.setAttributedString(NSAttributedString())
+        textView.layoutManager?.textStorage = nil
+        textView.textContainer?.layoutManager = nil
+        scrollView.documentView = nil
+    }
+
     private var appColors: TerminalAppColors? {
         terminalAppTheme?.colors(for: colorScheme)
     }

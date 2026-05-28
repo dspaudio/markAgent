@@ -35,14 +35,18 @@ struct ActiveTabContentView: View {
                     onDocumentChanged()
                 }
         } else if let markdownTab = tab as? MarkdownTab {
-            MarkdownTabView(
-                state: markdownTab.state,
-                isActive: isActive,
-                onOpenFile: onOpenFile,
-                onDocumentChanged: {
-                    onDocumentChanged()
-                }
-            )
+            if isActive {
+                MarkdownTabView(
+                    state: markdownTab.state,
+                    isActive: true,
+                    onOpenFile: onOpenFile,
+                    onDocumentChanged: {
+                        onDocumentChanged()
+                    }
+                )
+            } else {
+                Color.clear
+            }
         } else if let gitDiffTab = tab as? GitDiffTab {
             GitDiffTabView(state: gitDiffTab.state, isActive: isActive)
         } else if tab is SettingsTab {
