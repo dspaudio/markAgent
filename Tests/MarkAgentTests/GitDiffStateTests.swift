@@ -48,6 +48,19 @@ final class GitDiffStateTests: XCTestCase {
         XCTAssertEqual(state.fileDiffs.first { $0.file.relativePath == "todo.md" }?.diffResult.addedCount, 2)
     }
 
+    @MainActor
+    func testToggleSidebarOutsideRepositoryShowsSidebarImmediately() {
+        let nonRepository = FileManager.default.temporaryDirectory
+            .appendingPathComponent("GitDiffStateTests-NonRepo-\(UUID().uuidString)")
+        try? FileManager.default.createDirectory(at: nonRepository, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: nonRepository) }
+
+        let state = GitDiffState()
+        state.toggleSidebar(for: nonRepository)
+
+        XCTAssertTrue(state.isShowingSidebar)
+    }
+
     private func makeRepository() throws -> URL {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("GitDiffStateTests-\(UUID().uuidString)")

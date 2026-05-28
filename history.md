@@ -34,6 +34,7 @@
 30. [세션 30: Ghostty 비활성 탭 렌더링 절감 및 v1.2.3 릴리즈](#세션-30-ghostty-비활성-탭-렌더링-절감-및-v123-릴리즈)
 31. [세션 31: 닫기 확인 및 About 탭 개선과 v1.2.4 릴리즈](#세션-31-닫기-확인-및-about-탭-개선과-v124-릴리즈)
 32. [세션 32: GitHub식 Diff 탭, 사이드바 토글 및 v1.3.0 릴리즈](#세션-32-github식-diff-탭-사이드바-토글-및-v130-릴리즈)
+33. [세션 33: 우측 스니펫 사이드바, Markdown preview 안정화 및 v1.4.0 릴리즈](#세션-33-우측-스니펫-사이드바-markdown-preview-안정화-및-v140-릴리즈)
 
 ---
 
@@ -90,6 +91,7 @@
 | 47 | Ghostty 비활성 탭 렌더링 절감 및 v1.2.3 릴리즈 | 비활성 터미널 탭 surface 숨김 처리, 불필요한 터미널 view 업데이트 축소, 앱 번들 버전 1.2.3 갱신 |
 | 48 | 닫기 확인 및 About 탭 개선과 v1.2.4 릴리즈 | 터미널/수정 문서 닫기 확인 UX, About 탭 전환, 오픈소스 원 저작자/클릭 가능한 링크 표시, 앱 번들 버전 1.2.4 갱신 |
 | 49 | GitHub식 Diff 탭, 사이드바 토글 및 v1.3.0 릴리즈 | 전체 변경 파일 diff 탭, 파일별 증감 요약, 왼쪽 사이드바 토글/설정/View 메뉴 제어, 앱 번들 버전 1.3.0 갱신 |
+| 50 | 우측 스니펫 사이드바, Markdown preview 안정화 및 v1.4.0 릴리즈 | 저장형 프롬프트 스니펫 사이드바, non-Git 우측 사이드바 접근, 표 렌더링 보강, Preview↔Raw Edit 메모리 반환 개선, 앱 번들 버전 1.4.0 갱신 |
 
 ---
 
@@ -1768,6 +1770,59 @@ AppKit의 자동 윈도우 탭 기능이 View 메뉴에 삽입하는 `Show Tab B
 
 **응답:**
 명시 버전 `1.3.0`으로 앱 번들 버전을 갱신하고, README 기능 소개와 `history.md` 세션 기록을 이번 변경분에 맞게 업데이트한 뒤 릴리즈 빌드, 커밋/푸시, GitHub Release, main 대상 PR 생성 및 머지를 진행.
+
+변경 파일: `Sources/App/Info.plist`, `README.md`, `history.md`
+
+---
+
+## 세션 33: 우측 스니펫 사이드바, Markdown preview 안정화 및 v1.4.0 릴리즈
+
+> 날짜: 2026-05-28
+> 경로: ~/workspace/markAgent
+
+Git 변경 파일 우측 사이드바를 스니펫 탭까지 확장하고, Markdown preview의 표 렌더링과 Preview/Raw Edit 전환 메모리 반환 문제를 보강한 뒤 `v1.4.0` 릴리즈를 준비.
+
+### 대화 1: 우측 사이드바 스니펫, 브랜치 단일 클릭, non-Git 접근
+
+**사용자:**
+> 우측 사이드 바의 타이틀을 상단으로 옮기고, 구분 선 아래에 파일 목록이 표시되도록 하게 수정해줘. 그리고, 우측 상단의 브랜치 목록에서 더블 클릭해야 브랜치가 변경되는데, 한번만 클릭해도 변경되게 해줘. 마지막으로 프롬프트를 미리 작성해서 기록해둘 수 있는 snippet 기능을 추가하고 싶어. 우측 사이드바에서 탭으로 Git 변경 파일 내역, 스니펫을 전환할 수 있는 방식이 좋을 것 같아. 저장된 스니펫은 편집하거나 삭제할 수 있어야 하고, 앱 종료 후 다시 실행해도 남아 있어야 해.
+
+**응답:**
+우측 사이드바를 헤더 + 구분선 + 탭 구조로 재구성하고, `Git 변경 파일`과 `스니펫` 탭을 전환할 수 있도록 구현했다. 스니펫은 body-only 구조로 저장되며 추가/편집/삭제/클립보드 복사와 `UserDefaults` 기반 영속 저장을 지원한다. 타이틀바 브랜치 팝오버는 더블 클릭 대신 단일 클릭으로 checkout 되도록 바꿨고, 우측 사이드바는 Git 저장소 밖에서도 열리며 non-Git 경로에서는 스니펫 탭이 우선 표시되도록 정리했다.
+
+검증:
+- `swift build` — 성공
+- `swift test` — 성공
+- `scripts/bundle.sh` — 성공
+
+변경 파일: `Sources/App/AppDelegate.swift`, `Sources/App/TitlebarStatusView.swift`, `Sources/Core/GitDiffState.swift`, `Sources/Core/PromptSnippetClipboard.swift`, `Sources/Core/PromptSnippetStore.swift`, `Sources/Views/Main/MainContainerView.swift`, `Sources/Views/Main/TabBarView.swift`, `Sources/Views/Sidebar/GitChangesSidebar.swift`, `Sources/Views/Sidebar/PromptSnippetsSidebarView.swift`, `Sources/Views/Sidebar/RightSidebarView.swift`, `Tests/MarkAgentTests/GitDiffStateTests.swift`, `Tests/MarkAgentTests/PromptSnippetClipboardTests.swift`, `Tests/MarkAgentTests/PromptSnippetStoreTests.swift`
+
+---
+
+### 대화 2: Markdown preview 표 렌더링 및 메모리 문제 보강
+
+**사용자:**
+> markdown 미리보기에서 표의 열이 구분되지 않고 붙어서 표시되는 문제가 있어. / rawEdit <-> Preview를 전환할 때마다 메모리가 반환되지 않고 늘어나는 문제가 있어. / 표 표시에서 셀 내 구분 선이 어떤 컬럼은 1줄이고, 다른 컬럼은 3줄일 경우 1줄인 컬럼의 구분자가 위 아래가 떨어진 형태로 표시가 돼.
+
+**응답:**
+표 렌더링을 수동/AST 경로 모두 보강해 컬럼 사이 구분선과 가로 스크롤을 유지하면서 표 셀 재파싱 부담을 줄였다. `ManualMarkdownTableView`는 셀 내용을 파싱 시점에 한 번만 `SwiftUI.Text`로 변환하도록 바꿨고, Preview에서 Raw Edit로 돌아갈 때 cached preview subtree를 즉시 해제하도록 했다. `MarkdownTextEditor`에는 `dismantleNSView`를 추가해 `NSTextView` 체인, undo, text storage를 명시 정리하고, 비활성 Markdown 탭만 언마운트해 Preview 메모리 잔류를 줄였다. 마지막으로 표의 세로 구분선은 행 안에서 셀 사이의 독립된 형제 뷰로 배치해 줄 수가 다른 셀에서도 이어져 보이도록 조정했다.
+
+검증:
+- `swift build` — 성공
+- `swift test` — 성공
+- Oracle review — PASS
+
+변경 파일: `Package.resolved`, `Sources/Rendering/MarkdownRenderer.swift`, `Sources/Views/EditorView.swift`, `Sources/Views/Main/ActiveTabContentView.swift`, `Sources/Views/Tabs/MarkdownTabView.swift`
+
+---
+
+### 대화 3: `/release-build 1.4.0`
+
+**사용자:**
+> /release-build 1.4.0 계속 진행해
+
+**응답:**
+명시 버전 `1.4.0`으로 앱 번들 버전을 갱신하고, README 기능 소개와 `history.md` 세션 기록을 이번 우측 스니펫 사이드바/Markdown preview 안정화 변경에 맞게 업데이트한 뒤 릴리즈 빌드, 커밋/푸시, GitHub Release, main 대상 PR 생성 및 머지를 진행.
 
 변경 파일: `Sources/App/Info.plist`, `README.md`, `history.md`
 

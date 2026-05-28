@@ -82,7 +82,6 @@ final class GitDiffState {
             self.errorMessage = result.errorMessage
             self.isRefreshing = false
             if result.repositoryRoot == nil {
-                self.isShowingSidebar = false
                 self.clearAllDiffs()
                 self.clearSelection()
                 return
@@ -149,7 +148,6 @@ final class GitDiffState {
     }
 
     func toggleSidebar(for directory: URL) {
-        guard isInGitRepository else { return }
         isShowingSidebar.toggle()
         refresh(for: directory)
     }

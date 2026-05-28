@@ -72,7 +72,7 @@ struct TabBarView: View {
             Spacer()
 
             Button(action: onToggleDiff) {
-                Image(systemName: isDiffVisible ? "sidebar.right" : "sidebar.right")
+                Image(systemName: "sidebar.right")
                     .font(.system(size: 14, weight: .medium))
                     .frame(width: 32, height: 28)
             }
@@ -80,10 +80,9 @@ struct TabBarView: View {
             .foregroundStyle(
                 isDiffVisible
                 ? (appColors?.accent ?? Color.accentColor)
-                : (isDiffEnabled ? (appColors?.foreground ?? Color.primary) : Color.secondary)
+                : (appColors?.foreground ?? Color.primary)
             )
-            .disabled(!isDiffEnabled)
-            .help(isDiffEnabled ? "Git 변경 파일 보기" : "Git 저장소에서만 사용할 수 있습니다")
+            .help(isDiffVisible ? "오른쪽 사이드바 숨기기" : "오른쪽 사이드바 표시")
             .padding(.trailing, 8)
         }
         .background(appColors?.background ?? Color(nsColor: .windowBackgroundColor))

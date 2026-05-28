@@ -2,22 +2,11 @@ import SwiftUI
 
 struct GitChangesSidebar: View {
     var state: GitDiffState
-    var width: Double
     var onSelectFile: (GitChangedFile) -> Void
 
-    @Environment(\.colorScheme) private var colorScheme
-    @Environment(\.terminalAppTheme) private var terminalAppTheme
-
     var body: some View {
-        VStack(spacing: 0) {
-            header
-            Divider()
-            fileList
-        }
-        .frame(width: width)
-        .frame(maxHeight: .infinity)
-        .background(appColors?.panel ?? Color(NSColor.controlBackgroundColor))
-        .foregroundStyle(appColors?.foreground ?? Color.primary)
+        fileList
+            .frame(maxHeight: .infinity)
         .onAppear {
             state.loadAllDiffs()
         }
@@ -26,72 +15,48 @@ struct GitChangesSidebar: View {
         }
     }
 
-    private var appColors: TerminalAppColors? {
-        terminalAppTheme?.colors(for: colorScheme)
-    }
-
-    private var header: some View {
-        HStack(spacing: 8) {
-            Image(systemName: "arrow.left.arrow.right.circle")
-                .foregroundStyle(.secondary)
-            Text("Git 변경 파일")
-                .font(.system(size: 13, weight: .bold))
-            Spacer()
-            if state.isRefreshing {
-                ProgressView()
-                    .scaleEffect(0.45)
-                    .frame(width: 14, height: 14)
-            }
-            Button {
-                if let root = state.repositoryRoot {
-                    state.refresh(for: root)
-                }
-            } label: {
-                Image(systemName: "arrow.clockwise")
-            }
-            .buttonStyle(.plain)
-            .help("새로고침")
-            .disabled(state.isRefreshing)
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 10)
-    }
-
-    @ViewBuilder
     private var fileList: some View {
-        if let errorMessage = state.errorMessage {
-            Text(errorMessage)
-                .font(.system(size: 12))
-                .foregroundStyle(.red)
-                .padding()
-                .frame(maxWidth: .infinity, alignment: .leading)
-        } else if state.changedFiles.isEmpty {
-            Text("마지막 커밋 이후 변경된 파일이 없습니다.")
-                .font(.system(size: 12))
-                .foregroundStyle(.secondary)
-                .padding()
-                .frame(maxWidth: .infinity, alignment: .leading)
-        } else {
-            ScrollView {
-                LazyVStack(spacing: 2) {
-                    ForEach(state.changedFiles) { file in
-                        Button {
-                            onSelectFile(file)
-                        } label: {
-                            GitChangedFileRow(
-                                file: file,
-                                diffResult: state.fileDiffs.first { $0.file.id == file.id }?.diffResult,
-                                isLoadingDiff: state.isLoadingDiffs,
-                                isSelected: state.selectedFile == file
-                            )
+        Group {
+            if !state.isInGitRepository {
+                Text("현재 작업 경로는 Git 저장소가 아닙니다.")
+                    .font(.system(size: 12))
+                    .foregroundStyle(.secondary)
+                    .padding()
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            } else if let errorMessage = state.errorMessage {
+                Text(errorMessage)
+                    .font(.system(size: 12))
+                    .foregroundStyle(.red)
+                    .padding()
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            } else if state.changedFiles.isEmpty {
+                Text("마지막 커밋 이후 변경된 파일이 없습니다.")
+                    .font(.system(size: 12))
+                    .foregroundStyle(.secondary)
+                    .padding()
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            } else {
+                ScrollView {
+                    LazyVStack(spacing: 2) {
+                        ForEach(state.changedFiles) { file in
+                            Button {
+                                onSelectFile(file)
+                            } label: {
+                                GitChangedFileRow(
+                                    file: file,
+                                    diffResult: state.fileDiffs.first { $0.file.id == file.id }?.diffResult,
+                                    isLoadingDiff: state.isLoadingDiffs,
+                                    isSelected: state.selectedFile == file
+                                )
+                            }
+                            .buttonStyle(.plain)
                         }
-                        .buttonStyle(.plain)
                     }
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 6)
                 }
-                .padding(.horizontal, 6)
-                .padding(.vertical, 6)
+                .opacity(state.isRefreshing ? 0.72 : 1)
             }
-            .opacity(state.isRefreshing ? 0.72 : 1)
         }
     }
 }

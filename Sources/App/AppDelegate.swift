@@ -6,6 +6,7 @@ import UniformTypeIdentifiers
 final class AppDelegate: NSObject, NSApplicationDelegate {
     let tabs = TabCollection()
     let recentStore = RecentDocumentStore()
+    let snippetStore = PromptSnippetStore()
     let directoryScanner: DirectoryScanner
     let gitRepositoryStatus: GitRepositoryStatus
     let dirtyPrompter: AppDirtyDocumentPrompter
@@ -76,6 +77,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             tabs: tabs,
             scanner: directoryScanner,
             recentStore: recentStore,
+            snippetStore: snippetStore,
             onOpenFile: { [weak self] in
                 self?.openFile()
             },
