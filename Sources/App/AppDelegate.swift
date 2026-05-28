@@ -14,6 +14,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private var isClosingAfterDirtyConfirmation = false
     private let windowFrameDefaultsKey = "MarkAgent.windowFrame"
+    private let leftSidebarVisibleDefaultsKey = "isLeftSidebarVisible"
     private var rootHostingView: NSHostingView<AnyView>?
 
     override init() {
@@ -26,8 +27,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        NSWindow.allowsAutomaticWindowTabbing = false
         setupMenu()
         setupWindow()
+        removeSystemTabBarMenuItems()
         tabs.createTerminalTab(workingDirectory: URL(fileURLWithPath: NSHomeDirectory()))
         openLaunchTargetIfNeeded()
         updateWindowTitle()
@@ -50,6 +53,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         window.contentView = hostingView
         window.titleVisibility = .hidden
         window.collectionBehavior = [.fullScreenPrimary]
+        window.tabbingMode = .disallowed
         window.level = .normal
         window.delegate = self
         window.terminalKeybindHandler = { [weak self] event in
@@ -281,6 +285,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         rawViewItem.target = self
         viewMenu.addItem(rawViewItem)
 
+        viewMenu.addItem(.separator())
+
+        let toggleLeftSidebarItem = NSMenuItem(title: "Toggle Left Sidebar", action: #selector(toggleLeftSidebar), keyEquivalent: "s")
+        toggleLeftSidebarItem.keyEquivalentModifierMask = [.command, .option]
+        toggleLeftSidebarItem.target = self
+        viewMenu.addItem(toggleLeftSidebarItem)
+
         let toggleDiffItem = NSMenuItem(title: "Toggle Diff", action: #selector(toggleDiff), keyEquivalent: "d")
         toggleDiffItem.target = self
         viewMenu.addItem(toggleDiffItem)
@@ -298,6 +309,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         enterFullScreenItem.keyEquivalentModifierMask = [.command, .control]
         enterFullScreenItem.target = self
         viewMenu.addItem(enterFullScreenItem)
+        removeSystemTabBarMenuItems(from: viewMenu)
 
         let windowMenuItem = NSMenuItem()
         mainMenu.addItem(windowMenuItem)
@@ -319,6 +331,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         helpMenu.addItem(helpItem)
 
         NSApp.mainMenu = mainMenu
+        removeSystemTabBarMenuItems()
+    }
+
+    private func removeSystemTabBarMenuItems(from menu: NSMenu? = NSApp.mainMenu?.item(withTitle: "View")?.submenu) {
+        guard let menu else { return }
+
+        let toggleTabBarSelector = NSSelectorFromString("toggleTabBar:")
+        for item in menu.items where item.action == toggleTabBarSelector || item.title == "Show Tab Bar" {
+            menu.removeItem(item)
+        }
     }
 
     @objc private func newTab() {
@@ -563,6 +585,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         updateViewMenuState()
     }
 
+    @objc private func toggleLeftSidebar() {
+        UserDefaults.standard.set(!isLeftSidebarVisible, forKey: leftSidebarVisibleDefaultsKey)
+        updateViewMenuState()
+    }
+
     @objc private func toggleAlwaysOnTop() {
         isAlwaysOnTop.toggle()
         window?.level = isAlwaysOnTop ? .floating : .normal
@@ -627,8 +654,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         viewMenu.items.first { $0.action == #selector(showRawView) }?.state = document?.viewMode == .rawEdit ? .on : .off
         viewMenu.items.first { $0.action == #selector(toggleDiff) }?.isEnabled = document?.diffResult != nil
         viewMenu.items.first { $0.action == #selector(toggleDiff) }?.state = document?.showDiff == true ? .on : .off
+        viewMenu.items.first { $0.action == #selector(toggleLeftSidebar) }?.state = isLeftSidebarVisible ? .on : .off
         viewMenu.items.first { $0.action == #selector(toggleAlwaysOnTop) }?.state = isAlwaysOnTop ? .on : .off
         updateFullScreenMenuItem(viewMenu.items.first { $0.action == #selector(toggleFullScreen) })
+    }
+
+    private var isLeftSidebarVisible: Bool {
+        guard UserDefaults.standard.object(forKey: leftSidebarVisibleDefaultsKey) != nil else {
+            return true
+        }
+        return UserDefaults.standard.bool(forKey: leftSidebarVisibleDefaultsKey)
     }
 
     private func updateFullScreenMenuItem(_ menuItem: NSMenuItem?) {
@@ -719,6 +754,7 @@ extension AppDelegate: NSMenuItemValidation {
              #selector(newTerminalTab),
              #selector(newMarkdownTab),
              #selector(openFile),
+             #selector(toggleLeftSidebar),
              #selector(toggleAlwaysOnTop),
              #selector(showAbout),
              #selector(showPreferences),
@@ -762,6 +798,9 @@ extension AppDelegate: NSMenuItemValidation {
             let document = tabs.activeMarkdownTab?.state.document
             menuItem.state = document?.showDiff == true ? .on : .off
             return document?.diffResult != nil
+        case #selector(toggleLeftSidebar):
+            menuItem.state = isLeftSidebarVisible ? .on : .off
+            return true
         default:
             return true
         }

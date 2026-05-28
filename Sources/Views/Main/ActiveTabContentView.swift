@@ -43,6 +43,8 @@ struct ActiveTabContentView: View {
                     onDocumentChanged()
                 }
             )
+        } else if let gitDiffTab = tab as? GitDiffTab {
+            GitDiffTabView(state: gitDiffTab.state, isActive: isActive)
         } else if tab is SettingsTab {
             PreferencesView(onSaved: onConfigurationSaved)
         } else if tab is AboutTab {

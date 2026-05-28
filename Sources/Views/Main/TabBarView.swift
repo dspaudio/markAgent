@@ -3,6 +3,8 @@ import SwiftUI
 struct TabBarView: View {
     var tabs: TabCollection
     var onNewTab: () -> Void
+    var isLeftSidebarVisible = true
+    var onToggleLeftSidebar: () -> Void = {}
     var isDiffEnabled = false
     var isDiffVisible = false
     var onToggleDiff: () -> Void = {}
@@ -13,6 +15,16 @@ struct TabBarView: View {
     
     var body: some View {
         HStack(spacing: 0) {
+            Button(action: onToggleLeftSidebar) {
+                Image(systemName: "sidebar.left")
+                    .font(.system(size: 14, weight: .medium))
+                    .frame(width: 32, height: 28)
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(isLeftSidebarVisible ? (appColors?.accent ?? Color.accentColor) : (appColors?.foreground ?? Color.primary))
+            .help(isLeftSidebarVisible ? "왼쪽 사이드바 숨기기" : "왼쪽 사이드바 표시")
+            .padding(.leading, 8)
+
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 0) {
                     ForEach(tabs.tabs, id: \.id) { tab in

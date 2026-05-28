@@ -11,6 +11,13 @@ struct GitChangedFile: Identifiable, Equatable {
     var parentPath: String { URL(fileURLWithPath: relativePath).deletingLastPathComponent().path }
 }
 
+struct GitFileDiff: Identifiable {
+    let file: GitChangedFile
+    let diffResult: DiffResult
+
+    var id: String { file.id }
+}
+
 @MainActor
 @Observable
 final class GitDiffState {
@@ -18,14 +25,20 @@ final class GitDiffState {
     private(set) var changedFiles: [GitChangedFile] = []
     var selectedFile: GitChangedFile?
     var selectedDiffResult: DiffResult?
+    private(set) var fileDiffs: [GitFileDiff] = []
     private(set) var errorMessage: String?
     private(set) var isRefreshing = false
     private(set) var isLoadingSelectedDiff = false
+    private(set) var isLoadingDiffs = false
     var isShowingSidebar = false
+    var focusedFileID: String?
+    private(set) var focusRequestID = 0
     private var refreshTask: Task<Void, Never>?
     private var selectTask: Task<Void, Never>?
+    private var loadAllTask: Task<Void, Never>?
     private var refreshToken = 0
     private var selectToken = 0
+    private var loadAllToken = 0
 
     var isInGitRepository: Bool { repositoryRoot != nil }
 
@@ -70,8 +83,13 @@ final class GitDiffState {
             self.isRefreshing = false
             if result.repositoryRoot == nil {
                 self.isShowingSidebar = false
+                self.clearAllDiffs()
                 self.clearSelection()
                 return
+            }
+
+            if !self.fileDiffs.isEmpty || self.isLoadingDiffs {
+                self.loadAllDiffs()
             }
 
             guard let selectedFile = self.selectedFile else { return }
@@ -86,6 +104,47 @@ final class GitDiffState {
             } else {
                 self.clearSelection()
             }
+        }
+    }
+
+    func focus(_ file: GitChangedFile) {
+        selectedFile = file
+        focusedFileID = file.id
+        focusRequestID += 1
+        loadAllDiffs()
+    }
+
+    func loadAllDiffs() {
+        loadAllToken += 1
+        let token = loadAllToken
+        let files = changedFiles
+        loadAllTask?.cancel()
+
+        guard repositoryRoot != nil else {
+            clearAllDiffs()
+            return
+        }
+
+        guard !files.isEmpty else {
+            fileDiffs = []
+            isLoadingDiffs = false
+            return
+        }
+
+        isLoadingDiffs = true
+        errorMessage = nil
+
+        loadAllTask = Task { [files, token] in
+            let diffs = await Task.detached(priority: .userInitiated) {
+                files.map { file in
+                    Self.loadFileDiff(file: file)
+                }
+            }.value
+
+            guard !Task.isCancelled, token == self.loadAllToken else { return }
+            self.fileDiffs = diffs
+            self.isLoadingDiffs = false
+            self.errorMessage = nil
         }
     }
 
@@ -137,6 +196,15 @@ final class GitDiffState {
         isLoadingSelectedDiff = false
     }
 
+    private func clearAllDiffs() {
+        loadAllToken += 1
+        loadAllTask?.cancel()
+        fileDiffs = []
+        isLoadingDiffs = false
+        focusedFileID = nil
+        focusRequestID += 1
+    }
+
     private nonisolated static func findRepositoryRoot(from directory: URL) -> URL? {
         var current = directory
         while true {
@@ -173,6 +241,17 @@ final class GitDiffState {
         } catch {
             return ""
         }
+    }
+
+    private nonisolated static func loadFileDiff(file: GitChangedFile) -> GitFileDiff {
+        let oldContent = (try? gitShowHead(file: file)) ?? ""
+        let newContent = (try? String(contentsOf: file.url, encoding: .utf8)) ?? ""
+        let diffResult = DiffEngine.compute(
+            old: oldContent,
+            new: newContent,
+            emptyOldIsAllAdded: true
+        )
+        return GitFileDiff(file: file, diffResult: diffResult)
     }
 
     private nonisolated static func runGit(_ arguments: [String], repositoryRoot: URL) throws -> String {

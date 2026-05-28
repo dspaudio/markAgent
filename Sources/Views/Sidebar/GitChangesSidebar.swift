@@ -3,6 +3,7 @@ import SwiftUI
 struct GitChangesSidebar: View {
     var state: GitDiffState
     var width: Double
+    var onSelectFile: (GitChangedFile) -> Void
 
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.terminalAppTheme) private var terminalAppTheme
@@ -12,23 +13,17 @@ struct GitChangesSidebar: View {
             header
             Divider()
             fileList
-            if state.isLoadingSelectedDiff {
-                Divider()
-                ProgressView("Diff 불러오는 중...")
-                    .font(.system(size: 12))
-                    .padding()
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            } else if let diffResult = state.selectedDiffResult {
-                Divider()
-                DiffOverlayView(diffResult: diffResult, baseURL: state.selectedFile?.url.deletingLastPathComponent()) {
-                    state.clearSelection()
-                }
-            }
         }
         .frame(width: width)
         .frame(maxHeight: .infinity)
         .background(appColors?.panel ?? Color(NSColor.controlBackgroundColor))
         .foregroundStyle(appColors?.foreground ?? Color.primary)
+        .onAppear {
+            state.loadAllDiffs()
+        }
+        .onChange(of: state.changedFiles.map(\.id)) { _, _ in
+            state.loadAllDiffs()
+        }
     }
 
     private var appColors: TerminalAppColors? {
@@ -81,10 +76,12 @@ struct GitChangesSidebar: View {
                 LazyVStack(spacing: 2) {
                     ForEach(state.changedFiles) { file in
                         Button {
-                            state.select(file)
+                            onSelectFile(file)
                         } label: {
                             GitChangedFileRow(
                                 file: file,
+                                diffResult: state.fileDiffs.first { $0.file.id == file.id }?.diffResult,
+                                isLoadingDiff: state.isLoadingDiffs,
                                 isSelected: state.selectedFile == file
                             )
                         }
@@ -94,7 +91,6 @@ struct GitChangesSidebar: View {
                 .padding(.horizontal, 6)
                 .padding(.vertical, 6)
             }
-            .frame(maxHeight: state.selectedDiffResult == nil ? .infinity : 220)
             .opacity(state.isRefreshing ? 0.72 : 1)
         }
     }
@@ -102,6 +98,8 @@ struct GitChangesSidebar: View {
 
 private struct GitChangedFileRow: View {
     let file: GitChangedFile
+    let diffResult: DiffResult?
+    let isLoadingDiff: Bool
     let isSelected: Bool
 
     var body: some View {
@@ -112,10 +110,14 @@ private struct GitChangedFileRow: View {
                 .frame(width: 28, alignment: .leading)
 
             VStack(alignment: .leading, spacing: 2) {
-                Text(file.displayName)
-                    .font(.system(size: 13, weight: .medium))
-                    .lineLimit(1)
-                    .truncationMode(.middle)
+                HStack(spacing: 6) {
+                    Text(file.displayName)
+                        .font(.system(size: 13, weight: .medium))
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+
+                    diffSummary
+                }
 
                 Text(file.relativePath)
                     .font(.system(size: 11))
@@ -133,5 +135,25 @@ private struct GitChangedFileRow: View {
             RoundedRectangle(cornerRadius: 6)
                 .fill(isSelected ? Color.accentColor.opacity(0.16) : Color.clear)
         )
+    }
+
+    @ViewBuilder
+    private var diffSummary: some View {
+        if let diffResult {
+            HStack(spacing: 4) {
+                Text("+\(diffResult.addedCount)")
+                    .foregroundStyle(.green)
+                Text("-\(diffResult.removedCount)")
+                    .foregroundStyle(.red)
+            }
+            .font(.system(size: 11, weight: .bold, design: .monospaced))
+            .lineLimit(1)
+            .layoutPriority(1)
+        } else if isLoadingDiff {
+            Text("+… -…")
+                .font(.system(size: 11, weight: .bold, design: .monospaced))
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+        }
     }
 }

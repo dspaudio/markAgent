@@ -19,6 +19,10 @@ final class TabCollection {
         activeTab as? MarkdownTab
     }
 
+    var activeGitDiffTab: GitDiffTab? {
+        activeTab as? GitDiffTab
+    }
+
     var activeSettingsTab: SettingsTab? {
         activeTab as? SettingsTab
     }
@@ -51,6 +55,19 @@ final class TabCollection {
         let id = UUID()
         let state = MarkdownTabState(id: id, fileURL: fileURL)
         let tab = MarkdownTab(id: id, fileURL: fileURL, state: state, dirtyPrompter: dirtyPrompter)
+        tabs.append(tab)
+        activeTabID = tab.id
+        return tab
+    }
+
+    @discardableResult
+    func showGitDiffTab(state: GitDiffState) -> GitDiffTab {
+        if let tab = tabs.first(where: { $0 is GitDiffTab }) as? GitDiffTab {
+            activeTabID = tab.id
+            return tab
+        }
+
+        let tab = GitDiffTab(state: state)
         tabs.append(tab)
         activeTabID = tab.id
         return tab

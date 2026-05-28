@@ -5,6 +5,7 @@ import SwiftUI
 struct PreferencesView: View {
     @State private var preferences: GhosttyPreferences
     @State private var saveErrorMessage: String?
+    @AppStorage("isLeftSidebarVisible") private var isLeftSidebarVisible = true
 
     let onSaved: () -> Void
 
@@ -64,6 +65,10 @@ struct PreferencesView: View {
 
     private var settingsPane: some View {
         Form {
+            Section("Workspace") {
+                Toggle("Show left sidebar by default", isOn: $isLeftSidebarVisible)
+            }
+
             Section("Terminal") {
                 LabeledContent("Theme") {
                     VStack(alignment: .trailing, spacing: 3) {

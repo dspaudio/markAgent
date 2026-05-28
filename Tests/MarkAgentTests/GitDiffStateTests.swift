@@ -25,6 +25,29 @@ final class GitDiffStateTests: XCTestCase {
         XCTAssertEqual(state.selectedDiffResult?.addedCount, 1)
     }
 
+    @MainActor
+    func testFocusLoadsAllFileDiffsAndRecordsScrollTarget() async throws {
+        let repository = try makeRepository()
+        defer { try? FileManager.default.removeItem(at: repository) }
+
+        let secondFileURL = repository.appendingPathComponent("todo.md")
+        try "new item\n".write(to: secondFileURL, atomically: true, encoding: .utf8)
+        try "base\nchanged\n".write(to: repository.appendingPathComponent("notes.md"), atomically: true, encoding: .utf8)
+
+        let state = GitDiffState()
+        state.refresh(for: repository)
+        try await waitUntil { state.changedFiles.count == 2 && !state.isRefreshing }
+
+        let file = try XCTUnwrap(state.changedFiles.first { $0.relativePath == "todo.md" })
+        state.focus(file)
+        try await waitUntil { state.fileDiffs.count == 2 && !state.isLoadingDiffs }
+
+        XCTAssertEqual(state.focusedFileID, "todo.md")
+        XCTAssertEqual(state.fileDiffs.map(\.file.relativePath), ["notes.md", "todo.md"])
+        XCTAssertEqual(state.fileDiffs.first { $0.file.relativePath == "notes.md" }?.diffResult.addedCount, 1)
+        XCTAssertEqual(state.fileDiffs.first { $0.file.relativePath == "todo.md" }?.diffResult.addedCount, 2)
+    }
+
     private func makeRepository() throws -> URL {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("GitDiffStateTests-\(UUID().uuidString)")
