@@ -249,10 +249,10 @@ private struct GitBranchPopoverView: View {
         .padding(.vertical, 7)
         .background(isCurrent ? Color.green.opacity(0.18) : Color.clear)
         .contentShape(Rectangle())
-        .onTapGesture(count: 2) {
+        .onTapGesture {
             status.checkout(branch)
         }
         .disabled(status.isCheckingOut)
-        .help("더블 클릭해서 \(branch.checkoutName) 체크아웃")
+        .help("클릭해서 \(branch.checkoutName) 체크아웃")
     }
 }
