@@ -171,103 +171,103 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let appMenu = NSMenu()
         appMenuItem.submenu = appMenu
 
-        let aboutItem = NSMenuItem(title: "About MarkAgent", action: #selector(showAbout), keyEquivalent: "")
+        let aboutItem = NSMenuItem(title: String(localized: "About MarkAgent"), action: #selector(showAbout), keyEquivalent: "")
         aboutItem.target = self
         appMenu.addItem(aboutItem)
 
         appMenu.addItem(.separator())
 
-        let settingsItem = NSMenuItem(title: "Settings…", action: #selector(showPreferences), keyEquivalent: ",")
+        let settingsItem = NSMenuItem(title: String(localized: "Settings…"), action: #selector(showPreferences), keyEquivalent: ",")
         settingsItem.target = self
         appMenu.addItem(settingsItem)
 
-        let reloadConfigurationItem = NSMenuItem(title: "Reload Configuration", action: #selector(reloadConfiguration), keyEquivalent: ",")
+        let reloadConfigurationItem = NSMenuItem(title: String(localized: "Reload Configuration"), action: #selector(reloadConfiguration), keyEquivalent: ",")
         reloadConfigurationItem.keyEquivalentModifierMask = [.command, .shift]
         reloadConfigurationItem.target = self
         appMenu.addItem(reloadConfigurationItem)
 
-        let openGhosttyConfigItem = NSMenuItem(title: "Open Ghostty config", action: #selector(openGhosttyConfig), keyEquivalent: "")
+        let openGhosttyConfigItem = NSMenuItem(title: String(localized: "Open Ghostty config"), action: #selector(openGhosttyConfig), keyEquivalent: "")
         openGhosttyConfigItem.target = self
         appMenu.addItem(openGhosttyConfigItem)
 
         appMenu.addItem(.separator())
 
-        let servicesMenuItem = NSMenuItem(title: "Services", action: nil, keyEquivalent: "")
-        let servicesMenu = NSMenu(title: "Services")
+        let servicesMenuItem = NSMenuItem(title: String(localized: "Services"), action: nil, keyEquivalent: "")
+        let servicesMenu = NSMenu(title: String(localized: "Services"))
         servicesMenuItem.submenu = servicesMenu
         NSApp.servicesMenu = servicesMenu
         appMenu.addItem(servicesMenuItem)
 
         appMenu.addItem(.separator())
-        appMenu.addItem(NSMenuItem(title: "Hide MarkAgent", action: #selector(NSApplication.hide(_:)), keyEquivalent: "h"))
-        let hideOthersItem = NSMenuItem(title: "Hide Others", action: #selector(NSApplication.hideOtherApplications(_:)), keyEquivalent: "h")
+        appMenu.addItem(NSMenuItem(title: String(localized: "Hide MarkAgent"), action: #selector(NSApplication.hide(_:)), keyEquivalent: "h"))
+        let hideOthersItem = NSMenuItem(title: String(localized: "Hide Others"), action: #selector(NSApplication.hideOtherApplications(_:)), keyEquivalent: "h")
         hideOthersItem.keyEquivalentModifierMask = [.command, .option]
         appMenu.addItem(hideOthersItem)
-        appMenu.addItem(NSMenuItem(title: "Show All", action: #selector(NSApplication.unhideAllApplications(_:)), keyEquivalent: ""))
+        appMenu.addItem(NSMenuItem(title: String(localized: "Show All"), action: #selector(NSApplication.unhideAllApplications(_:)), keyEquivalent: ""))
         appMenu.addItem(.separator())
-        appMenu.addItem(NSMenuItem(title: "Quit MarkAgent", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
+        appMenu.addItem(NSMenuItem(title: String(localized: "Quit MarkAgent"), action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
 
         let fileMenuItem = NSMenuItem()
         mainMenu.addItem(fileMenuItem)
-        let fileMenu = NSMenu(title: "File")
+        let fileMenu = NSMenu(title: String(localized: "File"))
         fileMenuItem.submenu = fileMenu
 
-        let newTerminalItem = NSMenuItem(title: "New Terminal Tab", action: #selector(newTab), keyEquivalent: "t")
+        let newTerminalItem = NSMenuItem(title: String(localized: "New Terminal Tab"), action: #selector(newTab), keyEquivalent: "t")
         newTerminalItem.target = self
         fileMenu.addItem(newTerminalItem)
 
-        let newMarkdownItem = NSMenuItem(title: "New Markdown Tab", action: #selector(newMarkdownTab), keyEquivalent: "n")
+        let newMarkdownItem = NSMenuItem(title: String(localized: "New Markdown Tab"), action: #selector(newMarkdownTab), keyEquivalent: "n")
         newMarkdownItem.target = self
         fileMenu.addItem(newMarkdownItem)
 
         fileMenu.addItem(.separator())
 
-        let openItem = NSMenuItem(title: "Open…", action: #selector(openFile), keyEquivalent: "o")
+        let openItem = NSMenuItem(title: String(localized: "Open…"), action: #selector(openFile), keyEquivalent: "o")
         openItem.target = self
         fileMenu.addItem(openItem)
 
         fileMenu.addItem(.separator())
 
-        let saveItem = NSMenuItem(title: "Save", action: #selector(saveDocument), keyEquivalent: "s")
+        let saveItem = NSMenuItem(title: String(localized: "Save"), action: #selector(saveDocument), keyEquivalent: "s")
         saveItem.target = self
         fileMenu.addItem(saveItem)
 
         fileMenu.addItem(.separator())
 
-        let closeTabItem = NSMenuItem(title: "Close Tab", action: #selector(closeTab), keyEquivalent: "w")
+        let closeTabItem = NSMenuItem(title: String(localized: "Close Tab"), action: #selector(closeTab), keyEquivalent: "w")
         closeTabItem.target = self
         fileMenu.addItem(closeTabItem)
 
         let editMenuItem = NSMenuItem()
         mainMenu.addItem(editMenuItem)
-        let editMenu = NSMenu(title: "Edit")
+        let editMenu = NSMenu(title: String(localized: "Edit"))
         editMenuItem.submenu = editMenu
-        editMenu.addItem(NSMenuItem(title: "Undo", action: Selector(("undo:")), keyEquivalent: "z"))
-        editMenu.addItem(NSMenuItem(title: "Redo", action: Selector(("redo:")), keyEquivalent: "Z"))
+        editMenu.addItem(NSMenuItem(title: String(localized: "Undo"), action: Selector(("undo:")), keyEquivalent: "z"))
+        editMenu.addItem(NSMenuItem(title: String(localized: "Redo"), action: Selector(("redo:")), keyEquivalent: "Z"))
         editMenu.addItem(.separator())
-        editMenu.addItem(NSMenuItem(title: "Cut", action: #selector(NSText.cut(_:)), keyEquivalent: "x"))
-        editMenu.addItem(NSMenuItem(title: "Copy", action: #selector(NSText.copy(_:)), keyEquivalent: "c"))
-        editMenu.addItem(NSMenuItem(title: "Paste", action: #selector(NSText.paste(_:)), keyEquivalent: "v"))
-        editMenu.addItem(NSMenuItem(title: "Delete", action: #selector(NSText.delete(_:)), keyEquivalent: ""))
+        editMenu.addItem(NSMenuItem(title: String(localized: "Cut"), action: #selector(NSText.cut(_:)), keyEquivalent: "x"))
+        editMenu.addItem(NSMenuItem(title: String(localized: "Copy"), action: #selector(NSText.copy(_:)), keyEquivalent: "c"))
+        editMenu.addItem(NSMenuItem(title: String(localized: "Paste"), action: #selector(NSText.paste(_:)), keyEquivalent: "v"))
+        editMenu.addItem(NSMenuItem(title: String(localized: "Delete"), action: #selector(NSText.delete(_:)), keyEquivalent: ""))
         editMenu.addItem(.separator())
-        editMenu.addItem(NSMenuItem(title: "Select All", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a"))
+        editMenu.addItem(NSMenuItem(title: String(localized: "Select All"), action: #selector(NSText.selectAll(_:)), keyEquivalent: "a"))
 
         let viewMenuItem = NSMenuItem()
         mainMenu.addItem(viewMenuItem)
-        let viewMenu = NSMenu(title: "View")
+        let viewMenu = NSMenu(title: String(localized: "View"))
         viewMenuItem.submenu = viewMenu
 
         let gotoTabItems: [(title: String, selector: Selector, key: String)] = [
-            ("Select Tab 1", #selector(gotoTab1), "1"),
-            ("Select Tab 2", #selector(gotoTab2), "2"),
-            ("Select Tab 3", #selector(gotoTab3), "3"),
-            ("Select Tab 4", #selector(gotoTab4), "4"),
-            ("Select Tab 5", #selector(gotoTab5), "5"),
-            ("Select Tab 6", #selector(gotoTab6), "6"),
-            ("Select Tab 7", #selector(gotoTab7), "7"),
-            ("Select Tab 8", #selector(gotoTab8), "8"),
-            ("Select Tab 9", #selector(gotoTab9), "9"),
-            ("Select Tab 10", #selector(gotoTab10), "0"),
+            (String(format: String(localized: "Select Tab %@"), "1"), #selector(gotoTab1), "1"),
+            (String(format: String(localized: "Select Tab %@"), "2"), #selector(gotoTab2), "2"),
+            (String(format: String(localized: "Select Tab %@"), "3"), #selector(gotoTab3), "3"),
+            (String(format: String(localized: "Select Tab %@"), "4"), #selector(gotoTab4), "4"),
+            (String(format: String(localized: "Select Tab %@"), "5"), #selector(gotoTab5), "5"),
+            (String(format: String(localized: "Select Tab %@"), "6"), #selector(gotoTab6), "6"),
+            (String(format: String(localized: "Select Tab %@"), "7"), #selector(gotoTab7), "7"),
+            (String(format: String(localized: "Select Tab %@"), "8"), #selector(gotoTab8), "8"),
+            (String(format: String(localized: "Select Tab %@"), "9"), #selector(gotoTab9), "9"),
+            (String(format: String(localized: "Select Tab %@"), "10"), #selector(gotoTab10), "0"),
         ]
         for item in gotoTabItems {
             let menuItem = NSMenuItem(title: item.title, action: item.selector, keyEquivalent: item.key)
@@ -277,37 +277,37 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         viewMenu.addItem(.separator())
 
-        let toggleModeItem = NSMenuItem(title: "Preview", action: #selector(toggleViewMode), keyEquivalent: "p")
+        let toggleModeItem = NSMenuItem(title: String(localized: "Preview"), action: #selector(toggleViewMode), keyEquivalent: "p")
         toggleModeItem.keyEquivalentModifierMask = [.command, .control]
         toggleModeItem.target = self
         viewMenu.addItem(toggleModeItem)
 
-        let rawViewItem = NSMenuItem(title: "Raw Edit", action: #selector(showRawView), keyEquivalent: "r")
+        let rawViewItem = NSMenuItem(title: String(localized: "Raw Edit"), action: #selector(showRawView), keyEquivalent: "r")
         rawViewItem.keyEquivalentModifierMask = [.command, .control]
         rawViewItem.target = self
         viewMenu.addItem(rawViewItem)
 
         viewMenu.addItem(.separator())
 
-        let toggleLeftSidebarItem = NSMenuItem(title: "Toggle Left Sidebar", action: #selector(toggleLeftSidebar), keyEquivalent: "s")
+        let toggleLeftSidebarItem = NSMenuItem(title: String(localized: "Toggle Left Sidebar"), action: #selector(toggleLeftSidebar), keyEquivalent: "s")
         toggleLeftSidebarItem.keyEquivalentModifierMask = [.command, .option]
         toggleLeftSidebarItem.target = self
         viewMenu.addItem(toggleLeftSidebarItem)
 
-        let toggleDiffItem = NSMenuItem(title: "Toggle Diff", action: #selector(toggleDiff), keyEquivalent: "d")
+        let toggleDiffItem = NSMenuItem(title: String(localized: "Toggle Diff"), action: #selector(toggleDiff), keyEquivalent: "d")
         toggleDiffItem.target = self
         viewMenu.addItem(toggleDiffItem)
 
         viewMenu.addItem(.separator())
 
-        let alwaysOnTopItem = NSMenuItem(title: "Always on Top", action: #selector(toggleAlwaysOnTop), keyEquivalent: "t")
+        let alwaysOnTopItem = NSMenuItem(title: String(localized: "Always on Top"), action: #selector(toggleAlwaysOnTop), keyEquivalent: "t")
         alwaysOnTopItem.keyEquivalentModifierMask = [.command, .shift]
         alwaysOnTopItem.target = self
         alwaysOnTopItem.state = .off
         viewMenu.addItem(alwaysOnTopItem)
 
         viewMenu.addItem(.separator())
-        let enterFullScreenItem = NSMenuItem(title: "Enter Full Screen", action: #selector(toggleFullScreen), keyEquivalent: "f")
+        let enterFullScreenItem = NSMenuItem(title: String(localized: "Enter Full Screen"), action: #selector(toggleFullScreen), keyEquivalent: "f")
         enterFullScreenItem.keyEquivalentModifierMask = [.command, .control]
         enterFullScreenItem.target = self
         viewMenu.addItem(enterFullScreenItem)
@@ -315,20 +315,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let windowMenuItem = NSMenuItem()
         mainMenu.addItem(windowMenuItem)
-        let windowMenu = NSMenu(title: "Window")
+        let windowMenu = NSMenu(title: String(localized: "Window"))
         windowMenuItem.submenu = windowMenu
         NSApp.windowsMenu = windowMenu
-        windowMenu.addItem(NSMenuItem(title: "Minimize", action: #selector(NSWindow.performMiniaturize(_:)), keyEquivalent: "m"))
-        windowMenu.addItem(NSMenuItem(title: "Zoom", action: #selector(NSWindow.performZoom(_:)), keyEquivalent: ""))
+        windowMenu.addItem(NSMenuItem(title: String(localized: "Minimize"), action: #selector(NSWindow.performMiniaturize(_:)), keyEquivalent: "m"))
+        windowMenu.addItem(NSMenuItem(title: String(localized: "Zoom"), action: #selector(NSWindow.performZoom(_:)), keyEquivalent: ""))
         windowMenu.addItem(.separator())
-        windowMenu.addItem(NSMenuItem(title: "Bring All to Front", action: #selector(NSApplication.arrangeInFront(_:)), keyEquivalent: ""))
+        windowMenu.addItem(NSMenuItem(title: String(localized: "Bring All to Front"), action: #selector(NSApplication.arrangeInFront(_:)), keyEquivalent: ""))
 
         let helpMenuItem = NSMenuItem()
         mainMenu.addItem(helpMenuItem)
-        let helpMenu = NSMenu(title: "Help")
+        let helpMenu = NSMenu(title: String(localized: "Help"))
         helpMenuItem.submenu = helpMenu
         NSApp.helpMenu = helpMenu
-        let helpItem = NSMenuItem(title: "MarkAgent Help", action: #selector(showHelp), keyEquivalent: "?")
+        let helpItem = NSMenuItem(title: String(localized: "MarkAgent Help"), action: #selector(showHelp), keyEquivalent: "?")
         helpItem.target = self
         helpMenu.addItem(helpItem)
 
@@ -336,7 +336,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         removeSystemTabBarMenuItems()
     }
 
-    private func removeSystemTabBarMenuItems(from menu: NSMenu? = NSApp.mainMenu?.item(withTitle: "View")?.submenu) {
+    private func removeSystemTabBarMenuItems(from menu: NSMenu? = NSApp.mainMenu?.item(withTitle: String(localized: "View"))?.submenu) {
         guard let menu else { return }
 
         let toggleTabBarSelector = NSSelectorFromString("toggleTabBar:")
@@ -450,8 +450,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func openFile() {
         let panel = NSOpenPanel()
-        panel.title = "파일 열기"
-        panel.prompt = "열기"
+        panel.title = String(localized: "파일 열기")
+        panel.prompt = String(localized: "열기")
         panel.canChooseFiles = true
         panel.canChooseDirectories = false
         panel.allowsMultipleSelection = false
@@ -540,8 +540,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func chooseSaveURL(suggestedName: String) -> URL? {
         let panel = NSSavePanel()
-        panel.title = "마크다운 문서 저장"
-        panel.prompt = "저장"
+        panel.title = String(localized: "마크다운 문서 저장")
+        panel.prompt = String(localized: "저장")
         panel.nameFieldStringValue = suggestedName
         panel.directoryURL = directoryScanner.currentDirectory
         panel.allowedContentTypes = markdownContentTypes
@@ -562,7 +562,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func showSaveError(_ error: Error) {
         let alert = NSAlert()
-        alert.messageText = "저장 실패"
+        alert.messageText = String(localized: "저장 실패")
         alert.informativeText = error.localizedDescription
         alert.alertStyle = .warning
         alert.runModal()
@@ -650,7 +650,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func updateViewMenuState() {
-        guard let viewMenu = NSApp.mainMenu?.item(withTitle: "View")?.submenu else { return }
+        guard let viewMenu = NSApp.mainMenu?.item(withTitle: String(localized: "View"))?.submenu else { return }
         let document = tabs.activeMarkdownTab?.state.document
         viewMenu.items.first { $0.action == #selector(toggleViewMode) }?.state = document?.viewMode == .preview ? .on : .off
         viewMenu.items.first { $0.action == #selector(showRawView) }?.state = document?.viewMode == .rawEdit ? .on : .off
@@ -670,7 +670,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func updateFullScreenMenuItem(_ menuItem: NSMenuItem?) {
         let isFullScreen = window?.styleMask.contains(.fullScreen) == true
-        menuItem?.title = isFullScreen ? "Exit Full Screen" : "Enter Full Screen"
+        menuItem?.title = isFullScreen ? String(localized: "Exit Full Screen") : String(localized: "Enter Full Screen")
         menuItem?.state = isFullScreen ? .on : .off
     }
 
@@ -684,11 +684,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func confirmCloseActiveTerminalTab() async -> Bool {
         let alert = NSAlert()
-        alert.messageText = "Close terminal tab?"
-        alert.informativeText = "Closing this terminal tab will end its session. Do you want to close it?"
+        alert.messageText = String(localized: "Close terminal tab?")
+        alert.informativeText = String(localized: "Closing this terminal tab will end its session. Do you want to close it?")
         alert.alertStyle = .warning
-        alert.addButton(withTitle: "Close Tab")
-        alert.addButton(withTitle: "Cancel")
+        alert.addButton(withTitle: String(localized: "Close Tab"))
+        alert.addButton(withTitle: String(localized: "취소"))
 
         let response: NSApplication.ModalResponse
         if let window {

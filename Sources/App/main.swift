@@ -27,7 +27,7 @@ if !executableURL.path.contains(".app/Contents/MacOS/") {
         }
         searchDir = searchDir.deletingLastPathComponent()
     }
-    fputs("warning: MarkAgent.app 번들을 찾지 못했습니다. scripts/bundle.sh를 먼저 실행하세요.\n", stderr)
+    fputs(String(localized: "warning: MarkAgent.app 번들을 찾지 못했습니다. scripts/bundle.sh를 먼저 실행하세요.\n"), stderr)
 }
 
 let app = NSApplication.shared

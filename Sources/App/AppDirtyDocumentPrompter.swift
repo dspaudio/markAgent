@@ -15,11 +15,11 @@ final class AppDirtyDocumentPrompter: DirtyDocumentPrompting {
         saveAction: @escaping (URL?) throws -> Void
     ) async -> Bool {
         let alert = NSAlert()
-        alert.messageText = "Save changes before closing?"
-        alert.informativeText = "Do you want to save the changes you made to \"\(title)\"?"
-        alert.addButton(withTitle: "Save")
-        alert.addButton(withTitle: "Discard Changes")
-        alert.addButton(withTitle: "Cancel")
+        alert.messageText = String(localized: "Save changes before closing?")
+        alert.informativeText = String(format: String(localized: "Do you want to save the changes you made to \"%@\"?"), title)
+        alert.addButton(withTitle: String(localized: "Save"))
+        alert.addButton(withTitle: String(localized: "Discard Changes"))
+        alert.addButton(withTitle: String(localized: "Cancel"))
         alert.alertStyle = .warning
 
         let response = await runAlert(alert)
@@ -53,8 +53,8 @@ final class AppDirtyDocumentPrompter: DirtyDocumentPrompting {
 
     private func chooseSaveURL(suggestedName: String) -> URL? {
         let panel = NSSavePanel()
-        panel.title = "Save Markdown Document"
-        panel.prompt = "Save"
+        panel.title = String(localized: "Save Markdown Document")
+        panel.prompt = String(localized: "Save")
         panel.nameFieldStringValue = suggestedName
         panel.allowedContentTypes = [
             UTType(filenameExtension: "md"),
@@ -70,10 +70,10 @@ final class AppDirtyDocumentPrompter: DirtyDocumentPrompting {
 
     private func showSaveError(_ error: Error) {
         let alert = NSAlert()
-        alert.messageText = "Could Not Save Document"
+        alert.messageText = String(localized: "Could Not Save Document")
         alert.informativeText = error.localizedDescription
         alert.alertStyle = .critical
-        alert.addButton(withTitle: "OK")
+        alert.addButton(withTitle: String(localized: "OK"))
         _ = alert.runModal()
     }
 }
