@@ -619,7 +619,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func showHelp() {
-        guard let url = URL(string: AboutView.githubURLString) else { return }
+        let bundledReadmeURL = Bundle.main.url(forResource: "README", withExtension: "md")
+        let url = bundledReadmeURL ?? URL(string: AboutView.githubURLString)
+        guard let url else { return }
         NSWorkspace.shared.open(url)
     }
 

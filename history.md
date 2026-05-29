@@ -36,6 +36,7 @@
 32. [세션 32: GitHub식 Diff 탭, 사이드바 토글 및 v1.3.0 릴리즈](#세션-32-github식-diff-탭-사이드바-토글-및-v130-릴리즈)
 33. [세션 33: 우측 스니펫 사이드바, Markdown preview 안정화 및 v1.4.0 릴리즈](#세션-33-우측-스니펫-사이드바-markdown-preview-안정화-및-v140-릴리즈)
 34. [세션 34: 앱 국제화 및 v1.4.1 릴리즈](#세션-34-앱-국제화-및-v141-릴리즈)
+35. [세션 35: 번들 도움말, 코드 서명 릴리즈 빌드 및 v1.4.2 릴리즈](#세션-35-번들-도움말-코드-서명-릴리즈-빌드-및-v142-릴리즈)
 
 ---
 
@@ -94,6 +95,7 @@
 | 49 | GitHub식 Diff 탭, 사이드바 토글 및 v1.3.0 릴리즈 | 전체 변경 파일 diff 탭, 파일별 증감 요약, 왼쪽 사이드바 토글/설정/View 메뉴 제어, 앱 번들 버전 1.3.0 갱신 |
 | 50 | 우측 스니펫 사이드바, Markdown preview 안정화 및 v1.4.0 릴리즈 | 저장형 프롬프트 스니펫 사이드바, non-Git 우측 사이드바 접근, 표 렌더링 보강, Preview↔Raw Edit 메모리 반환 개선, 앱 번들 버전 1.4.0 갱신 |
 | 51 | 앱 국제화 및 v1.4.1 릴리즈 | 영어 기본 UI와 한국어 로컬라이제이션 리소스 추가, 메뉴/사이드바/Git/스니펫 문구 정리, 앱 번들 버전 1.4.1 갱신 |
+| 52 | 번들 도움말, 코드 서명 릴리즈 빌드 및 v1.4.2 릴리즈 | Help 메뉴에서 번들 README를 열도록 변경, release/install 번들 코드 서명 자동화, 앱 번들 버전 1.4.2 갱신 |
 
 ---
 
@@ -1865,5 +1867,41 @@ Git 변경 파일 우측 사이드바를 스니펫 탭까지 확장하고, Markd
 명시 버전 `1.4.1`로 앱 번들 버전을 갱신하고, README 기능 소개와 `history.md` 세션 기록을 이번 국제화 변경분에 맞게 업데이트한 뒤 릴리즈 빌드, 커밋/푸시, GitHub Release, main 대상 PR 생성 및 머지를 진행.
 
 변경 파일: `Sources/App/Info.plist`, `README.md`, `history.md`
+
+---
+
+## 세션 35: 번들 도움말, 코드 서명 릴리즈 빌드 및 v1.4.2 릴리즈
+
+> 날짜: 2026-05-29
+> 경로: ~/workspace/markAgent
+
+Help 메뉴에서 프로젝트 문서를 바로 열 수 있도록 앱 번들에 `README.md`를 포함하고, 릴리스/설치 번들 생성 시 로컬 Developer ID 인증서를 자동 탐지해 코드 서명하도록 `v1.4.2` 패치 릴리즈를 준비.
+
+### 대화 1: 코드 서명 ID 확인 및 릴리스 번들 서명 자동화
+
+**사용자:**
+> 다음 명령을 실행해서 code sign을 확인했어. `security find-identity -v -p codesigning` 결과 Developer ID Application identity가 있어.
+
+**응답:**
+`scripts/bundle.sh`에 release/install 빌드에서 로컬 `Developer ID Application` 인증서를 자동 탐지해 실행 파일과 앱 번들을 순서대로 서명하고 검증하는 흐름을 추가했다. 소스 저장소에는 개인 이름, Team ID, 인증서 해시를 하드코딩하지 않고, `MARKAGENT_SIGN_IDENTITY`와 `MARKAGENT_CODESIGN` 환경변수로 필요 시 동작을 제어할 수 있게 했다.
+
+검증:
+- `bash -n scripts/bundle.sh` — 성공
+- `scripts/bundle.sh release` — 성공
+- `codesign --verify --deep --strict --verbose=2 .build/MarkAgent.app` — 성공
+
+변경 파일: `scripts/bundle.sh`
+
+---
+
+### 대화 2: Help 메뉴에서 번들 README 열기 및 `/release-build 1.4.2`
+
+**사용자:**
+> 도움말-MarkAgent 도움말을 선택하면 이 프로젝트의 README.md 파일이 열리도록 해줘. 물론 앱 번들에도 README.md 가 포함되어야 할거야. 이 수정을 마치면 $release-build 1.4.2 명령을 실행해줘. 코드사인이 들어가고 배포되는거지?
+
+**응답:**
+`MarkAgent Help` 메뉴가 앱 번들 리소스의 `README.md`를 우선 열도록 변경하고, 번들 생성 시 프로젝트 루트의 `README.md`를 `Contents/Resources/README.md`로 복사하도록 했다. 앱 번들 버전을 `1.4.2`로 갱신하고 README 기능 소개와 히스토리 기록을 릴리즈 내용에 맞춰 업데이트한 뒤 릴리즈 빌드, GitHub Release, PR 생성/머지를 진행.
+
+변경 파일: `Sources/App/AppDelegate.swift`, `scripts/bundle.sh`, `Sources/App/Info.plist`, `README.md`, `history.md`
 
 ---

@@ -41,6 +41,7 @@ MarkAgent is a visual bridge for that workflow.
 - **Working directory file browser:** Updates the file browser based on the active terminal or Markdown tab's working directory, and both left and right sidebars can be resized directly in the window. The left file sidebar can be toggled from the toolbar or View menu, with a Settings option for the default visibility.
 - **Change tracking:** Shows changed files from the Git repository in the sidebar with per-file `+/-` line counts, supports single-click branch checkout and Git init from the titlebar, keeps the full current branch name visible in the titlebar, and opens a GitHub-style Files changed tab that displays all changed file diffs in one scrollable view. The right sidebar can stay open outside Git repositories and switch between changed files and saved prompt snippets. Selecting a file in the right sidebar jumps the diff tab to that file's section.
 - **About and licenses:** Opens About as an in-app tab with app version, repository link, and open source package attribution, including original authors and clickable repository links.
+- **Bundled help:** Opens the bundled `README.md` from the Help menu so the app can show its project documentation even when the local checkout is not available.
 - **Recent documents:** Reopen frequently used Markdown documents from the recent documents list.
 - **App launch file opening:** Opening the app with a file path, including `.app --args` launches, resolves the target file directly into a markdown tab.
 - **English and Korean interface:** Uses English as the default UI language and switches to Korean through macOS localization resources, covering menus, sidebars, Git/Diff screens, snippets, settings, About, and document prompts.
@@ -233,6 +234,7 @@ MarkAgent는 이 흐름을 위해 만든 비주얼 브릿지입니다.
 - **작업 경로 파일 확인:** 활성 터미널이나 Markdown 탭의 작업 경로에 맞춰 파일 브라우저를 갱신하며, 좌우 사이드바를 직접 리사이즈할 수 있습니다.
 - **변경사항 추적:** Git 저장소의 변경 파일을 사이드바로 보고, 선택한 파일의 줄 단위 Diff를 확인하며, 숨겨진 문맥은 단계적으로 더 펼쳐볼 수 있습니다. 변경 파일 목록을 새로고침해도 해당 파일이 계속 변경된 상태라면 선택한 Diff를 유지합니다. 우측 사이드바는 Git 저장소 밖에서도 열 수 있고, 변경 파일 탭과 저장된 프롬프트 스니펫 탭을 전환할 수 있습니다. 타이틀바에서는 Git 브랜치 전환과 Git Init도 처리할 수 있으며 브랜치는 한 번 클릭으로 전환합니다.
 - **About 및 라이선스:** About을 앱 내부 탭으로 열고 앱 버전, 저장소 링크, 오픈소스 패키지별 원 저작자와 클릭 가능한 저장소 링크를 표시합니다.
+- **번들 도움말:** Help 메뉴에서 앱 번들에 포함된 `README.md`를 열어 로컬 checkout이 없어도 프로젝트 문서를 확인할 수 있습니다.
 - **최근 문서:** 자주 여는 Markdown 문서를 최근 문서 목록에서 다시 열 수 있습니다.
 - **앱 실행 시 파일 열기:** `.app --args` 또는 CLI wrapper로 파일 경로를 넘겨 실행했을 때 대상 파일을 바로 Markdown 탭으로 엽니다.
 - **영어/한국어 인터페이스:** 기본 UI 언어는 영어로 제공하고, macOS 언어가 한국어일 때는 메뉴, 사이드바, Git/Diff 화면, 스니펫, 설정, About, 문서 확인창까지 한국어 리소스로 표시합니다.
