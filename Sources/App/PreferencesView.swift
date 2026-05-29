@@ -311,7 +311,7 @@ private struct FontPreview: View {
                 .font(.custom(primaryFontFamily, size: fontSize))
                 .lineSpacing(3)
 
-            Text("Fallback: \(fallbackFontFamily) · 한글 미리보기 123")
+            Text(String(format: String(localized: "Fallback: %@ · 한글 미리보기 123"), fallbackFontFamily))
                 .font(.custom(fallbackFontFamily, size: max(12, fontSize - 1)))
                 .opacity(0.78)
         }

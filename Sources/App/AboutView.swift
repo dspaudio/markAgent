@@ -74,7 +74,7 @@ struct AboutView: View {
                         }
                     }
 
-                    section(title: "Open Source Libraries") {
+                    section(title: String(localized: "Open Source Libraries")) {
                         VStack(spacing: 10) {
                             ForEach(libraries) { library in
                                 LibraryRow(library: library)
@@ -82,10 +82,10 @@ struct AboutView: View {
                         }
                     }
 
-                    section(title: "License Notice") {
+                    section(title: String(localized: "License Notice")) {
                         VStack(alignment: .leading, spacing: 8) {
-                            licenseLine("MarkAgent includes and links against the open source components listed above.")
-                            licenseLine("Package versions are resolved by Swift Package Manager through Package.resolved.")
+                            licenseLine(String(localized: "MarkAgent includes and links against the open source components listed above."))
+                            licenseLine(String(localized: "Package versions are resolved by Swift Package Manager through Package.resolved."))
                         }
                     }
                 }
@@ -137,11 +137,11 @@ struct AboutView: View {
 
         switch (version, build) {
         case let (version?, build?) where version != build:
-            return "Version \(version) (\(build))"
+            return String(format: String(localized: "Version %@ (%@)"), version, build)
         case let (version?, _):
-            return "Version \(version)"
+            return String(format: String(localized: "Version %@"), version)
         default:
-            return "Version 1.0.0"
+            return String(format: String(localized: "Version %@"), "1.0.0")
         }
     }
 
@@ -197,7 +197,7 @@ private struct LibraryRow: View {
                 .font(.callout)
                 .foregroundStyle(.secondary)
 
-            Text("Original author: \(library.author)")
+            Text(String(format: String(localized: "Original author: %@"), library.author))
                 .font(.footnote.weight(.medium))
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -220,7 +220,7 @@ private struct LibraryRow: View {
             }
             .buttonStyle(.link)
             .foregroundStyle(isHoveringURL ? Color.accentColor : Color.secondary)
-            .help("Open repository")
+            .help(Text("Open repository"))
             .onHover { hovering in
                 isHoveringURL = hovering
                 if hovering {
