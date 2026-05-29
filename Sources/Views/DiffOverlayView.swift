@@ -43,12 +43,12 @@ struct DiffOverlayView: View {
     private var summaryText: String {
         var parts: [String] = []
         if diffResult.addedCount > 0 {
-            parts.append("+\(diffResult.addedCount)줄")
+            parts.append(String(format: String(localized: "+%@줄"), "\(diffResult.addedCount)"))
         }
         if diffResult.removedCount > 0 {
-            parts.append("-\(diffResult.removedCount)줄")
+            parts.append(String(format: String(localized: "-%@줄"), "\(diffResult.removedCount)"))
         }
-        return parts.isEmpty ? "변경 없음" : parts.joined(separator: ", ")
+        return parts.isEmpty ? String(localized: "변경 없음") : parts.joined(separator: ", ")
     }
 }
 
@@ -229,7 +229,7 @@ struct DiffContentView: View {
                     Button {
                         expandedTopCounts[context.id] = min(topCount + expansionStep, context.hiddenLines.count - bottomCount)
                     } label: {
-                        Label("\(min(expansionStep, remainingCount))줄 더 보기", systemImage: "chevron.down")
+                        Label(String(format: String(localized: "%@줄 더 보기"), "\(min(expansionStep, remainingCount))"), systemImage: "chevron.down")
                     }
                     .buttonStyle(.bordered)
                     .controlSize(.small)
@@ -237,7 +237,7 @@ struct DiffContentView: View {
 
                 Spacer(minLength: 0)
 
-                Text("\(remainingCount)줄 숨김")
+                Text(String(format: String(localized: "%@줄 숨김"), "\(remainingCount)"))
                     .font(.system(size: 11, weight: .medium))
                     .foregroundStyle(.secondary)
 
@@ -247,7 +247,7 @@ struct DiffContentView: View {
                     Button {
                         expandedBottomCounts[context.id] = min(bottomCount + expansionStep, context.hiddenLines.count - topCount)
                     } label: {
-                        Label("\(min(expansionStep, remainingCount))줄 더 보기", systemImage: "chevron.up")
+                        Label(String(format: String(localized: "%@줄 더 보기"), "\(min(expansionStep, remainingCount))"), systemImage: "chevron.up")
                     }
                     .buttonStyle(.bordered)
                     .controlSize(.small)
@@ -330,8 +330,8 @@ private struct ImageDiffPairView: View {
                 Spacer()
             }
             HStack(alignment: .top, spacing: 12) {
-                imageColumn(title: "Before", reference: before, tint: .red)
-                imageColumn(title: "After", reference: after, tint: .green)
+                imageColumn(title: String(localized: "Before"), reference: before, tint: .red)
+                imageColumn(title: String(localized: "After"), reference: after, tint: .green)
             }
         }
         .padding(.horizontal, 12)
