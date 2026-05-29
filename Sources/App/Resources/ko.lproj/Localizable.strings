@@ -1,0 +1,222 @@
+/* NewTabChooserView */
+"새 탭 만들기" = "새 탭 만들기";
+"터미널" = "터미널";
+"마크다운" = "마크다운";
+"취소" = "취소";
+
+/* ActiveTabContentView */
+"알 수 없는 탭 유형입니다." = "알 수 없는 탭 유형입니다.";
+"새 탭을 추가하세요" = "새 탭을 추가하세요";
+
+/* TabBarView */
+"왼쪽 사이드바 숨기기" = "왼쪽 사이드바 숨기기";
+"왼쪽 사이드바 표시" = "왼쪽 사이드바 표시";
+"새 탭" = "새 탭";
+"오른쪽 사이드바 숨기기" = "오른쪽 사이드바 숨기기";
+"오른쪽 사이드바 표시" = "오른쪽 사이드바 표시";
+
+/* RightSidebarView */
+"작업 사이드바" = "작업 사이드바";
+"새로고침" = "새로고침";
+"Git 변경 파일" = "Git 변경 파일";
+"스니펫" = "스니펫";
+
+/* GitChangesSidebar */
+"현재 작업 경로는 Git 저장소가 아닙니다." = "현재 작업 경로는 Git 저장소가 아닙니다.";
+"마지막 커밋 이후 변경된 파일이 없습니다." = "마지막 커밋 이후 변경된 파일이 없습니다.";
+
+/* FileBrowserSidebar */
+"상위 폴더로 이동" = "상위 폴더로 이동";
+"빈 폴더" = "빈 폴더";
+"폴더" = "폴더";
+"파일" = "파일";
+"Markdown 파일" = "Markdown 파일";
+"이미지 파일" = "이미지 파일";
+"불러오는 중..." = "불러오는 중...";
+"닫기" = "닫기";
+"이미지를 열 수 없습니다." = "이미지를 열 수 없습니다.";
+
+/* RecentDocumentsSection */
+"최근 문서" = "최근 문서";
+"최근 문서 없음" = "최근 문서 없음";
+"최근 문서에서 제거" = "최근 문서에서 제거";
+
+/* PromptSnippetsSidebarView */
+"스니펫을 삭제할까요?" = "스니펫을 삭제할까요?";
+"삭제" = "삭제";
+"삭제한 스니펫은 복구할 수 없습니다." = "삭제한 스니펫은 복구할 수 없습니다.";
+"저장된 프롬프트" = "저장된 프롬프트";
+"추가" = "추가";
+"스니펫 추가" = "스니펫 추가";
+"저장된 스니펫이 없습니다." = "저장된 스니펫이 없습니다.";
+"복사됨" = "복사됨";
+"편집" = "편집";
+"클릭해서 스니펫 복사" = "클릭해서 스니펫 복사";
+"스니펫 편집" = "스니펫 편집";
+"저장" = "저장";
+
+/* MarkdownTabView */
+"파일이 외부에서 수정되었습니다" = "파일이 외부에서 수정되었습니다";
+"외부 변경 로드" = "외부 변경 로드";
+"내 변경 유지" = "내 변경 유지";
+"편집 중인 내용과 파일의 내용이 다릅니다. 어떻게 하시겠습니까?" = "편집 중인 내용과 파일의 내용이 다릅니다. 어떻게 하시겠습니까?";
+"제목" = "제목";
+"굵게" = "굵게";
+"기울임" = "기울임";
+"링크" = "링크";
+"글머리 기호" = "글머리 기호";
+"번호 목록" = "번호 목록";
+"체크리스트" = "체크리스트";
+"인용" = "인용";
+"인라인 코드" = "인라인 코드";
+"%@ 보기" = "%@ 보기";
+"파일을 로드하는 중..." = "파일을 로드하는 중...";
+"빈 문서입니다." = "빈 문서입니다.";
+"파일 열기" = "파일 열기";
+
+/* GitDiffTabView */
+"Files changed" = "변경 파일";
+"Diff 불러오는 중..." = "Diff 불러오는 중...";
+"Git 저장소" = "Git 저장소";
+"%@ · %@개 파일 · +%@ -%@" = "%1$@ · %2$@개 파일 · +%3$@ -%4$@";
+
+/* TitlebarStatusView */
+"Git 저장소를 초기화할까요?" = "Git 저장소를 초기화할까요?";
+"%@에 .git 디렉토리를 생성합니다." = "%@에 .git 디렉토리를 생성합니다.";
+"브랜치" = "브랜치";
+"브랜치 목록 새로고침" = "브랜치 목록 새로고침";
+"체크아웃 진행 중..." = "체크아웃 진행 중...";
+"클릭해서 %@ 체크아웃" = "클릭해서 %@ 체크아웃";
+"%@에서 git init" = "%@에서 git init";
+
+/* AppDelegate */
+"열기" = "열기";
+"마크다운 문서 저장" = "마크다운 문서 저장";
+"저장 실패" = "저장 실패";
+"Close terminal tab?" = "터미널 탭을 닫을까요?";
+"Closing this terminal tab will end its session. Do you want to close it?" = "이 터미널 탭을 닫으면 세션이 종료됩니다. 닫으시겠습니까?";
+
+/* PreferencesView */
+"Settings" = "설정";
+"Workspace" = "작업 공간";
+"Show left sidebar by default" = "왼쪽 사이드바를 기본으로 표시";
+"Terminal" = "터미널";
+"Theme" = "테마";
+"Choose from preview" = "미리보기에서 선택";
+"Font Size" = "글꼴 크기";
+"Fonts" = "글꼴";
+"Coding Font" = "코딩 글꼴";
+"Fallback Font" = "대체 글꼴";
+"Theme Preview" = "테마 미리보기";
+"Selected" = "선택됨";
+"Font Preview" = "글꼴 미리보기";
+"Fallback: %@ · 한글 미리보기 123" = "대체 글꼴: %@ · 한글 미리보기 123";
+
+/* AboutView */
+"Open Repository" = "저장소 열기";
+"Open Source Libraries" = "오픈소스 라이브러리";
+"License Notice" = "라이선스 고지";
+"MarkAgent includes and links against the open source components listed above." = "MarkAgent는 위에 나열된 오픈소스 구성 요소를 포함하고 링크합니다.";
+"Package versions are resolved by Swift Package Manager through Package.resolved." = "패키지 버전은 Swift Package Manager가 Package.resolved를 통해 결정합니다.";
+"Version %@ (%@)" = "버전 %1$@ (%2$@)";
+"Version %@" = "버전 %@";
+"Original author: %@" = "원 저작자: %@";
+"Open repository" = "저장소 열기";
+
+/* main.swift */
+"warning: MarkAgent.app 번들을 찾지 못했습니다. scripts/bundle.sh를 먼저 실행하세요.\n" = "경고: MarkAgent.app 번들을 찾지 못했습니다. scripts/bundle.sh를 먼저 실행하세요.\n";
+
+/* DiffOverlayView */
+"Diff 닫기" = "Diff 닫기";
+"Diff 숨기기" = "Diff 숨기기";
+"Diff 보기" = "Diff 보기";
+"+%@줄" = "+%@줄";
+"-%@줄" = "-%@줄";
+"변경 없음" = "변경 없음";
+"%@줄 더 보기" = "%@줄 더 보기";
+"%@줄 숨김" = "%@줄 숨김";
+"이미지 변경" = "이미지 변경";
+"Before" = "이전";
+"After" = "이후";
+
+/* EditorView */
+"Untitled" = "제목 없음";
+"굵은 텍스트" = "굵은 텍스트";
+"기울임 텍스트" = "기울임 텍스트";
+"code" = "code";
+
+/* Document.swift */
+"파일을 읽을 수 없습니다: %@" = "파일을 읽을 수 없습니다: %@";
+"파일을 찾을 수 없습니다: %@" = "파일을 찾을 수 없습니다: %@";
+"사용법: ma <파일경로>" = "사용법: ma <파일경로>";
+
+/* CodeHighlighter.swift */
+"코드 복사" = "코드 복사";
+
+/* MarkdownImage.swift */
+"클릭해서 이미지 열기" = "클릭해서 이미지 열기";
+"깨진 이미지" = "깨진 이미지";
+
+/* ContentView.swift */
+"새 문서 (⌘N)" = "새 문서 (⌘N)";
+"파일 열기 (⌘O)" = "파일 열기 (⌘O)";
+"Diff 보기 토글 (⌘D)" = "Diff 보기 토글 (⌘D)";
+"이미지를 찾을 수 없습니다: %@" = "이미지를 찾을 수 없습니다: %@";
+"새 문서" = "새 문서";
+"파일을 열면 여기에 표시됩니다." = "파일을 열면 여기에 표시됩니다.";
+
+/* Git errors */
+"Git 저장소가 아닙니다." = "Git 저장소가 아닙니다.";
+"이미 '%@' 브랜치에 있습니다." = "이미 '%@' 브랜치에 있습니다.";
+"다른 체크아웃 작업이 진행 중입니다." = "다른 체크아웃 작업이 진행 중입니다.";
+"추적되지 않는 파일이 덮어쓰여집니다. 먼저 파일을 커밋하거나 삭제해주세요." = "추적되지 않는 파일이 덮어쓰여집니다. 먼저 파일을 커밋하거나 삭제해주세요.";
+"커밋하지 않은 변경사항이 있습니다. 먼저 커밋하거나 스태시(stash)해주세요." = "커밋하지 않은 변경사항이 있습니다. 먼저 커밋하거나 스태시(stash)해주세요.";
+"병합(merge) 충돌이 있습니다. 먼저 충돌을 해결해주세요." = "병합(merge) 충돌이 있습니다. 먼저 충돌을 해결해주세요.";
+"git 명령을 실행할 수 없습니다." = "git 명령을 실행할 수 없습니다.";
+
+/* Menu Items */
+"About MarkAgent" = "MarkAgent 정보";
+"Settings…" = "설정…";
+"Reload Configuration" = "설정 다시 반영";
+"Open Ghostty config" = "Ghostty 설정 열기";
+"Services" = "서비스";
+"Hide MarkAgent" = "MarkAgent 숨기기";
+"Hide Others" = "기타 숨기기";
+"Show All" = "모두 보기";
+"Quit MarkAgent" = "MarkAgent 종료";
+"New Terminal Tab" = "새 터미널 탭";
+"New Markdown Tab" = "새 마크다운 탭";
+"Open…" = "열기…";
+"Save" = "저장";
+"Close Tab" = "탭 닫기";
+"Save changes before closing?" = "닫기 전에 변경사항을 저장할까요?";
+"Do you want to save the changes you made to \"%@\"?" = "\"%@\"에 적용한 변경사항을 저장하시겠습니까?";
+"Discard Changes" = "변경사항 버리기";
+"Cancel" = "취소";
+"Save Markdown Document" = "마크다운 문서 저장";
+"Could Not Save Document" = "문서를 저장할 수 없습니다";
+"OK" = "확인";
+"Undo" = "실행 취소";
+"Redo" = "다시 실행";
+"Cut" = "잘라내기";
+"Copy" = "복사";
+"Paste" = "붙여넣기";
+"Delete" = "삭제";
+"Select All" = "전체 선택";
+"Preview" = "미리보기";
+"Raw Edit" = "원시 편집";
+"Toggle Left Sidebar" = "왼쪽 사이드바 토글";
+"Toggle Diff" = "Diff 토글";
+"Always on Top" = "항상 위";
+"Enter Full Screen" = "전체 화면 시작";
+"Exit Full Screen" = "전체 화면 종료";
+"Minimize" = "최소화";
+"Zoom" = "확대/축소";
+"Bring All to Front" = "모두 앞으로 가져오기";
+"MarkAgent Help" = "MarkAgent 도움말";
+"File" = "파일";
+"Edit" = "편집";
+"View" = "보기";
+"Window" = "창";
+"Help" = "도움말";
+"Select Tab %@" = "탭 %@ 선택";
