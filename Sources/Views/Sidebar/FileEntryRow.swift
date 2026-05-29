@@ -77,10 +77,10 @@ struct FileEntryRow: View {
 
     private var kindText: String {
         switch entry.kind {
-        case .directory: return "폴더"
-        case .markdown: return "Markdown 파일"
-        case .image: return "이미지 파일"
-        case .file: return "파일"
+        case .directory: return String(localized: "폴더")
+        case .markdown: return String(localized: "Markdown 파일")
+        case .image: return String(localized: "이미지 파일")
+        case .file: return String(localized: "파일")
         }
     }
 }

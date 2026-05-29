@@ -150,17 +150,17 @@ final class GitRepositoryStatus {
 
     func checkout(_ branch: GitBranch) {
         guard let repositoryRoot else {
-            checkoutErrorMessage = "Git 저장소가 아닙니다."
+            checkoutErrorMessage = String(localized: "Git 저장소가 아닙니다.")
             return
         }
 
         if branch.name == branchName {
-            checkoutErrorMessage = "이미 '\(branch.displayName)' 브랜치에 있습니다."
+            checkoutErrorMessage = String(format: String(localized: "이미 '%@' 브랜치에 있습니다."), branch.displayName)
             return
         }
 
         guard !isCheckingOut else {
-            checkoutErrorMessage = "다른 체크아웃 작업이 진행 중입니다."
+            checkoutErrorMessage = String(localized: "다른 체크아웃 작업이 진행 중입니다.")
             return
         }
 
@@ -289,12 +289,12 @@ final class GitRepositoryStatus {
         let lowercased = message.lowercased()
         if lowercased.contains("would be overwritten by checkout") {
             if lowercased.contains("untracked working tree files") {
-                return "추적되지 않는 파일이 덮어쓰여집니다. 먼저 파일을 커밋하거나 삭제해주세요."
+                return String(localized: "추적되지 않는 파일이 덮어쓰여집니다. 먼저 파일을 커밋하거나 삭제해주세요.")
             } else {
-                return "커밋하지 않은 변경사항이 있습니다. 먼저 커밋하거나 스태시(stash)해주세요."
+                return String(localized: "커밋하지 않은 변경사항이 있습니다. 먼저 커밋하거나 스태시(stash)해주세요.")
             }
         } else if lowercased.contains("you need to resolve your current index first") || lowercased.contains("unmerged files") {
-            return "병합(merge) 충돌이 있습니다. 먼저 충돌을 해결해주세요."
+            return String(localized: "병합(merge) 충돌이 있습니다. 먼저 충돌을 해결해주세요.")
         }
         return message
     }
@@ -342,7 +342,7 @@ enum GitRepositoryStatusError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .commandFailed(let message):
-            return message.isEmpty ? "git 명령을 실행할 수 없습니다." : message
+            return message.isEmpty ? String(localized: "git 명령을 실행할 수 없습니다.") : message
         }
     }
 }

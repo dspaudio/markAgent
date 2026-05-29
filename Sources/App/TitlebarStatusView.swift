@@ -78,7 +78,7 @@ struct TitlebarGitBranchView: View {
                 .disabled(status.isInitializingRepository)
                 .padding(.trailing, 16)
                 .frame(maxWidth: 240, alignment: .trailing)
-                .help(status.checkoutErrorMessage ?? "\(status.currentDirectory.path)에서 git init")
+                .help(status.checkoutErrorMessage ?? String(format: String(localized: "%@에서 git init"), status.currentDirectory.path))
             }
         }
         .alert("Git 저장소를 초기화할까요?", isPresented: $isShowingInitConfirmation) {
@@ -87,7 +87,7 @@ struct TitlebarGitBranchView: View {
                 status.initializeRepository()
             }
         } message: {
-            Text("\(status.currentDirectory.path)에 .git 디렉토리를 생성합니다.")
+            Text(String(format: String(localized: "%@에 .git 디렉토리를 생성합니다."), status.currentDirectory.path))
         }
     }
 }
@@ -124,7 +124,7 @@ private struct GitBranchPopoverView: View {
             }
             .buttonStyle(.plain)
             .disabled(status.isLoadingBranches || status.isCheckingOut)
-            .help("브랜치 목록 새로고침")
+            .help(String(localized: "브랜치 목록 새로고침"))
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 10)
@@ -253,6 +253,6 @@ private struct GitBranchPopoverView: View {
             status.checkout(branch)
         }
         .disabled(status.isCheckingOut)
-        .help("클릭해서 \(branch.checkoutName) 체크아웃")
+        .help(String(format: String(localized: "클릭해서 %@ 체크아웃"), branch.checkoutName))
     }
 }

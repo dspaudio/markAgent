@@ -35,7 +35,7 @@ struct FileBrowserSidebar: View {
                 }
                 .buttonStyle(.plain)
                 .disabled(scanner.currentDirectory.path == "/")
-                .help("상위 폴더로 이동")
+                .help(String(localized: "상위 폴더로 이동"))
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 10)
@@ -113,14 +113,14 @@ struct FileBrowserSidebar: View {
         var rows: [SidebarDisplayRow] = []
 
         if !directoryEntries.isEmpty {
-            rows.append(.header(id: "root-folders", title: "폴더", depth: 0))
+            rows.append(.header(id: "root-folders", title: String(localized: "폴더"), depth: 0))
             for entry in directoryEntries {
                 appendDirectoryRows(for: entry, depth: 0, rows: &rows)
             }
         }
 
         if !fileEntries.isEmpty {
-            rows.append(.header(id: "root-files", title: "파일", depth: 0))
+            rows.append(.header(id: "root-files", title: String(localized: "파일"), depth: 0))
             rows.append(contentsOf: fileEntries.map { .entry($0, depth: 0) })
         }
 
@@ -135,7 +135,7 @@ struct FileBrowserSidebar: View {
         if loadingDirectoryIDs.contains(entry.id) {
             rows.append(.status(
                 id: "\(entry.id)-loading",
-                message: "불러오는 중...",
+                message: String(localized: "불러오는 중..."),
                 depth: depth + 1,
                 isError: false
             ))
@@ -156,7 +156,7 @@ struct FileBrowserSidebar: View {
         if children.isEmpty {
             rows.append(.status(
                 id: "\(entry.id)-empty",
-                message: "빈 폴더",
+                message: String(localized: "빈 폴더"),
                 depth: depth + 1,
                 isError: false
             ))
@@ -167,14 +167,14 @@ struct FileBrowserSidebar: View {
         let childFiles = children.filter { !$0.isDirectory }
 
         if !childDirectories.isEmpty {
-            rows.append(.header(id: "\(entry.id)-folders", title: "폴더", depth: depth + 1))
+            rows.append(.header(id: "\(entry.id)-folders", title: String(localized: "폴더"), depth: depth + 1))
             for child in childDirectories {
                 appendDirectoryRows(for: child, depth: depth + 1, rows: &rows)
             }
         }
 
         if !childFiles.isEmpty {
-            rows.append(.header(id: "\(entry.id)-files", title: "파일", depth: depth + 1))
+            rows.append(.header(id: "\(entry.id)-files", title: String(localized: "파일"), depth: depth + 1))
             rows.append(contentsOf: childFiles.map { .entry($0, depth: depth + 1) })
         }
     }

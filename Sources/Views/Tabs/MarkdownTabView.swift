@@ -96,9 +96,9 @@ struct MarkdownTabView: View {
         HStack(spacing: 12) {
             HStack(spacing: 6) {
                 if state.document.supportsPreview {
-                    modeButton(.preview, title: "Preview", systemImage: "eye")
+                    modeButton(.preview, title: String(localized: "Preview"), systemImage: "eye")
                 }
-                modeButton(.rawEdit, title: "Raw Edit", systemImage: "square.and.pencil")
+                    modeButton(.rawEdit, title: String(localized: "Raw Edit"), systemImage: "square.and.pencil")
             }
 
             if state.document.supportsPreview {
@@ -106,16 +106,16 @@ struct MarkdownTabView: View {
                     .frame(height: 22)
 
                 HStack(spacing: 6) {
-                    editButton("H", help: "제목", action: .heading)
-                    editButton("B", help: "굵게", action: .bold)
-                    editButton("I", help: "기울임", action: .italic)
+                    editButton("H", help: String(localized: "제목"), action: .heading)
+                    editButton("B", help: String(localized: "굵게"), action: .bold)
+                    editButton("I", help: String(localized: "기울임"), action: .italic)
                         .italic()
-                    editButton(systemImage: "link", help: "링크", action: .link)
-                    editButton(systemImage: "list.bullet", help: "글머리 기호", action: .unorderedList)
-                    editButton(systemImage: "list.number", help: "번호 목록", action: .orderedList)
-                    editButton(systemImage: "checklist", help: "체크리스트", action: .checklist)
-                    editButton(systemImage: "quote.opening", help: "인용", action: .quote)
-                    editButton(systemImage: "chevron.left.forwardslash.chevron.right", help: "인라인 코드", action: .inlineCode)
+                    editButton(systemImage: "link", help: String(localized: "링크"), action: .link)
+                    editButton(systemImage: "list.bullet", help: String(localized: "글머리 기호"), action: .unorderedList)
+                    editButton(systemImage: "list.number", help: String(localized: "번호 목록"), action: .orderedList)
+                    editButton(systemImage: "checklist", help: String(localized: "체크리스트"), action: .checklist)
+                    editButton(systemImage: "quote.opening", help: String(localized: "인용"), action: .quote)
+                    editButton(systemImage: "chevron.left.forwardslash.chevron.right", help: String(localized: "인라인 코드"), action: .inlineCode)
                 }
                 .disabled(state.document.viewMode != .rawEdit)
                 .opacity(state.document.viewMode == .rawEdit ? 1 : 0.45)
@@ -142,7 +142,7 @@ struct MarkdownTabView: View {
                 .frame(width: 28, height: 26)
                 .foregroundStyle(isSelected ? (appColors?.accent ?? Color.accentColor) : (appColors?.foreground ?? Color.primary))
         }
-        .help("\(title) 보기")
+        .help(String(format: String(localized: "%@ 보기"), title))
     }
 
     private func editButton(_ title: String, help: String, action: MarkdownEditAction) -> some View {

@@ -281,7 +281,7 @@ enum GitDiffError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .commandFailed(let message):
-            return message.isEmpty ? "git 명령을 실행할 수 없습니다." : message
+            return message.isEmpty ? String(localized: "git 명령을 실행할 수 없습니다.") : message
         }
     }
 }

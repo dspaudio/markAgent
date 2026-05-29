@@ -33,7 +33,7 @@ struct ContentView: View {
                 Button(action: onNewDocument) {
                     Label("새 문서", systemImage: "doc.badge.plus")
                 }
-                .help("새 문서 (⌘N)")
+                .help(String(localized: "새 문서 (⌘N)"))
                 .keyboardShortcut("n", modifiers: .command)
             }
 
@@ -41,13 +41,13 @@ struct ContentView: View {
                 Button(action: onOpenFile) {
                     Label("열기", systemImage: "folder")
                 }
-                .help("파일 열기 (⌘O)")
+                .help(String(localized: "파일 열기 (⌘O)"))
                 .keyboardShortcut("o", modifiers: .command)
             }
 
             ToolbarItemGroup(placement: .automatic) {
-                modeButton(.preview, title: "Preview", systemImage: "eye", shortcut: "1")
-                modeButton(.rawEdit, title: "Raw Edit", systemImage: "square.and.pencil", shortcut: "2")
+                    modeButton(.preview, title: String(localized: "Preview"), systemImage: "eye", shortcut: "1")
+                    modeButton(.rawEdit, title: String(localized: "Raw Edit"), systemImage: "square.and.pencil", shortcut: "2")
             }
 
             ToolbarItem(placement: .automatic) {
@@ -59,7 +59,7 @@ struct ContentView: View {
                         systemImage: "arrow.left.arrow.right.circle"
                     )
                 }
-                .help("Diff 보기 토글 (⌘D)")
+                .help(String(localized: "Diff 보기 토글 (⌘D)"))
                 .keyboardShortcut("d", modifiers: .command)
                 .disabled(document.diffResult == nil)
             }
@@ -125,7 +125,7 @@ struct ContentView: View {
             Label(title, systemImage: systemImage)
                 .foregroundStyle(isSelected ? (appColors?.accent ?? Color.accentColor) : (appColors?.foreground ?? Color.primary))
         }
-        .help("\(title) 보기")
+        .help(String(format: String(localized: "%@ 보기"), title))
         .keyboardShortcut(shortcut, modifiers: .command)
     }
 

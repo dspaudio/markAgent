@@ -75,7 +75,7 @@ struct RightSidebarView: View {
                 Image(systemName: "arrow.clockwise")
             }
             .buttonStyle(.plain)
-            .help("새로고침")
+            .help(String(localized: "새로고침"))
             .disabled(gitDiffState.isRefreshing)
         }
     }
@@ -103,9 +103,9 @@ private enum RightSidebarTab: String, CaseIterable, Identifiable {
     var title: String {
         switch self {
         case .gitChanges:
-            return "Git 변경 파일"
+            return String(localized: "Git 변경 파일")
         case .snippets:
-            return "스니펫"
+            return String(localized: "스니펫")
         }
     }
 

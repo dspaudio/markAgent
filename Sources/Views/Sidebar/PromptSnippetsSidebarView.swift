@@ -42,11 +42,11 @@ struct PromptSnippetsSidebarView: View {
             Button {
                 editor = PromptSnippetEditorState(snippet: nil)
             } label: {
-                Label("추가", systemImage: "plus")
+                Label(String(localized: "추가"), systemImage: "plus")
                     .labelStyle(.iconOnly)
             }
             .buttonStyle(.plain)
-            .help("스니펫 추가")
+            .help(String(localized: "스니펫 추가"))
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
@@ -93,7 +93,7 @@ struct PromptSnippetsSidebarView: View {
                 Image(systemName: "pencil")
             }
             .buttonStyle(.plain)
-            .help("편집")
+            .help(String(localized: "편집"))
 
             Button {
                 snippetPendingDeletion = snippet
@@ -101,7 +101,7 @@ struct PromptSnippetsSidebarView: View {
                 Image(systemName: "trash")
             }
             .buttonStyle(.plain)
-            .help("삭제")
+            .help(String(localized: "삭제"))
         }
         .padding(.horizontal, 8)
         .padding(.vertical, 7)
@@ -110,7 +110,7 @@ struct PromptSnippetsSidebarView: View {
         .onTapGesture {
             copy(snippet)
         }
-        .help("클릭해서 스니펫 복사")
+        .help(String(localized: "클릭해서 스니펫 복사"))
     }
 
     private var deleteAlertBinding: Binding<Bool> {
@@ -187,7 +187,7 @@ private struct PromptSnippetEditorView: View {
 
     private var header: some View {
         HStack(spacing: 8) {
-            Text(state.snippet == nil ? "스니펫 추가" : "스니펫 편집")
+            Text(LocalizedStringKey(state.snippet == nil ? "스니펫 추가" : "스니펫 편집"))
                 .font(.system(size: 13, weight: .bold))
             Spacer()
             Button("취소") {

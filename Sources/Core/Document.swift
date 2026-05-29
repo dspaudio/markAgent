@@ -50,7 +50,7 @@ final class MarkdownDocument {
             }
         } catch {
             isLoaded = false
-            errorMessage = "파일을 읽을 수 없습니다: \(error.localizedDescription)"
+            errorMessage = String(format: String(localized: "파일을 읽을 수 없습니다: %@"), error.localizedDescription)
         }
     }
 
@@ -158,9 +158,9 @@ enum DocumentError: LocalizedError, Equatable {
     var errorDescription: String? {
         switch self {
         case .fileNotFound(let path):
-            return "파일을 찾을 수 없습니다: \(path)"
+            return String(format: String(localized: "파일을 찾을 수 없습니다: %@"), path)
         case .noFileSpecified:
-            return "사용법: ma <파일경로>"
+            return String(localized: "사용법: ma <파일경로>")
         }
     }
 }

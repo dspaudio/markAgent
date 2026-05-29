@@ -88,7 +88,7 @@ private struct EditorStatusBar: View {
         if let fileURL {
             return fileURL.path
         }
-        return "Untitled"
+        return String(localized: "Untitled")
     }
 }
 
@@ -127,11 +127,11 @@ enum MarkdownEditingController {
                     .joined(separator: "\n")
             }
         case .bold:
-            wrapSelection(prefix: "**", suffix: "**", placeholder: "굵은 텍스트", in: document, selectedRange: selectedRange, range: safeRange)
+            wrapSelection(prefix: "**", suffix: "**", placeholder: String(localized: "굵은 텍스트"), in: document, selectedRange: selectedRange, range: safeRange)
         case .italic:
-            wrapSelection(prefix: "*", suffix: "*", placeholder: "기울임 텍스트", in: document, selectedRange: selectedRange, range: safeRange)
+            wrapSelection(prefix: "*", suffix: "*", placeholder: String(localized: "기울임 텍스트"), in: document, selectedRange: selectedRange, range: safeRange)
         case .link:
-            wrapSelection(prefix: "[", suffix: "](url)", placeholder: "링크", in: document, selectedRange: selectedRange, range: safeRange)
+            wrapSelection(prefix: "[", suffix: "](url)", placeholder: String(localized: "링크"), in: document, selectedRange: selectedRange, range: safeRange)
         case .unorderedList:
             prefixSelectedLines("- ", in: document, selectedRange: selectedRange, range: safeRange)
         case .orderedList:
@@ -141,7 +141,7 @@ enum MarkdownEditingController {
         case .quote:
             prefixSelectedLines("> ", in: document, selectedRange: selectedRange, range: safeRange)
         case .inlineCode:
-            wrapSelection(prefix: "`", suffix: "`", placeholder: "code", in: document, selectedRange: selectedRange, range: safeRange)
+            wrapSelection(prefix: "`", suffix: "`", placeholder: String(localized: "code"), in: document, selectedRange: selectedRange, range: safeRange)
         }
     }
 
@@ -210,16 +210,16 @@ private struct InlineEditToolbar: View {
 
     var body: some View {
         HStack(spacing: 4) {
-            toolbarButton("H", help: "제목", action: .heading)
-            toolbarButton("B", help: "굵게", action: .bold)
-            toolbarButton("I", help: "기울임", action: .italic)
+            toolbarButton("H", help: String(localized: "제목"), action: .heading)
+            toolbarButton("B", help: String(localized: "굵게"), action: .bold)
+            toolbarButton("I", help: String(localized: "기울임"), action: .italic)
                 .italic()
-            toolbarButton(systemImage: "link", help: "링크", action: .link)
-            toolbarButton(systemImage: "list.bullet", help: "글머리 기호", action: .unorderedList)
-            toolbarButton(systemImage: "list.number", help: "번호 목록", action: .orderedList)
-            toolbarButton(systemImage: "checklist", help: "체크리스트", action: .checklist)
-            toolbarButton(systemImage: "quote.opening", help: "인용", action: .quote)
-            toolbarButton(systemImage: "chevron.left.forwardslash.chevron.right", help: "인라인 코드", action: .inlineCode)
+            toolbarButton(systemImage: "link", help: String(localized: "링크"), action: .link)
+            toolbarButton(systemImage: "list.bullet", help: String(localized: "글머리 기호"), action: .unorderedList)
+            toolbarButton(systemImage: "list.number", help: String(localized: "번호 목록"), action: .orderedList)
+            toolbarButton(systemImage: "checklist", help: String(localized: "체크리스트"), action: .checklist)
+            toolbarButton(systemImage: "quote.opening", help: String(localized: "인용"), action: .quote)
+            toolbarButton(systemImage: "chevron.left.forwardslash.chevron.right", help: String(localized: "인라인 코드"), action: .inlineCode)
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 9)

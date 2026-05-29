@@ -35,6 +35,7 @@
 31. [세션 31: 닫기 확인 및 About 탭 개선과 v1.2.4 릴리즈](#세션-31-닫기-확인-및-about-탭-개선과-v124-릴리즈)
 32. [세션 32: GitHub식 Diff 탭, 사이드바 토글 및 v1.3.0 릴리즈](#세션-32-github식-diff-탭-사이드바-토글-및-v130-릴리즈)
 33. [세션 33: 우측 스니펫 사이드바, Markdown preview 안정화 및 v1.4.0 릴리즈](#세션-33-우측-스니펫-사이드바-markdown-preview-안정화-및-v140-릴리즈)
+34. [세션 34: 앱 국제화 및 v1.4.1 릴리즈](#세션-34-앱-국제화-및-v141-릴리즈)
 
 ---
 
@@ -92,6 +93,7 @@
 | 48 | 닫기 확인 및 About 탭 개선과 v1.2.4 릴리즈 | 터미널/수정 문서 닫기 확인 UX, About 탭 전환, 오픈소스 원 저작자/클릭 가능한 링크 표시, 앱 번들 버전 1.2.4 갱신 |
 | 49 | GitHub식 Diff 탭, 사이드바 토글 및 v1.3.0 릴리즈 | 전체 변경 파일 diff 탭, 파일별 증감 요약, 왼쪽 사이드바 토글/설정/View 메뉴 제어, 앱 번들 버전 1.3.0 갱신 |
 | 50 | 우측 스니펫 사이드바, Markdown preview 안정화 및 v1.4.0 릴리즈 | 저장형 프롬프트 스니펫 사이드바, non-Git 우측 사이드바 접근, 표 렌더링 보강, Preview↔Raw Edit 메모리 반환 개선, 앱 번들 버전 1.4.0 갱신 |
+| 51 | 앱 국제화 및 v1.4.1 릴리즈 | 영어 기본 UI와 한국어 로컬라이제이션 리소스 추가, 메뉴/사이드바/Git/스니펫 문구 정리, 앱 번들 버전 1.4.1 갱신 |
 
 ---
 
@@ -1823,6 +1825,44 @@ Git 변경 파일 우측 사이드바를 스니펫 탭까지 확장하고, Markd
 
 **응답:**
 명시 버전 `1.4.0`으로 앱 번들 버전을 갱신하고, README 기능 소개와 `history.md` 세션 기록을 이번 우측 스니펫 사이드바/Markdown preview 안정화 변경에 맞게 업데이트한 뒤 릴리즈 빌드, 커밋/푸시, GitHub Release, main 대상 PR 생성 및 머지를 진행.
+
+변경 파일: `Sources/App/Info.plist`, `README.md`, `history.md`
+
+---
+
+## 세션 34: 앱 국제화 및 v1.4.1 릴리즈
+
+> 날짜: 2026-05-29
+> 경로: ~/workspace/markAgent
+
+앱 기본 인터페이스 언어를 영어로 정리하고, macOS 언어가 한국어일 때 한국어 리소스를 사용하도록 `v1.4.1` 패치 릴리즈를 준비.
+
+### 대화 1: 앱 국제화 및 메뉴 문구 보정
+
+**사용자:**
+> 앱을 국제화 하려고해. 기본 인터페이스 언어는 영어로 해줘. 특시 새 탭 열기 창의 내용, 오른쪽 사이드바, 왼쪽 사이드 바, 스니펫 관련, Git 관련 처리에 한국어가 있는데, 영어로 변경해야 해. 그리고 한국어 리소스를 따로 만들어서 현재 macOS의 언어가 한국어일 때 모든 텍스트 리소스가 한국어로 표시되어야 해. 일단은 이 두개의 언어만 작업하자.
+
+**응답:**
+`en.lproj`와 `ko.lproj`의 `Localizable.strings`를 추가하고, `Info.plist`에 `CFBundleDevelopmentRegion`과 `CFBundleLocalizations`를 선언했다. 새 탭 chooser, 좌/우 사이드바, 스니펫, Git 변경/브랜치/초기화, Diff, 에디터 툴바, 메뉴, 설정/About, 저장/닫기 확인창 문자열을 `String(localized:)` 또는 SwiftUI localization 경로로 연결했다. 이후 한국어 메뉴 문구 요청에 맞춰 `구성 다시 로드`를 `설정 다시 반영`, `Ghostty 구성 열기`를 `Ghostty 설정 열기`로 보정했다.
+
+검증:
+- `plutil -lint` — 성공
+- `swift build` — 성공
+- `swift test` — 37개 통과
+- `scripts/bundle.sh` — 성공, `.app` 리소스에 `en.lproj`, `ko.lproj` 포함 확인
+- Oracle review — PASS
+
+변경 파일: `Sources/App/Info.plist`, `Sources/App/Resources/en.lproj/Localizable.strings`, `Sources/App/Resources/ko.lproj/Localizable.strings`, `Sources/App/AboutView.swift`, `Sources/App/AppDelegate.swift`, `Sources/App/AppDirtyDocumentPrompter.swift`, `Sources/App/PreferencesView.swift`, `Sources/App/TitlebarStatusView.swift`, `Sources/App/main.swift`, `Sources/Core/Document.swift`, `Sources/Core/GitDiffState.swift`, `Sources/Core/GitRepositoryStatus.swift`, `Sources/Rendering/CodeHighlighter.swift`, `Sources/Rendering/MarkdownImage.swift`, `Sources/Views/ContentView.swift`, `Sources/Views/DiffOverlayView.swift`, `Sources/Views/EditorView.swift`, `Sources/Views/Main/TabBarView.swift`, `Sources/Views/RecentDocumentsSidebar.swift`, `Sources/Views/Sidebar/FileBrowserSidebar.swift`, `Sources/Views/Sidebar/FileEntryRow.swift`, `Sources/Views/Sidebar/PromptSnippetsSidebarView.swift`, `Sources/Views/Sidebar/RecentDocumentsSection.swift`, `Sources/Views/Sidebar/RightSidebarView.swift`, `Sources/Views/Tabs/GitDiffTabView.swift`, `Sources/Views/Tabs/MarkdownTabView.swift`
+
+---
+
+### 대화 2: `/release-build 1.4.1`
+
+**사용자:**
+> /release-build 1.4.1
+
+**응답:**
+명시 버전 `1.4.1`로 앱 번들 버전을 갱신하고, README 기능 소개와 `history.md` 세션 기록을 이번 국제화 변경분에 맞게 업데이트한 뒤 릴리즈 빌드, 커밋/푸시, GitHub Release, main 대상 PR 생성 및 머지를 진행.
 
 변경 파일: `Sources/App/Info.plist`, `README.md`, `history.md`
 

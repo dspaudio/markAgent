@@ -56,7 +56,7 @@ struct GitDiffTabView: View {
                     .frame(width: 24, height: 24)
             }
             .buttonStyle(.plain)
-            .help("새로고침")
+            .help(String(localized: "새로고침"))
             .disabled(state.isRefreshing || state.repositoryRoot == nil)
         }
         .padding(.horizontal, 16)
@@ -110,8 +110,8 @@ struct GitDiffTabView: View {
         let fileCount = state.changedFiles.count
         let addedCount = state.fileDiffs.reduce(0) { $0 + $1.diffResult.addedCount }
         let removedCount = state.fileDiffs.reduce(0) { $0 + $1.diffResult.removedCount }
-        let repositoryName = state.repositoryRoot?.lastPathComponent ?? "Git 저장소"
-        return "\(repositoryName) · \(fileCount)개 파일 · +\(addedCount) -\(removedCount)"
+        let repositoryName = state.repositoryRoot?.lastPathComponent ?? String(localized: "Git 저장소")
+        return String(format: String(localized: "%@ · %@개 파일 · +%@ -%@"), repositoryName, "\(fileCount)", "\(addedCount)", "\(removedCount)")
     }
 
     private func scrollToFocusedFile(with proxy: ScrollViewProxy, animated: Bool) {
