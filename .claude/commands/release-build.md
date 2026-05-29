@@ -51,7 +51,9 @@
 5. **릴리즈 빌드 검증 필수**
    - `swift test`
    - `scripts/bundle.sh release`
-   - zip 생성 및 SHA-256 계산
+   - `scripts/bundle.sh release`가 생성한 `MarkAgent-v<version>.zip`의 압축 해제 후 `codesign`/`spctl` 검증 통과 확인
+   - `scripts/bundle.sh release` 출력의 SHA-256 기록
+   - GitHub 업로드 전 `zip -r` 등으로 릴리스 ZIP을 다시 만들지 마세요.
 
 6. **Git 작업은 원자적으로**
    - 의미가 다른 변경은 여러 커밋으로 나누세요.
@@ -100,8 +102,26 @@
 
 - `scripts/bundle.sh release`
 - `.build/MarkAgent.app` 생성 확인
-- `MarkAgent-v<version>.zip` 생성
-- SHA-256 계산
+- `MarkAgent-v<version>.zip` 생성 확인
+- 압축 해제된 앱의 서명/Gatekeeper 검증 결과 확인
+- SHA-256 기록
+
+`scripts/bundle.sh release`는 기본적으로 Developer ID 서명과 공증을 요구합니다. 유지보수자는 공증 자격 증명 방식 중 하나를 설정해야 합니다.
+
+```bash
+MARKAGENT_NOTARY_PROFILE="notarytool-profile" scripts/bundle.sh release
+```
+
+또는:
+
+```bash
+MARKAGENT_NOTARY_APPLE_ID="..." \
+MARKAGENT_NOTARY_TEAM_ID="..." \
+MARKAGENT_NOTARY_PASSWORD="..." \
+scripts/bundle.sh release
+```
+
+서명/공증 없는 로컬 확인이 필요할 때만 `MARKAGENT_CODESIGN=0` 또는 `MARKAGENT_NOTARIZE=0`을 사용하고, 이 산출물은 GitHub Release에 업로드하지 마세요.
 
 ### 6. 원격 반영
 
