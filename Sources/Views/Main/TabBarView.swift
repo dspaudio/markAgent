@@ -22,7 +22,7 @@ struct TabBarView: View {
             }
             .buttonStyle(.plain)
             .foregroundStyle(isLeftSidebarVisible ? (appColors?.accent ?? Color.accentColor) : (appColors?.foreground ?? Color.primary))
-            .help(isLeftSidebarVisible ? "왼쪽 사이드바 숨기기" : "왼쪽 사이드바 표시")
+            .help(isLeftSidebarVisible ? String(localized: "왼쪽 사이드바 숨기기") : String(localized: "왼쪽 사이드바 표시"))
             .padding(.leading, 8)
 
             ScrollView(.horizontal, showsIndicators: false) {
@@ -65,7 +65,7 @@ struct TabBarView: View {
                     .buttonStyle(.plain)
                     .padding(.leading, 4)
                     .padding(.trailing, 8)
-                    .help("새 탭")
+                    .help(String(localized: "새 탭"))
                 }
             }
 
@@ -82,7 +82,7 @@ struct TabBarView: View {
                 ? (appColors?.accent ?? Color.accentColor)
                 : (appColors?.foreground ?? Color.primary)
             )
-            .help(isDiffVisible ? "오른쪽 사이드바 숨기기" : "오른쪽 사이드바 표시")
+            .help(isDiffVisible ? String(localized: "오른쪽 사이드바 숨기기") : String(localized: "오른쪽 사이드바 표시"))
             .padding(.trailing, 8)
         }
         .background(appColors?.background ?? Color(nsColor: .windowBackgroundColor))
