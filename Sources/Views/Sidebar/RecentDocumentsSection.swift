@@ -95,7 +95,7 @@ private struct RecentDocumentRow: View {
                 }
                 .buttonStyle(.plain)
                 .foregroundStyle(.tertiary)
-                .help("최근 문서에서 제거")
+                .help(String(localized: "최근 문서에서 제거"))
             }
             .padding(.horizontal, 8)
             .padding(.vertical, 5)
