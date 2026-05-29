@@ -3,13 +3,17 @@
 #
 # 사용법:
 #   scripts/bundle.sh              # debug 빌드 + 번들 생성
-#   scripts/bundle.sh release      # release 빌드 + 번들 생성 + 가능한 경우 Developer ID 서명
+#   scripts/bundle.sh release      # release 빌드 + Developer ID 서명 + ZIP 생성/검증
 #   scripts/bundle.sh install      # release 빌드 + 서명 + ~/Applications 설치 + CLI 심볼릭 링크
 #
 # 서명 제어:
 #   MARKAGENT_CODESIGN=0 scripts/bundle.sh release
-#   MARKAGENT_CODESIGN=1 scripts/bundle.sh release  # 서명 ID가 없으면 실패
 #   MARKAGENT_SIGN_IDENTITY="Developer ID Application: ..." scripts/bundle.sh release
+#
+# 공증 제어:
+#   MARKAGENT_NOTARIZE=1 scripts/bundle.sh release
+#   MARKAGENT_NOTARY_PROFILE="notarytool-profile" scripts/bundle.sh release
+#   MARKAGENT_NOTARY_APPLE_ID="..." MARKAGENT_NOTARY_TEAM_ID="..." MARKAGENT_NOTARY_PASSWORD="..." scripts/bundle.sh release
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -26,6 +30,14 @@ fi
 BUNDLE_DIR="$PROJECT_DIR/.build/${APP_NAME}.app"
 CONTENTS_DIR="$BUNDLE_DIR/Contents"
 MACOS_DIR="$CONTENTS_DIR/MacOS"
+
+app_version() {
+    /usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$PROJECT_DIR/Sources/App/Info.plist"
+}
+
+release_zip_path() {
+    echo "$PROJECT_DIR/${APP_NAME}-v$(app_version).zip"
+}
 
 # 빌드
 echo "Building ($CONFIG)..."
@@ -46,6 +58,30 @@ fi
 
 should_codesign() {
     [ "$ACTION" = "release" ] || [ "$ACTION" = "install" ]
+}
+
+requires_codesign() {
+    [ "$ACTION" = "release" ] && [ "${MARKAGENT_CODESIGN:-auto}" != "0" ]
+}
+
+has_notary_credentials() {
+    [ -n "${MARKAGENT_NOTARY_PROFILE:-}" ] || {
+        [ -n "${MARKAGENT_NOTARY_APPLE_ID:-}" ] \
+            && [ -n "${MARKAGENT_NOTARY_TEAM_ID:-}" ] \
+            && [ -n "${MARKAGENT_NOTARY_PASSWORD:-}" ]
+    }
+}
+
+should_notarize() {
+    [ "${MARKAGENT_NOTARIZE:-auto}" = "1" ] || {
+        [ "${MARKAGENT_NOTARIZE:-auto}" = "auto" ] && has_notary_credentials
+    }
+}
+
+requires_notarization() {
+    [ "$ACTION" = "release" ] \
+        && [ "${MARKAGENT_CODESIGN:-auto}" != "0" ] \
+        && [ "${MARKAGENT_NOTARIZE:-auto}" != "0" ]
 }
 
 has_codesign_identity() {
@@ -72,8 +108,9 @@ sign_bundle() {
     fi
 
     if [ -z "$identity" ]; then
-        if [ "${MARKAGENT_CODESIGN:-auto}" = "1" ]; then
+        if requires_codesign || [ "${MARKAGENT_CODESIGN:-auto}" = "1" ]; then
             echo "error: Developer ID Application signing identity not found" >&2
+            echo "Set MARKAGENT_SIGN_IDENTITY or use MARKAGENT_CODESIGN=0 for a local unsigned build." >&2
             exit 1
         fi
 
@@ -82,8 +119,9 @@ sign_bundle() {
     fi
 
     if ! has_codesign_identity "$identity"; then
-        if [ "${MARKAGENT_CODESIGN:-auto}" = "1" ]; then
+        if requires_codesign || [ "${MARKAGENT_CODESIGN:-auto}" = "1" ]; then
             echo "error: code signing identity not found: $identity" >&2
+            echo "Set MARKAGENT_SIGN_IDENTITY to a valid Developer ID Application identity." >&2
             exit 1
         fi
 
@@ -98,8 +136,105 @@ sign_bundle() {
     echo "✓ signed $BUNDLE_DIR"
 }
 
+notarytool_submit() {
+    local zip_path="$1"
+
+    if [ -n "${MARKAGENT_NOTARY_PROFILE:-}" ]; then
+        xcrun notarytool submit "$zip_path" --wait --keychain-profile "$MARKAGENT_NOTARY_PROFILE"
+        return
+    fi
+
+    if [ -n "${MARKAGENT_NOTARY_APPLE_ID:-}" ] && [ -n "${MARKAGENT_NOTARY_TEAM_ID:-}" ] && [ -n "${MARKAGENT_NOTARY_PASSWORD:-}" ]; then
+        xcrun notarytool submit "$zip_path" \
+            --wait \
+            --apple-id "$MARKAGENT_NOTARY_APPLE_ID" \
+            --team-id "$MARKAGENT_NOTARY_TEAM_ID" \
+            --password "$MARKAGENT_NOTARY_PASSWORD"
+        return
+    fi
+
+    return 1
+}
+
+create_release_zip() {
+    local zip_path="$1"
+    rm -f "$zip_path"
+    COPYFILE_DISABLE=1 ditto -c -k --keepParent --zlibCompressionLevel 9 "$BUNDLE_DIR" "$zip_path"
+}
+
+verify_release_zip() {
+    local zip_path="$1"
+    local tmpdir
+    tmpdir="$(mktemp -d /private/tmp/markagent-release.XXXXXX)"
+
+    ditto -x -k "$zip_path" "$tmpdir"
+    if find "$tmpdir/${APP_NAME}.app" -name '._*' -print -quit | grep -q .; then
+        rm -rf "$tmpdir"
+        echo "error: ZIP contains AppleDouble metadata inside ${APP_NAME}.app" >&2
+        exit 1
+    fi
+
+    if [ "${MARKAGENT_CODESIGN:-auto}" != "0" ]; then
+        codesign --verify --deep --strict --verbose=2 "$tmpdir/${APP_NAME}.app"
+        if requires_notarization; then
+            spctl --assess --type execute --verbose=4 "$tmpdir/${APP_NAME}.app"
+        fi
+    fi
+
+    rm -rf "$tmpdir"
+    echo "✓ verified extracted ZIP"
+}
+
+notarize_bundle() {
+    if ! should_notarize; then
+        if requires_notarization; then
+            echo "error: notarization credentials not configured for release build" >&2
+            echo "Set MARKAGENT_NOTARY_PROFILE, use MARKAGENT_NOTARIZE=0 for a signed but non-notarized local build, or MARKAGENT_CODESIGN=0 for a local unsigned build." >&2
+            exit 1
+        fi
+
+        echo "Notarization skipped."
+        return
+    fi
+
+    if [ "${MARKAGENT_CODESIGN:-auto}" = "0" ]; then
+        echo "error: notarization requires Developer ID signing" >&2
+        exit 1
+    fi
+
+    if ! has_notary_credentials; then
+        echo "error: notarization credentials not configured" >&2
+        echo "Set MARKAGENT_NOTARY_PROFILE or MARKAGENT_NOTARY_APPLE_ID/MARKAGENT_NOTARY_TEAM_ID/MARKAGENT_NOTARY_PASSWORD." >&2
+        exit 1
+    fi
+
+    local zip_path
+    zip_path="$(release_zip_path)"
+
+    create_release_zip "$zip_path"
+    notarytool_submit "$zip_path"
+    xcrun stapler staple "$BUNDLE_DIR"
+    xcrun stapler validate "$BUNDLE_DIR"
+    codesign --verify --deep --strict --verbose=2 "$BUNDLE_DIR"
+    echo "✓ notarized $BUNDLE_DIR"
+}
+
+package_release() {
+    local zip_path
+    zip_path="$(release_zip_path)"
+    create_release_zip "$zip_path"
+    verify_release_zip "$zip_path"
+    shasum -a 256 "$zip_path"
+    echo "✓ $zip_path"
+}
+
 if should_codesign; then
     sign_bundle
+fi
+
+if [ "$ACTION" = "release" ]; then
+    notarize_bundle
+    package_release
 fi
 
 echo "✓ $BUNDLE_DIR"

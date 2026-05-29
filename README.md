@@ -140,6 +140,18 @@ Create a release bundle:
 scripts/bundle.sh release
 ```
 
+Release builds are intended for maintainers with a Developer ID certificate and Apple notarization credentials. The script signs, notarizes when credentials are configured, creates `MarkAgent-v<version>.zip` with `ditto`, verifies the extracted app, and prints the SHA-256 checksum.
+
+```bash
+MARKAGENT_NOTARY_PROFILE="notarytool-profile" scripts/bundle.sh release
+```
+
+For local unsigned testing only:
+
+```bash
+MARKAGENT_CODESIGN=0 scripts/bundle.sh release
+```
+
 Install the app bundle to `~/Applications`:
 
 ```bash

@@ -37,6 +37,7 @@
 33. [세션 33: 우측 스니펫 사이드바, Markdown preview 안정화 및 v1.4.0 릴리즈](#세션-33-우측-스니펫-사이드바-markdown-preview-안정화-및-v140-릴리즈)
 34. [세션 34: 앱 국제화 및 v1.4.1 릴리즈](#세션-34-앱-국제화-및-v141-릴리즈)
 35. [세션 35: 번들 도움말, 코드 서명 릴리즈 빌드 및 v1.4.2 릴리즈](#세션-35-번들-도움말-코드-서명-릴리즈-빌드-및-v142-릴리즈)
+36. [세션 36: 공증 릴리스 자동화 보강 및 v1.4.2 재배포](#세션-36-공증-릴리스-자동화-보강-및-v142-재배포)
 
 ---
 
@@ -96,6 +97,7 @@
 | 50 | 우측 스니펫 사이드바, Markdown preview 안정화 및 v1.4.0 릴리즈 | 저장형 프롬프트 스니펫 사이드바, non-Git 우측 사이드바 접근, 표 렌더링 보강, Preview↔Raw Edit 메모리 반환 개선, 앱 번들 버전 1.4.0 갱신 |
 | 51 | 앱 국제화 및 v1.4.1 릴리즈 | 영어 기본 UI와 한국어 로컬라이제이션 리소스 추가, 메뉴/사이드바/Git/스니펫 문구 정리, 앱 번들 버전 1.4.1 갱신 |
 | 52 | 번들 도움말, 코드 서명 릴리즈 빌드 및 v1.4.2 릴리즈 | Help 메뉴에서 번들 README를 열도록 변경, release/install 번들 코드 서명 자동화, 앱 번들 버전 1.4.2 갱신 |
+| 53 | 공증 릴리스 자동화 보강 및 v1.4.2 재배포 | release 빌드에 Developer ID 서명, notarization, stapling, ditto ZIP 생성, 압축 해제 후 Gatekeeper 검증을 추가하고 GitHub Release v1.4.2 자산을 공증 ZIP으로 교체 |
 
 ---
 
@@ -1903,5 +1905,54 @@ Help 메뉴에서 프로젝트 문서를 바로 열 수 있도록 앱 번들에 
 `MarkAgent Help` 메뉴가 앱 번들 리소스의 `README.md`를 우선 열도록 변경하고, 번들 생성 시 프로젝트 루트의 `README.md`를 `Contents/Resources/README.md`로 복사하도록 했다. 앱 번들 버전을 `1.4.2`로 갱신하고 README 기능 소개와 히스토리 기록을 릴리즈 내용에 맞춰 업데이트한 뒤 릴리즈 빌드, GitHub Release, PR 생성/머지를 진행.
 
 변경 파일: `Sources/App/AppDelegate.swift`, `scripts/bundle.sh`, `Sources/App/Info.plist`, `README.md`, `history.md`
+
+---
+
+## 세션 36: 공증 릴리스 자동화 보강 및 v1.4.2 재배포
+
+> 날짜: 2026-05-29
+> 경로: ~/workspace/markAgent
+
+GitHub에서 다운로드한 `v1.4.2` 앱이 코드 서명/Gatekeeper 경고를 내는 문제를 확인하고, 릴리스 산출물이 공증과 압축 해제 후 검증을 통과하도록 배포 절차를 보강.
+
+### 대화 1: 코드 서명 경고 원인 확인
+
+**사용자:**
+> github에서 다운로드 받아서 실행했더니 코드 사인이 안되었다고 그러는데?
+
+**응답:**
+기존 `MarkAgent-v1.4.2.zip`을 압축 해제해 `codesign --verify --deep --strict`로 확인한 결과 서명이 깨져 있었고, `v1.4.1`은 ad-hoc 서명 상태임을 확인했다. `v1.4.2` ZIP 내부에는 `._*` AppleDouble 메타데이터가 섞여 있었고, 릴리스 흐름에 notarization/stapling과 압축 해제 후 검증이 빠져 있음을 정리했다.
+
+변경 파일: 없음
+
+---
+
+### 대화 2: 릴리스 ZIP 생성/검증 및 공증 흐름 보강
+
+**사용자:**
+> 그러면 그렇게 해줘.
+
+**응답:**
+`scripts/bundle.sh release`가 Developer ID 서명, notarization, stapling, `ditto` 기반 ZIP 생성, 압축 해제 후 `codesign`/`spctl` 검증, SHA-256 출력을 수행하도록 보강했다. 공증 자격 증명이 없는 배포용 release는 실패하도록 하고, 로컬 확인용 opt-out은 `MARKAGENT_NOTARIZE=0` 또는 `MARKAGENT_CODESIGN=0`으로 명시하게 했다. README와 프로젝트 로컬 release-build 명령 문서에도 공증 자격 증명과 GitHub 업로드 전 검증 규칙을 반영했다.
+
+검증:
+- `bash -n scripts/bundle.sh` — 성공
+- `git diff --check` — 성공
+- `scripts/bundle.sh release` — 공증 자격 증명 없을 때 의도대로 실패
+- `MARKAGENT_NOTARIZE=0 scripts/bundle.sh release` — 서명된 비공증 로컬 ZIP 생성 및 압축 해제 후 `codesign` 검증 성공
+
+변경 파일: `scripts/bundle.sh`, `README.md`, `.claude/commands/release-build.md`
+
+---
+
+### 대화 3: 공증 프로필 설정 후 v1.4.2 릴리스 자산 교체
+
+**사용자:**
+> 프로필 저장됐어.
+
+**응답:**
+`markagent` notarytool 프로필을 사용해 `MARKAGENT_NOTARY_PROFILE=markagent scripts/bundle.sh release`를 실행했고, Apple notary service 제출 `5818eaff-0c14-4296-9904-799da0d8cf31`이 `Accepted` 상태가 됐다. `.build/MarkAgent.app`에 stapling/validation을 수행한 뒤 `MarkAgent-v1.4.2.zip`을 생성하고, 압축 해제한 앱이 `spctl --assess --type execute`에서 `source=Notarized Developer ID`로 통과하는 것을 확인했다. GitHub Release `v1.4.2`의 기존 ZIP 자산을 새 공증 ZIP으로 교체하고 릴리스 노트 SHA-256을 `717fda3cf5c913e863c029d044824b6eb83f469aab51778c2726171f70a86cfc`로 갱신했다.
+
+변경 파일: 없음
 
 ---
