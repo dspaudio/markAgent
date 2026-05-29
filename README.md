@@ -43,6 +43,7 @@ MarkAgent is a visual bridge for that workflow.
 - **About and licenses:** Opens About as an in-app tab with app version, repository link, and open source package attribution, including original authors and clickable repository links.
 - **Recent documents:** Reopen frequently used Markdown documents from the recent documents list.
 - **App launch file opening:** Opening the app with a file path, including `.app --args` launches, resolves the target file directly into a markdown tab.
+- **English and Korean interface:** Uses English as the default UI language and switches to Korean through macOS localization resources, covering menus, sidebars, Git/Diff screens, snippets, settings, About, and document prompts.
 - **macOS app bundle:** Runs as a `.app` bundle with Dock, menu bar, Cmd+Tab, and normal macOS window behavior.
 
 ## Terminal Workflow
@@ -234,6 +235,7 @@ MarkAgent는 이 흐름을 위해 만든 비주얼 브릿지입니다.
 - **About 및 라이선스:** About을 앱 내부 탭으로 열고 앱 버전, 저장소 링크, 오픈소스 패키지별 원 저작자와 클릭 가능한 저장소 링크를 표시합니다.
 - **최근 문서:** 자주 여는 Markdown 문서를 최근 문서 목록에서 다시 열 수 있습니다.
 - **앱 실행 시 파일 열기:** `.app --args` 또는 CLI wrapper로 파일 경로를 넘겨 실행했을 때 대상 파일을 바로 Markdown 탭으로 엽니다.
+- **영어/한국어 인터페이스:** 기본 UI 언어는 영어로 제공하고, macOS 언어가 한국어일 때는 메뉴, 사이드바, Git/Diff 화면, 스니펫, 설정, About, 문서 확인창까지 한국어 리소스로 표시합니다.
 - **macOS 앱 번들:** Dock, 메뉴바, Cmd+Tab, 일반 macOS 윈도우 동작을 지원하는 `.app` 번들로 실행됩니다.
 
 ## 터미널 워크플로우
