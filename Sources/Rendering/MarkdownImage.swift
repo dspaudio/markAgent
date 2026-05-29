@@ -61,7 +61,7 @@ struct MarkdownImagePreview: View {
                 }
 
             if reference.isMissing {
-                Label("이미지를 찾을 수 없습니다: \(reference.displayPath)", systemImage: "exclamationmark.triangle")
+                Label(String(format: String(localized: "이미지를 찾을 수 없습니다: %@"), reference.displayPath), systemImage: "exclamationmark.triangle")
                     .font(.caption)
                     .foregroundStyle(.red)
                     .textSelection(.enabled)
@@ -99,7 +99,7 @@ struct MarkdownImagePreview: View {
                 .contentShape(RoundedRectangle(cornerRadius: 6))
                 .onHover { hovering in isHovering = hovering }
                 .onTapGesture(perform: openImage)
-                .help("클릭해서 이미지 열기")
+                .help(String(localized: "클릭해서 이미지 열기"))
         } else if let url = reference.resolvedURL {
             AsyncImage(url: url) { phase in
                 switch phase {
@@ -119,7 +119,7 @@ struct MarkdownImagePreview: View {
             .contentShape(RoundedRectangle(cornerRadius: 6))
             .onHover { hovering in isHovering = hovering }
             .onTapGesture(perform: openImage)
-            .help("클릭해서 이미지 열기")
+            .help(String(localized: "클릭해서 이미지 열기"))
         } else {
             missingSurface
         }
@@ -130,7 +130,7 @@ struct MarkdownImagePreview: View {
             Image(systemName: "photo.badge.exclamationmark")
                 .font(.title3)
             VStack(alignment: .leading, spacing: 2) {
-                Text(reference.altText.isEmpty ? "깨진 이미지" : reference.altText)
+                Text(reference.altText.isEmpty ? String(localized: "깨진 이미지") : reference.altText)
                     .font(.callout.weight(.medium))
                 Text(reference.displayPath)
                     .font(.caption.monospaced())

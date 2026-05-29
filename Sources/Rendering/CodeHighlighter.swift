@@ -71,7 +71,7 @@ struct HighlightedCodeBlock: View {
             .clipShape(Capsule())
         }
         .buttonStyle(.plain)
-        .help("코드 복사")
+        .help(String(localized: "코드 복사"))
         .padding(8)
         .onHover { hovering in
             isHoveringBadge = hovering
