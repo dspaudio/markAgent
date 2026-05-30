@@ -69,8 +69,8 @@ private extension AgentTimelineEventKind {
             return "doc.text"
         case .gitDiff:
             return "arrow.left.arrow.right.circle"
-        case .commit:
-            return "number.square"
+        case .changeSummary:
+            return "list.clipboard"
         }
     }
 
@@ -82,7 +82,7 @@ private extension AgentTimelineEventKind {
             return .blue
         case .gitDiff:
             return .orange
-        case .commit:
+        case .changeSummary:
             return .purple
         }
     }

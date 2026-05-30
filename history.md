@@ -40,6 +40,7 @@
 36. [세션 36: 공증 릴리스 자동화 보강 및 v1.4.2 재배포](#세션-36-공증-릴리스-자동화-보강-및-v142-재배포)
 37. [세션 37: 에이전트 검토 워크스페이스 1차 구현](#세션-37-에이전트-검토-워크스페이스-1차-구현)
 38. [세션 38: .agents Timeline persistence와 AI 요약 구현](#세션-38-agents-timeline-persistence와-ai-요약-구현)
+39. [세션 39: Timeline 공유 정책 논리 모순 수정](#세션-39-timeline-공유-정책-논리-모순-수정)
 
 ---
 
@@ -102,6 +103,7 @@
 | 53 | 공증 릴리스 자동화 보강 및 v1.4.2 재배포 | release 빌드에 Developer ID 서명, notarization, stapling, ditto ZIP 생성, 압축 해제 후 Gatekeeper 검증을 추가하고 GitHub Release v1.4.2 자산을 공증 ZIP으로 교체 |
 | 54 | 에이전트 검토 워크스페이스 1차 구현 | 에이전트 작업 타임라인, 마크다운-Git diff 연결 표시, 구현 플랜 문서와 테스트 추가 |
 | 55 | .agents Timeline persistence와 AI 요약 구현 | `.agents/timeline.jsonl` source of truth, `.agents/timeline.md` 요약, commit_created 이벤트와 HEAD 커밋 변경 요약 기록 구현 |
+| 56 | Timeline 공유 정책 논리 모순 수정 | post-commit `commit_created` 자동 기록을 제거하고, 커밋 전 공유 가능한 `change_summary` 중심으로 `.agents` Timeline 정책 정리 |
 
 ---
 
@@ -2052,5 +2054,61 @@ AI 연계와 append-friendly 특성을 고려해 단일 JSON 배열보다 JSONL�
 
 **응답:**
 커밋/푸시 전 필수 규칙에 따라 이번 세션의 주요 리뷰, 설계 논의, 구현 및 검증 내용을 `history.md`에 세션 38로 기록했다.
+
+변경 파일: `history.md`
+
+
+## 세션 39: Timeline 공유 정책 논리 모순 수정
+
+> 날짜: 2026-05-30
+> 경로: ~/workspace/markAgent
+
+`.agents` Timeline을 공유 가능한 작업 히스토리로 유지하려는 목적과 post-commit `commit_created` 자동 기록 사이의 논리 모순을 확인하고, 커밋 전에 포함 가능한 `change_summary` 중심 구조로 수정했다.
+
+### 대화 1: `.agents` runtime dirty 상태 문제 확인
+
+**사용자:**
+> 커밋 후에도 timeline 관련 데이터에 변경이 생겨서 해당 저장소의 상태가 지속적으로 unstage 상태가 되는 문제가 있어.
+
+**응답:**
+앱 실행 이후 `.agents/timeline.jsonl`, `.agents/timeline.md`가 untracked/dirty 상태가 되는 원인을 확인했다. 초기에는 runtime 파일을 ignore하는 방향을 검토했으나, 사용자가 `.agents` 전체를 공유 히스토리로 사용하려는 의도를 다시 설명하면서 ignore 방식은 목적과 맞지 않음을 확인했다.
+
+변경 파일: 없음
+
+---
+
+### 대화 2: `commit_created` 자기 참조 모순 정리
+
+**사용자:**
+> commit_created도 커밋 이전에 기록되어야 하는데?
+
+**응답:**
+`commit_created`에 현재 커밋 hash를 넣어 같은 커밋에 포함하는 것은 커밋 hash 계산 방식상 불가능하다는 점을 정리했다. 커밋 후 hash를 기록하면 다시 dirty가 되고, amend하면 hash가 바뀌는 자기 참조 모순이 생기므로 post-commit 자동 기록 모델을 제거하기로 했다.
+
+변경 파일: 없음
+
+---
+
+### 대화 3: `change_summary` 중심 공유 Timeline으로 수정
+
+**사용자:**
+> 논리 모순이 생겨
+
+**응답:**
+`AgentTimelineStore`에서 `commit_created`, HEAD snapshot 자동 기록, Git refresh 후 post-commit 기록 경로를 제거했다. 대신 공유 파일에는 커밋 전에 포함 가능한 `change_summary` 이벤트만 기록하도록 조정하고, `terminal_created`, `markdown_opened`, `git_diff_focused` 같은 런타임 UI 이벤트는 앱 내부 Timeline에만 남기도록 했다. `.agents/timeline.jsonl`과 `.agents/timeline.md`는 ignore하지 않고 공유 가능한 작업 요약 파일로 정리했다. 플랜/실행 문서도 `change_summary` 정책으로 업데이트했다.
+
+검증: `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer swift test --filter AgentTimelineStoreTests` 6개 통과, `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer swift test` 46개 통과, `git diff --check` 성공.
+
+변경 파일: `Sources/Core/AgentTimelineStore.swift`, `Sources/Views/Main/MainContainerView.swift`, `Sources/Views/Sidebar/AgentTimelineSidebarView.swift`, `Tests/MarkAgentTests/AgentTimelineStoreTests.swift`, `plans/agent-review-workspace-plan.md`, `plans/agent-review-workspace-execution.md`, `.agents/timeline.jsonl`, `.agents/timeline.md`
+
+---
+
+### 대화 4: 커밋 및 푸시
+
+**사용자:**
+> 커밋 & 푸시해줘
+
+**응답:**
+커밋/푸시 전 필수 규칙에 따라 이번 논리 모순 수정 내용을 `history.md`에 세션 39로 기록했다.
 
 변경 파일: `history.md`

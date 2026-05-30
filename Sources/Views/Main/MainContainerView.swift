@@ -227,7 +227,6 @@ struct MainContainerView: View {
         }
 
         timelineStore.configureRepositoryRoot(repositoryRoot)
-        timelineStore.recordLatestCommitIfNeeded(repositoryRoot: repositoryRoot)
     }
 
     private func createTerminalTab() {

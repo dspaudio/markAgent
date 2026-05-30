@@ -4,15 +4,7 @@ enum AgentTimelineEventKind: String, Codable, Equatable {
     case terminal = "terminal_created"
     case markdown = "markdown_opened"
     case gitDiff = "git_diff_focused"
-    case commit = "commit_created"
-}
-
-struct AgentTimelineCommit: Codable, Equatable {
-    let hash: String
-    let shortHash: String
-    let subject: String
-    let author: String
-    let committedAt: String
+    case changeSummary = "change_summary"
 }
 
 struct AgentTimelineChangedFile: Codable, Equatable {
@@ -27,11 +19,6 @@ struct AgentTimelineChanges: Codable, Equatable {
     let deletions: Int
 }
 
-struct AgentTimelineCommitSnapshot: Codable, Equatable {
-    let commit: AgentTimelineCommit
-    let changes: AgentTimelineChanges
-}
-
 struct AgentTimelineEvent: Identifiable, Codable, Equatable {
     let version: Int
     let id: UUID
@@ -41,7 +28,6 @@ struct AgentTimelineEvent: Identifiable, Codable, Equatable {
     let timestamp: Date
     let source: String
     let repositoryRoot: String?
-    let commit: AgentTimelineCommit?
     let changes: AgentTimelineChanges?
 
     init(
@@ -53,7 +39,6 @@ struct AgentTimelineEvent: Identifiable, Codable, Equatable {
         timestamp: Date,
         source: String = "MarkAgent",
         repositoryRoot: String? = nil,
-        commit: AgentTimelineCommit? = nil,
         changes: AgentTimelineChanges? = nil
     ) {
         self.version = version
@@ -64,7 +49,6 @@ struct AgentTimelineEvent: Identifiable, Codable, Equatable {
         self.timestamp = timestamp
         self.source = source
         self.repositoryRoot = repositoryRoot
-        self.commit = commit
         self.changes = changes
     }
 }
@@ -73,7 +57,7 @@ enum AgentTimelineAction {
     case terminalCreated(directory: URL)
     case markdownOpened(url: URL)
     case gitDiffFocused(relativePath: String)
-    case commitCreated(AgentTimelineCommitSnapshot)
+    case changeSummary(title: String, detail: String, changes: AgentTimelineChanges?)
 }
 
 @MainActor
@@ -84,7 +68,6 @@ final class AgentTimelineStore {
     private let limit: Int
     private let now: () -> Date
     private var repositoryRoot: URL?
-    private var commitSnapshotTask: Task<Void, Never>?
 
     init(limit: Int = 100, now: @escaping @autoclosure () -> Date = Date()) {
         self.limit = max(1, limit)
@@ -99,29 +82,14 @@ final class AgentTimelineStore {
         guard let standardizedRoot else { return }
         let loadedEvents = loadPersistedEvents(repositoryRoot: standardizedRoot)
         mergeLoadedEvents(loadedEvents)
-        regenerateMarkdownSummary()
     }
 
     func record(_ action: AgentTimelineAction) {
         let event = event(for: action)
         events.insert(event, at: 0)
         trimEventsToLimit()
-        persist(event)
-    }
-
-    func recordLatestCommitIfNeeded(repositoryRoot root: URL) {
-        let standardizedRoot = root.standardizedFileURL
-        configureRepositoryRoot(standardizedRoot)
-        commitSnapshotTask?.cancel()
-
-        commitSnapshotTask = Task { [standardizedRoot] in
-            let snapshot = await Task.detached(priority: .utility) {
-                try? Self.loadLatestCommitSnapshot(repositoryRoot: standardizedRoot)
-            }.value
-
-            guard !Task.isCancelled, let snapshot else { return }
-            guard !self.events.contains(where: { $0.commit?.hash == snapshot.commit.hash }) else { return }
-            self.record(.commitCreated(snapshot))
+        if event.shouldPersistToSharedTimeline {
+            persist(event)
         }
     }
 
@@ -153,15 +121,14 @@ final class AgentTimelineStore {
                 timestamp: now(),
                 repositoryRoot: repositoryRootPath
             )
-        case .commitCreated(let snapshot):
+        case .changeSummary(let title, let detail, let changes):
             return AgentTimelineEvent(
-                kind: .commit,
-                title: "커밋 생성",
-                detail: snapshot.commit.subject,
+                kind: .changeSummary,
+                title: title,
+                detail: detail,
                 timestamp: now(),
                 repositoryRoot: repositoryRootPath,
-                commit: snapshot.commit,
-                changes: snapshot.changes
+                changes: changes
             )
         }
     }
@@ -249,10 +216,10 @@ final class AgentTimelineStore {
         let formatter = ISO8601DateFormatter()
         let updatedAt = formatter.string(from: now())
         let repositoryName = repositoryRoot?.lastPathComponent ?? "Unknown Repository"
-        let recentEvents = Array(events.prefix(20))
-        let commitEvents = events.compactMap(\.commit).prefix(5)
+        let sharedEvents = events.filter(\.shouldPersistToSharedTimeline)
+        let recentEvents = Array(sharedEvents.prefix(20))
         let changedFiles = Array(
-            Set(events.flatMap { event in
+            Set(sharedEvents.flatMap { event in
                 event.changes?.files.map(\.path) ?? []
             })
         ).sorted()
@@ -268,11 +235,11 @@ final class AgentTimelineStore {
             ""
         ]
 
-        if commitEvents.isEmpty && changedFiles.isEmpty {
-            lines.append("- 아직 커밋 또는 변경 파일 요약이 없습니다.")
+        if recentEvents.isEmpty && changedFiles.isEmpty {
+            lines.append("- 아직 공유된 작업 요약이 없습니다.")
         } else {
-            for commit in commitEvents {
-                lines.append("- 커밋 `\(commit.shortHash)`: \(commit.subject)")
+            for event in recentEvents.prefix(5) {
+                lines.append("- \(event.detail)")
             }
             if !changedFiles.isEmpty {
                 lines.append("- 최근 변경 파일 \(changedFiles.count)개가 Timeline에 기록되었습니다.")
@@ -288,7 +255,7 @@ final class AgentTimelineStore {
         ]
 
         if recentEvents.isEmpty {
-            lines.append("| - | - | 기록된 이벤트가 없습니다. |")
+            lines.append("| - | - | 기록된 공유 이벤트가 없습니다. |")
         } else {
             for event in recentEvents {
                 let time = formatter.string(from: event.timestamp)
@@ -314,75 +281,6 @@ final class AgentTimelineStore {
         return lines.joined(separator: "\n")
     }
 
-    private nonisolated static func loadLatestCommitSnapshot(repositoryRoot: URL) throws -> AgentTimelineCommitSnapshot {
-        let logOutput = try runGit(
-            ["log", "-1", "--format=%H%x1f%h%x1f%s%x1f%an%x1f%cI"],
-            repositoryRoot: repositoryRoot
-        )
-        let parts = logOutput.trimmingCharacters(in: .whitespacesAndNewlines).split(separator: "\u{1F}", omittingEmptySubsequences: false)
-        guard parts.count >= 5 else {
-            throw AgentTimelineGitError.missingCommit
-        }
-
-        let files = try loadLatestCommitChangedFiles(repositoryRoot: repositoryRoot)
-        let changes = AgentTimelineChanges(
-            files: files,
-            insertions: files.reduce(0) { $0 + $1.insertions },
-            deletions: files.reduce(0) { $0 + $1.deletions }
-        )
-        let commit = AgentTimelineCommit(
-            hash: String(parts[0]),
-            shortHash: String(parts[1]),
-            subject: String(parts[2]),
-            author: String(parts[3]),
-            committedAt: String(parts[4])
-        )
-
-        return AgentTimelineCommitSnapshot(commit: commit, changes: changes)
-    }
-
-    private nonisolated static func loadLatestCommitChangedFiles(repositoryRoot: URL) throws -> [AgentTimelineChangedFile] {
-        let output = try runGit(["show", "--numstat", "--format=", "--no-renames", "HEAD"], repositoryRoot: repositoryRoot)
-        return output
-            .split(whereSeparator: \.isNewline)
-            .compactMap { line -> AgentTimelineChangedFile? in
-                let parts = line.split(separator: "\t", maxSplits: 2, omittingEmptySubsequences: false)
-                guard parts.count == 3 else { return nil }
-                return AgentTimelineChangedFile(
-                    path: String(parts[2]),
-                    insertions: Int(parts[0]) ?? 0,
-                    deletions: Int(parts[1]) ?? 0
-                )
-            }
-    }
-
-    private nonisolated static func runGit(_ arguments: [String], repositoryRoot: URL) throws -> String {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/git")
-        process.arguments = arguments
-        process.currentDirectoryURL = repositoryRoot
-        process.environment = [
-            "PATH": ProcessInfo.processInfo.environment["PATH"] ?? "/usr/bin:/bin:/usr/sbin:/sbin",
-            "LC_ALL": "C",
-            "LANG": "C",
-        ]
-
-        let outputPipe = Pipe()
-        let errorPipe = Pipe()
-        process.standardOutput = outputPipe
-        process.standardError = errorPipe
-
-        try process.run()
-        process.waitUntilExit()
-
-        let output = String(data: outputPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
-        guard process.terminationStatus == 0 else {
-            let message = String(data: errorPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
-            throw AgentTimelineGitError.commandFailed(message.trimmingCharacters(in: .whitespacesAndNewlines))
-        }
-        return output
-    }
-
     private nonisolated static func makeJSONEncoder() -> JSONEncoder {
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
@@ -402,20 +300,6 @@ final class AgentTimelineStore {
     }
 }
 
-private enum AgentTimelineGitError: LocalizedError {
-    case missingCommit
-    case commandFailed(String)
-
-    var errorDescription: String? {
-        switch self {
-        case .missingCommit:
-            return String(localized: "기록할 커밋을 찾을 수 없습니다.")
-        case .commandFailed(let message):
-            return message.isEmpty ? String(localized: "git 명령을 실행할 수 없습니다.") : message
-        }
-    }
-}
-
 private extension AgentTimelineEventKind {
     var displayName: String {
         switch self {
@@ -425,16 +309,25 @@ private extension AgentTimelineEventKind {
             return "마크다운"
         case .gitDiff:
             return "Git Diff"
-        case .commit:
-            return "커밋"
+        case .changeSummary:
+            return "작업 요약"
         }
     }
 }
 
 private extension AgentTimelineEvent {
+    var shouldPersistToSharedTimeline: Bool {
+        switch kind {
+        case .changeSummary:
+            return true
+        case .terminal, .markdown, .gitDiff:
+            return false
+        }
+    }
+
     var summaryDetail: String {
-        if let commit {
-            return "\(detail) (`\(commit.shortHash)` · +\(changes?.insertions ?? 0) -\(changes?.deletions ?? 0))"
+        if let changes {
+            return "\(detail) (+\(changes.insertions) -\(changes.deletions))"
         }
         return detail
     }
