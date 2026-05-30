@@ -38,6 +38,7 @@
 34. [세션 34: 앱 국제화 및 v1.4.1 릴리즈](#세션-34-앱-국제화-및-v141-릴리즈)
 35. [세션 35: 번들 도움말, 코드 서명 릴리즈 빌드 및 v1.4.2 릴리즈](#세션-35-번들-도움말-코드-서명-릴리즈-빌드-및-v142-릴리즈)
 36. [세션 36: 공증 릴리스 자동화 보강 및 v1.4.2 재배포](#세션-36-공증-릴리스-자동화-보강-및-v142-재배포)
+37. [세션 37: 에이전트 검토 워크스페이스 1차 구현](#세션-37-에이전트-검토-워크스페이스-1차-구현)
 
 ---
 
@@ -98,6 +99,7 @@
 | 51 | 앱 국제화 및 v1.4.1 릴리즈 | 영어 기본 UI와 한국어 로컬라이제이션 리소스 추가, 메뉴/사이드바/Git/스니펫 문구 정리, 앱 번들 버전 1.4.1 갱신 |
 | 52 | 번들 도움말, 코드 서명 릴리즈 빌드 및 v1.4.2 릴리즈 | Help 메뉴에서 번들 README를 열도록 변경, release/install 번들 코드 서명 자동화, 앱 번들 버전 1.4.2 갱신 |
 | 53 | 공증 릴리스 자동화 보강 및 v1.4.2 재배포 | release 빌드에 Developer ID 서명, notarization, stapling, ditto ZIP 생성, 압축 해제 후 Gatekeeper 검증을 추가하고 GitHub Release v1.4.2 자산을 공증 ZIP으로 교체 |
+| 54 | 에이전트 검토 워크스페이스 1차 구현 | 에이전트 작업 타임라인, 마크다운-Git diff 연결 표시, 구현 플랜 문서와 테스트 추가 |
 
 ---
 
@@ -1954,5 +1956,43 @@ GitHub에서 다운로드한 `v1.4.2` 앱이 코드 서명/Gatekeeper 경고를 
 `markagent` notarytool 프로필을 사용해 `MARKAGENT_NOTARY_PROFILE=markagent scripts/bundle.sh release`를 실행했고, Apple notary service 제출 `5818eaff-0c14-4296-9904-799da0d8cf31`이 `Accepted` 상태가 됐다. `.build/MarkAgent.app`에 stapling/validation을 수행한 뒤 `MarkAgent-v1.4.2.zip`을 생성하고, 압축 해제한 앱이 `spctl --assess --type execute`에서 `source=Notarized Developer ID`로 통과하는 것을 확인했다. GitHub Release `v1.4.2`의 기존 ZIP 자산을 새 공증 ZIP으로 교체하고 릴리스 노트 SHA-256을 `717fda3cf5c913e863c029d044824b6eb83f469aab51778c2726171f70a86cfc`로 갱신했다.
 
 변경 파일: 없음
+
+---
+
+## 세션 37: 에이전트 검토 워크스페이스 1차 구현
+
+> 날짜: 2026-05-30
+> 경로: ~/workspace/markAgent
+
+MarkAgent를 CLI 에이전트 산출물 검토용 비주얼 브릿지로 강화하기 위해, 제안 기능의 구현 가능성을 정리하고 우선순위가 높은 작업 타임라인과 마크다운-Git diff 연결 기능을 1차 범위로 구현.
+
+### 대화 1: 에이전트 검토 기능 후보 분석 및 구현
+
+**사용자:**
+> `$omo:ultragoal` 다음 내용을 확인하고 구현가능한 부분을 찾아서 상세 플랜으로 만들어줘. 그리고 구현 가능한 부분부터 구현해줘. markAgent 성격 파악함: Ghostty 멀티탭 터미널 + 마크다운 워크스페이스 + Git diff 뷰어를 한 창에 묶은 macOS 네이티브 앱. "CLI 에이전트로 개발할 때 사람이 검토하기 좋게" 보조하는 비주얼 브릿지.
+
+**응답:**
+5개 기능 후보를 MarkAgent의 기존 구조와 검토 워크플로우 기준으로 분석하고 `plans/agent-review-workspace-plan.md`에 상세 플랜을 작성했다. 실행 중 사용한 계획과 RED-GREEN/QA 증거는 저장소에서 추적할 수 있도록 `plans/agent-review-workspace-execution.md`에 별도 기록했다. 1차 구현으로 열린 마크다운 문서가 Git 변경 파일 경로를 언급하면 Git 변경 목록과 diff 섹션에 `문서 언급` 표시를 보여주는 연결 인덱스를 추가했다. 이어서 우측 작업 사이드바에 `타임라인` 탭을 추가하고, 터미널 탭 생성, 마크다운 문서 열기, Git diff 파일 포커스 이벤트를 최신순으로 기록하는 `AgentTimelineStore`와 UI를 구현했다. 기존 pasteboard 테스트는 전역 pasteboard 의존으로 인한 flake를 피하도록 고유 named pasteboard를 사용하게 보정했다.
+
+검증:
+- `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer swift test --filter AgentTimelineStoreTests` — 3개 통과
+- `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer swift test --filter MarkdownGitReferenceIndexTests` — 3개 통과
+- `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer swift test --disable-sandbox` — 43개 통과
+- `git diff --check` — 성공
+- tmux QA transcript: `/private/tmp/markagent-agent-review-qa-20260530-155630.txt`
+
+변경 파일: `plans/agent-review-workspace-plan.md`, `plans/agent-review-workspace-execution.md`, `Sources/Core/AgentTimelineStore.swift`, `Sources/Core/MarkdownGitReferenceIndex.swift`, `Sources/Views/Main/ActiveTabContentView.swift`, `Sources/Views/Main/MainContainerView.swift`, `Sources/Views/Sidebar/AgentTimelineSidebarView.swift`, `Sources/Views/Sidebar/GitChangesSidebar.swift`, `Sources/Views/Sidebar/RightSidebarView.swift`, `Sources/Views/Tabs/GitDiffTabView.swift`, `Tests/MarkAgentTests/AgentTimelineStoreTests.swift`, `Tests/MarkAgentTests/MarkdownGitReferenceIndexTests.swift`, `Tests/MarkAgentTests/PromptSnippetClipboardTests.swift`
+
+---
+
+### 대화 2: dev 브랜치 커밋 요청 및 히스토리 기록
+
+**사용자:**
+> 작업된 내역을 history.md 파일에 기록하고 dev 브랜치에 커밋해야 해. main 브랜치에서 작업한 것은 잘못이야.
+
+**응답:**
+현재 브랜치가 `dev`임을 확인하고, 커밋 전 규칙에 따라 이번 세션 작업 내용을 `history.md` 목차, 전체 타임라인 요약, 세션 본문에 기록했다. 변경사항은 `history.md` 포함 dev 브랜치에 커밋한다.
+
+변경 파일: `history.md`
 
 ---

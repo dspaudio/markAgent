@@ -3,8 +3,10 @@ import SwiftUI
 struct RightSidebarView: View {
     var gitDiffState: GitDiffState
     var snippetStore: PromptSnippetStore
+    var timelineStore: AgentTimelineStore
     var width: Double
     var onSelectFile: (GitChangedFile) -> Void
+    var mentionedFileIDs: Set<GitChangedFile.ID> = []
 
     @State private var selectedTab: RightSidebarTab = .gitChanges
     @Environment(\.colorScheme) private var colorScheme
@@ -86,16 +88,20 @@ struct RightSidebarView: View {
         case .gitChanges:
             GitChangesSidebar(
                 state: gitDiffState,
-                onSelectFile: onSelectFile
+                onSelectFile: onSelectFile,
+                mentionedFileIDs: mentionedFileIDs
             )
         case .snippets:
             PromptSnippetsSidebarView(store: snippetStore)
+        case .timeline:
+            AgentTimelineSidebarView(store: timelineStore)
         }
     }
 }
 
 private enum RightSidebarTab: String, CaseIterable, Identifiable {
     case gitChanges
+    case timeline
     case snippets
 
     var id: String { rawValue }
@@ -104,6 +110,8 @@ private enum RightSidebarTab: String, CaseIterable, Identifiable {
         switch self {
         case .gitChanges:
             return String(localized: "Git 변경 파일")
+        case .timeline:
+            return String(localized: "타임라인")
         case .snippets:
             return String(localized: "스니펫")
         }
@@ -113,6 +121,8 @@ private enum RightSidebarTab: String, CaseIterable, Identifiable {
         switch self {
         case .gitChanges:
             return "arrow.left.arrow.right.circle"
+        case .timeline:
+            return "clock.arrow.circlepath"
         case .snippets:
             return "text.quote"
         }

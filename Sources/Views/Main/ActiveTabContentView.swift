@@ -6,6 +6,7 @@ struct ActiveTabContentView: View {
     var onNewTab: () -> Void
     var onDocumentChanged: () -> Void
     var onConfigurationSaved: () -> Void
+    var mentionedGitFileIDs: Set<GitChangedFile.ID> = []
 
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.terminalAppTheme) private var terminalAppTheme
@@ -48,7 +49,11 @@ struct ActiveTabContentView: View {
                 Color.clear
             }
         } else if let gitDiffTab = tab as? GitDiffTab {
-            GitDiffTabView(state: gitDiffTab.state, isActive: isActive)
+            GitDiffTabView(
+                state: gitDiffTab.state,
+                isActive: isActive,
+                mentionedFileIDs: mentionedGitFileIDs
+            )
         } else if tab is SettingsTab {
             PreferencesView(onSaved: onConfigurationSaved)
         } else if tab is AboutTab {
