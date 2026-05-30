@@ -81,3 +81,49 @@ MarkAgent의 강점은 터미널, 마크다운, Git diff를 같은 창에서 오
 3. 스니펫 주입은 `TerminalTabState.sendText(_:)` 같은 테스트 가능한 래퍼를 만든 뒤 사이드바에서 활성 터미널로 주입한다.
 4. diff 리뷰 마킹은 파일 id 기준 로컬 store를 만들고 Git 변경 row와 diff section header에 체크/문제 상태를 표시한다.
 5. 코드블록 Run은 렌더러에 action closure를 주입하는 구조 변경이 필요하므로 Markdown renderer refactor와 함께 진행한다.
+
+## 2차 구현 상세: `.agents` 기반 Timeline persistence와 AI 요약
+
+### 목표
+
+Timeline을 앱 메모리 안에만 두지 않고 저장소 루트의 `.agents/` 폴더에 저장한다. `.agents/timeline.jsonl`은 AI CLI 도구가 append/read 하기 쉬운 source of truth로 사용하고, `.agents/timeline.md`는 사람과 AI가 빠르게 읽는 요약 문서로 유지한다. Git refresh 시 이미 커밋된 HEAD를 감지하면 커밋 코드와 변경 파일 요약을 Timeline 이벤트로 남긴다.
+
+### 파일 형식 판단
+
+1. `.agents/timeline.jsonl`
+   - 각 줄을 독립 이벤트 JSON으로 기록한다.
+   - 이벤트 단위 append가 가능해 AI CLI 연계와 충돌 복구에 유리하다.
+   - 깨진 줄이 있어도 나머지 이벤트를 읽을 수 있다.
+2. `.agents/timeline.md`
+   - JSONL의 최근 이벤트를 규칙 기반으로 요약한다.
+   - AI가 작업 재개 시 긴 JSONL 전체를 읽지 않고도 최근 맥락을 파악할 수 있게 한다.
+   - source of truth는 아니며 언제든 재생성 가능해야 한다.
+
+### 수용 기준
+
+1. Git 저장소 루트가 확인되면 `.agents/timeline.jsonl`과 `.agents/timeline.md`를 생성/갱신한다.
+2. Timeline 이벤트 기록 시 JSONL에 한 줄 이벤트를 append하고, MD 요약을 재생성한다.
+3. 앱 재시작 또는 store 재생성 후에도 JSONL에서 기존 이벤트를 읽어 최신순으로 표시할 수 있다.
+4. Git refresh 후 HEAD 커밋이 이미 기록되지 않았다면 `commit_created` 이벤트를 추가한다.
+5. 커밋 이벤트에는 commit hash/short hash/subject/author/committedAt과 변경 파일, insertions, deletions 요약을 포함한다.
+6. `.agents` 파일이 없거나 일부 JSONL 줄이 깨져도 UI는 실패하지 않고 읽을 수 있는 이벤트만 사용한다.
+
+### 변경 단위
+
+1. `Sources/Core/AgentTimelineStore.swift`
+   - 이벤트를 Codable 구조로 확장한다.
+   - `.agents/timeline.jsonl` append/read와 `.agents/timeline.md` 생성 로직을 추가한다.
+   - `commit_created` 이벤트와 Git HEAD snapshot 기록을 지원한다.
+2. `Sources/Views/Main/MainContainerView.swift`
+   - Git 저장소 루트 변경 및 refresh 완료 시 Timeline store를 저장소 루트와 동기화한다.
+   - HEAD commit snapshot을 중복 없이 기록한다.
+3. `Sources/Views/Sidebar/AgentTimelineSidebarView.swift`
+   - 커밋 이벤트 icon/tint 표시를 추가한다.
+4. `Tests/MarkAgentTests/AgentTimelineStoreTests.swift`
+   - JSONL append/read, Markdown summary 생성, commit 이벤트 중복 방지 테스트를 추가한다.
+
+### 보류/후속
+
+1. `.agents/timeline.jsonl`과 `.agents/timeline.md`의 git tracking 여부는 프로젝트 정책으로 남긴다. 기본 구현은 파일을 생성하되 `.gitignore`를 자동 수정하지 않는다.
+2. 전체 diff 본문은 저장하지 않고 commit hash를 통해 Git에서 조회하도록 둔다.
+3. 향후 AI CLI가 `agent_note` 이벤트를 직접 append할 수 있도록 schema 문서를 추가할 수 있다.

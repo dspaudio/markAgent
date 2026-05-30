@@ -39,6 +39,7 @@
 35. [세션 35: 번들 도움말, 코드 서명 릴리즈 빌드 및 v1.4.2 릴리즈](#세션-35-번들-도움말-코드-서명-릴리즈-빌드-및-v142-릴리즈)
 36. [세션 36: 공증 릴리스 자동화 보강 및 v1.4.2 재배포](#세션-36-공증-릴리스-자동화-보강-및-v142-재배포)
 37. [세션 37: 에이전트 검토 워크스페이스 1차 구현](#세션-37-에이전트-검토-워크스페이스-1차-구현)
+38. [세션 38: .agents Timeline persistence와 AI 요약 구현](#세션-38-agents-timeline-persistence와-ai-요약-구현)
 
 ---
 
@@ -100,6 +101,7 @@
 | 52 | 번들 도움말, 코드 서명 릴리즈 빌드 및 v1.4.2 릴리즈 | Help 메뉴에서 번들 README를 열도록 변경, release/install 번들 코드 서명 자동화, 앱 번들 버전 1.4.2 갱신 |
 | 53 | 공증 릴리스 자동화 보강 및 v1.4.2 재배포 | release 빌드에 Developer ID 서명, notarization, stapling, ditto ZIP 생성, 압축 해제 후 Gatekeeper 검증을 추가하고 GitHub Release v1.4.2 자산을 공증 ZIP으로 교체 |
 | 54 | 에이전트 검토 워크스페이스 1차 구현 | 에이전트 작업 타임라인, 마크다운-Git diff 연결 표시, 구현 플랜 문서와 테스트 추가 |
+| 55 | .agents Timeline persistence와 AI 요약 구현 | `.agents/timeline.jsonl` source of truth, `.agents/timeline.md` 요약, commit_created 이벤트와 HEAD 커밋 변경 요약 기록 구현 |
 
 ---
 
@@ -1996,3 +1998,59 @@ MarkAgent를 CLI 에이전트 산출물 검토용 비주얼 브릿지로 강화�
 변경 파일: `history.md`
 
 ---
+
+
+## 세션 38: .agents Timeline persistence와 AI 요약 구현
+
+> 날짜: 2026-05-30
+> 경로: ~/workspace/markAgent
+
+AI CLI 도구와 연계하기 쉬운 Timeline 저장 위치와 파일 형식을 논의한 뒤, `.agents/timeline.jsonl`을 source of truth로, `.agents/timeline.md`를 사람/AI용 요약으로 사용하는 2차 구현을 진행했다. 커밋 이벤트에는 HEAD 커밋 코드와 변경 파일 요약을 포함하도록 확장했다.
+
+### 대화 1: 에이전트 검토 워크스페이스 구현 리뷰
+
+**사용자:**
+> plans 폴더 내용을 읽고 지금까지 구현한 내용을 리뷰해봐
+
+**응답:**
+`plans/agent-review-workspace-plan.md`와 `plans/agent-review-workspace-execution.md`를 읽고, 1차 구현인 마크다운-Git diff 연결 및 Timeline 탭 구현을 리뷰했다. 구현은 수용 기준을 대체로 충족하며, 열린 모든 마크다운 탭 기준의 mention 계산, Git status 경로 파싱, raw text 기반 문서 reference 탐지, Timeline persistence 부재 등을 후속 개선점으로 정리했다.
+
+변경 파일: 없음
+
+---
+
+### 대화 2: `.agents` 기반 Timeline persistence 설계 논의
+
+**사용자:**
+> .agents/timeline.json을 활용하는게 AI 연계에 맞을 것 같아. .agents 폴더는 AI cli 도구 중 호환성이 제일 낫다고 생각하기 때문이야. 다만 꼭 json이어야 하는지? 아니면 다른 추천 방식이 있을지는 고민해야 해. timeline 이벤트에는 이미 커밋했다면 해당 커밋코드와 변경내용도 포함하면 어떨까 싶어.
+
+**응답:**
+AI 연계와 append-friendly 특성을 고려해 단일 JSON 배열보다 JSONL을 추천했다. `.agents/timeline.jsonl`은 이벤트 단위 source of truth로, `.agents/timeline.md`는 AI와 사람이 읽기 쉬운 요약으로 두는 구조를 제안했다. 커밋 정보는 전체 diff 본문 대신 commit hash, subject, 변경 파일, insertions/deletions 요약을 별도 `commit_created` 이벤트로 남기는 방향을 권장했다.
+
+변경 파일: 없음
+
+---
+
+### 대화 3: `.agents/timeline.jsonl` + `timeline.md` 구현
+
+**사용자:**
+> 이 내용을 기반으로 플랜을 업데이트하고 구현해줘. ulw
+
+**응답:**
+플랜 문서에 2차 구현 상세를 추가하고, `AgentTimelineStore`를 파일 기반 persistence 구조로 확장했다. Git 저장소 루트 확인 시 `.agents/timeline.jsonl`과 `.agents/timeline.md`를 생성/갱신하며, Timeline 이벤트 기록 시 JSONL append와 MD 요약 재생성을 수행하도록 구현했다. Git refresh 완료 후 HEAD 커밋이 아직 기록되지 않았으면 `commit_created` 이벤트를 추가하고, commit hash/short hash/subject/author/committedAt 및 변경 파일 insertions/deletions 요약을 포함하도록 했다. 깨진 JSONL line은 무시하고 읽을 수 있는 이벤트만 로드하도록 테스트를 추가했다.
+
+검증: `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer swift test --filter AgentTimelineStoreTests` 6개 통과, `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer swift test` 46개 통과, `git diff --check` 성공.
+
+변경 파일: `Sources/Core/AgentTimelineStore.swift`, `Sources/Views/Main/MainContainerView.swift`, `Sources/Views/Sidebar/AgentTimelineSidebarView.swift`, `Tests/MarkAgentTests/AgentTimelineStoreTests.swift`, `plans/agent-review-workspace-plan.md`, `plans/agent-review-workspace-execution.md`
+
+---
+
+### 대화 4: 히스토리 기록 및 커밋/푸시
+
+**사용자:**
+> history.md를 업데이트하고 커밋 & 푸시해줘.
+
+**응답:**
+커밋/푸시 전 필수 규칙에 따라 이번 세션의 주요 리뷰, 설계 논의, 구현 및 검증 내용을 `history.md`에 세션 38로 기록했다.
+
+변경 파일: `history.md`

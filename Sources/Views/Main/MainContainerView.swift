@@ -136,6 +136,14 @@ struct MainContainerView: View {
             gitDiffState.refresh(for: directory)
             onDirectoryChanged(directory)
         }
+        .onChange(of: gitDiffState.repositoryRoot) { _, _ in
+            syncTimelineToGitRepository()
+        }
+        .onChange(of: gitDiffState.isRefreshing) { _, isRefreshing in
+            if !isRefreshing {
+                syncTimelineToGitRepository()
+            }
+        }
         .background(appColors?.background ?? Color(nsColor: .windowBackgroundColor))
         .foregroundStyle(appColors?.foreground ?? Color.primary)
         .tint(appColors?.accent ?? Color.accentColor)
@@ -210,6 +218,16 @@ struct MainContainerView: View {
 
     private func clampedLeftSidebarWidth(for containerWidth: Double, proposedWidth: Double) -> Double {
         return max(220, min(520, min(proposedWidth, max(containerWidth - 240, 220))))
+    }
+
+    private func syncTimelineToGitRepository() {
+        guard let repositoryRoot = gitDiffState.repositoryRoot else {
+            timelineStore.configureRepositoryRoot(nil)
+            return
+        }
+
+        timelineStore.configureRepositoryRoot(repositoryRoot)
+        timelineStore.recordLatestCommitIfNeeded(repositoryRoot: repositoryRoot)
     }
 
     private func createTerminalTab() {

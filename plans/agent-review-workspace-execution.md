@@ -67,3 +67,36 @@ CLI 에이전트 작업 검토를 강화하는 기능 후보를 분석하고, �
 - `Tests/MarkAgentTests/AgentTimelineStoreTests.swift`
 - `Tests/MarkAgentTests/MarkdownGitReferenceIndexTests.swift`
 - `plans/agent-review-workspace-plan.md`
+
+## 2차 실행: `.agents` Timeline persistence와 AI 요약
+
+> 날짜: 2026-05-30
+
+### 목표
+
+AI CLI 도구와 공유하기 쉬운 저장소 로컬 Timeline 기록을 위해 `.agents/timeline.jsonl`을 source of truth로 사용하고, `.agents/timeline.md`를 사람/AI용 요약으로 생성한다. Git refresh 후 HEAD 커밋이 아직 Timeline에 없으면 커밋 코드와 변경 파일 요약을 기록한다.
+
+### 구현 산출물
+
+- `Sources/Core/AgentTimelineStore.swift`
+  - Timeline 이벤트 Codable 확장
+  - `.agents/timeline.jsonl` append/read
+  - `.agents/timeline.md` 규칙 기반 요약 생성
+  - `commit_created` 이벤트 및 HEAD commit snapshot 기록
+- `Sources/Views/Main/MainContainerView.swift`
+  - Git 저장소 root/refresh 완료 시 Timeline persistence 동기화
+- `Sources/Views/Sidebar/AgentTimelineSidebarView.swift`
+  - 커밋 이벤트 icon/tint 추가
+- `Tests/MarkAgentTests/AgentTimelineStoreTests.swift`
+  - JSONL/MD persistence, 깨진 JSONL line skip, commit 이벤트 중복 방지 테스트 추가
+- `plans/agent-review-workspace-plan.md`
+  - `.agents` 기반 2차 구현 계획 추가
+
+### 검증
+
+- `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer swift test --filter AgentTimelineStoreTests`
+  - 결과: 6 tests passed
+- `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer swift test`
+  - 결과: 46 tests passed
+- `git diff --check`
+  - 결과: 성공
