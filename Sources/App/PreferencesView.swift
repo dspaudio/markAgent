@@ -181,18 +181,27 @@ struct PreferencesView: View {
     private var themePreviewList: some View {
         ScrollViewReader { proxy in
             ScrollView {
-                LazyVStack(spacing: 12) {
-                    ForEach(themes) { theme in
-                        Button {
-                            preferences.themeName = theme.name
-                        } label: {
-                            ThemePreview(
-                                theme: theme,
-                                isSelected: theme.name == selectedTheme.name
-                            )
+                LazyVStack(alignment: .leading, spacing: 14) {
+                    ForEach(themeSections) { section in
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text(section.title)
+                                .font(.system(size: 12, weight: .semibold))
+                                .foregroundStyle(.secondary)
+                                .padding(.horizontal, 2)
+
+                            ForEach(section.themes) { theme in
+                                Button {
+                                    preferences.themeName = theme.name
+                                } label: {
+                                    ThemePreview(
+                                        theme: theme,
+                                        isSelected: theme.name == selectedTheme.name
+                                    )
+                                }
+                                .buttonStyle(.plain)
+                                .id(theme.name)
+                            }
                         }
-                        .buttonStyle(.plain)
-                        .id(theme.name)
                     }
                 }
                 .padding(.vertical, 2)
@@ -211,6 +220,14 @@ struct PreferencesView: View {
         GhosttyThemeCatalog.theme(named: preferences.themeName)
             ?? themes.first
             ?? GhosttyThemeDefinition(name: "Default", background: "1f1f1f", foreground: "d4d4d4")
+    }
+
+    private var themeSections: [ThemeSection] {
+        let grouped = Dictionary(grouping: themes, by: \.previewColorScheme)
+        return [
+            ThemeSection(title: String(localized: "Light Themes"), themes: grouped[.light] ?? []),
+            ThemeSection(title: String(localized: "Dark Themes"), themes: grouped[.dark] ?? []),
+        ].filter { !$0.themes.isEmpty }
     }
 
     private func save(_ preferences: GhosttyPreferences) {
@@ -236,6 +253,13 @@ struct PreferencesView: View {
     private func fontSizeLabel(_ size: Double) -> String {
         size.rounded() == size ? "\(Int(size))" : String(format: "%.1f", size)
     }
+}
+
+private struct ThemeSection: Identifiable {
+    let title: String
+    let themes: [GhosttyThemeDefinition]
+
+    var id: String { title }
 }
 
 private struct ThemePreview: View {
@@ -325,6 +349,13 @@ private struct FontPreview: View {
     }
 }
 
+private extension GhosttyThemeDefinition {
+    var previewColorScheme: ColorScheme {
+        guard let color = NSColor.previewHex(background) else { return .dark }
+        return color.relativeLuminance < 0.5 ? .dark : .light
+    }
+}
+
 private enum FontCatalog {
     static func codingFonts() -> [String] {
         let common = [
@@ -373,5 +404,17 @@ private extension NSColor {
             blue: CGFloat(integer & 0xff) / 255,
             alpha: 1
         )
+    }
+
+    var relativeLuminance: CGFloat {
+        guard let color = usingColorSpace(.sRGB) else { return 0 }
+
+        func channel(_ value: CGFloat) -> CGFloat {
+            value <= 0.03928 ? value / 12.92 : pow((value + 0.055) / 1.055, 2.4)
+        }
+
+        return 0.2126 * channel(color.redComponent)
+            + 0.7152 * channel(color.greenComponent)
+            + 0.0722 * channel(color.blueComponent)
     }
 }
