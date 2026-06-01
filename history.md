@@ -45,6 +45,7 @@
 41. [세션 41: 원 클릭 미리보기 메모리 피크 완화 및 v1.5.1 릴리즈](#세션-41-원-클릭-미리보기-메모리-피크-완화-및-v151-릴리즈)
 42. [세션 42: Git Diff 사이드바 미리보기 안정화 및 v1.5.2 릴리즈](#세션-42-git-diff-사이드바-미리보기-안정화-및-v152-릴리즈)
 43. [세션 43: 테마 선택 UX와 Git Diff 단일 클릭 미리보기 및 v1.5.3 릴리즈](#세션-43-테마-선택-ux와-git-diff-단일-클릭-미리보기-및-v153-릴리즈)
+44. [세션 44: Ghostty 테마 적용 수정과 Settings 테마 필터 및 v1.5.4 릴리즈](#세션-44-ghostty-테마-적용-수정과-settings-테마-필터-및-v154-릴리즈)
 
 ---
 
@@ -112,6 +113,7 @@
 | 58 | 원 클릭 미리보기 메모리 피크 완화 및 v1.5.1 릴리즈 | 이미지 미리보기를 ImageIO 썸네일 로딩으로 전환하고 텍스트 미리보기 크기를 제한해 앱 번들 버전 1.5.1 갱신 |
 | 59 | Git Diff 사이드바 미리보기 안정화 및 v1.5.2 릴리즈 | Git Diff 로딩 hang 수정, 우측 사이드바 Diff 미리보기/탭 승격/열린 Diff 탭 스크롤 연동, 앱 번들 버전 1.5.2 갱신 |
 | 60 | 테마 선택 UX와 Git Diff 단일 클릭 미리보기 및 v1.5.3 릴리즈 | Settings 테마 목록을 라이트/다크로 그룹화, 선택 테마 기반 사이드바 컬러, Apple SD Gothic Neo fallback, Git Diff 파일 단일 클릭 미리보기, 앱 번들 버전 1.5.3 갱신 |
+| 61 | Ghostty 테마 적용 수정과 Settings 테마 필터 및 v1.5.4 릴리즈 | 이름 있는 Ghostty 테마를 명시 색상으로 내장 터미널에 적용, Light/Dark selector 기반 테마 목록 전환, Swift 6 이미지 썸네일 Sendable 오류 수정, 앱 번들 버전 1.5.4 갱신 |
 
 ---
 
@@ -1517,6 +1519,93 @@ MarkAgent 메뉴의 `Settings…` 창을 추가하고, Ghostty theme/font-size/c
 
 **응답:**
 명시 버전 `1.2.0`으로 앱 번들 버전을 갱신하고, README 기능 소개와 `history.md` 세션 기록을 이번 변경분에 맞게 업데이트한 뒤 릴리즈 빌드, GitHub Release, 커밋/푸시, main 대상 PR 생성 및 머지를 진행.
+
+변경 파일: `Sources/App/Info.plist`, `README.md`, `history.md`
+
+
+## 세션 44: Ghostty 테마 적용 수정과 Settings 테마 필터 및 v1.5.4 릴리즈
+
+> 날짜: 2026-06-01
+> 경로: ~/workspace/markAgent
+
+Catppuccin Latte 같은 이름 있는 Ghostty 테마를 선택했을 때 내장 터미널이 기본 dark 배경으로 남는 문제를 수정하고, Settings의 테마 선택 목록을 Light/Dark selector로 전환했다. Swift 6 빌드를 막던 로컬 이미지 썸네일 로딩의 `NSImage` Sendable 문제도 함께 정리하고 `v1.5.4` 릴리즈를 준비했다.
+
+### 대화 1: Catppuccin Latte 테마가 검은 터미널로 보이는 원인 분석
+
+**사용자:**
+> catputtin latte light theme를 선택했는데, 터미널의 컬러가 왜 black이야?
+
+**응답:**
+`~/.config/ghostty/config`에는 `theme = Catppuccin Latte`가 저장되어 있었지만, MarkAgent의 내장 Ghostty 터미널은 raw `theme` 줄을 직접 해석하지 못해 기본 dark 색상으로 남는 것을 확인했다. `GhosttyConfig.parseColorTheme`로 파싱한 `TerminalColorTheme`를 `GhosttyTerminal.TerminalTheme`으로 변환해 명시적인 `background`, `foreground`, `cursor-color`, `palette` 설정으로 주입하는 방향을 정했다.
+
+변경 파일: 없음
+
+---
+
+### 대화 2: 내장 터미널 테마 적용 수정
+
+**사용자:**
+> 수정해줘.
+
+**응답:**
+`TerminalTabState`에서 사용자 config의 `colorTheme`를 Ghostty 터미널용 `TerminalTheme`으로 변환해 적용하도록 수정했다. 이름 있는 테마를 카탈로그에서 해석한 경우에는 raw config에서 활성 `theme` 줄을 제거해 내장 Ghostty 런타임의 theme lookup 실패가 다른 설정 적용을 막지 않도록 했다. 회귀 테스트로 Catppuccin Latte의 `#eff1f5` 배경, `#4c4f69` foreground, cursor/palette 색상이 렌더 config에 들어가는지 확인했다.
+
+검증: `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer swift test --filter TerminalTabStateTests/testNamedGhosttyThemeRendersExplicitTerminalColors` 통과.
+
+변경 파일: `Sources/Core/Tabs/TerminalTabState.swift`, `Tests/MarkAgentTests/TerminalTabStateTests.swift`
+
+---
+
+### 대화 3: Swift 6 이미지 썸네일 Sendable 오류 수정
+
+**사용자:**
+> xcode는 잘 설치되어 있는데?
+
+**응답:**
+Xcode는 `/Applications/Xcode.app`에 설치되어 있고, 현재 쉘의 `xcode-select`만 CommandLineTools를 가리키고 있음을 확인했다. 검증은 `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer`를 지정해 진행했다. 동시에 `Task.detached` 경계로 `NSImage`를 넘기던 `MarkdownImageThumbnailLoader`를 수정해 백그라운드 작업에서는 `Data`만 만들고 메인 actor 쪽에서 `NSImage`를 복원하도록 변경했다.
+
+검증: `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer swift build` 성공.
+
+변경 파일: `Sources/Rendering/MarkdownImage.swift`
+
+---
+
+### 대화 4: Settings 테마 선택을 Light/Dark selector로 전환
+
+**사용자:**
+> 설정에서 light, dark 테마가 너무 많아서 선택하기가 힘들어 2컬럼으로 분리해서 표시하고, 선택할 수 있을까?
+> 아 2컬럼보다 selector ( Light | Dark )를 전환하면 목록이 바뀌는 형태로 하자.
+
+**응답:**
+`PreferencesView`의 테마 목록을 Light/Dark segmented selector 기반 필터 UI로 변경했다. 현재 선택된 테마의 색상 계열에 맞춰 초기 selector를 정하고, selector를 전환하면 해당 계열의 테마 카드만 표시되도록 했다.
+
+검증: `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer swift build` 성공, `PreferencesView.swift` LSP diagnostics clean.
+
+변경 파일: `Sources/App/PreferencesView.swift`
+
+---
+
+### 대화 5: 앱 번들 실행 확인
+
+**사용자:**
+> 확인할 수 있게 앱을 빌드하고 실행해줘.
+
+**응답:**
+`scripts/bundle.sh`로 debug 앱 번들을 생성하고 `.build/MarkAgent.app`을 실행했다. 실행 프로세스가 `.build/MarkAgent.app/Contents/MacOS/ma`로 올라온 것을 확인했다.
+
+검증: `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer scripts/bundle.sh` 성공, 앱 프로세스 실행 확인.
+
+변경 파일: 없음
+
+---
+
+### 대화 6: v1.5.4 릴리즈 빌드 준비
+
+**사용자:**
+> .claude/commands/release-build.md 1.5.4
+
+**응답:**
+명시 버전 `1.5.4`로 `Info.plist`의 `CFBundleVersion`과 `CFBundleShortVersionString`을 갱신하고, README 기능 소개와 `history.md`를 이번 테마 적용/선택 UX 변경에 맞게 업데이트한 뒤 릴리즈 빌드 절차를 진행한다.
 
 변경 파일: `Sources/App/Info.plist`, `README.md`, `history.md`
 

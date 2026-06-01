@@ -41,7 +41,7 @@ final class TerminalTabState {
 
         let terminalConfiguration = Self.makeTerminalConfiguration(userConfig: userConfig)
         let configSource = Self.configSource(for: userConfig)
-        let theme: TerminalTheme = userConfig != nil ? TerminalTheme() : .default
+        let theme = Self.makeTerminalTheme(userConfig: userConfig)
 
         _ = terminalViewState.controller.updateConfigSource(configSource)
         _ = terminalViewState.controller.setTheme(theme)
@@ -71,7 +71,7 @@ final class TerminalTabState {
         let terminalConfiguration = makeTerminalConfiguration(userConfig: userConfig)
 
         let configSource = configSource(for: userConfig)
-        let theme: TerminalTheme = userConfig != nil ? TerminalTheme() : .default
+        let theme = makeTerminalTheme(userConfig: userConfig)
 
         let viewState = TerminalViewState(
             configSource: configSource,
@@ -93,9 +93,77 @@ final class TerminalTabState {
         }
     }
 
+    private static func makeTerminalTheme(userConfig: GhosttyConfig?) -> TerminalTheme {
+        guard let userConfig else { return .default }
+        guard let colorTheme = userConfig.colorTheme else { return TerminalTheme() }
+
+        let lightTheme = colorTheme.light ?? colorTheme.dark
+        let darkTheme = colorTheme.dark ?? colorTheme.light
+
+        return TerminalTheme(
+            light: makeTerminalConfiguration(colorTheme: lightTheme),
+            dark: makeTerminalConfiguration(colorTheme: darkTheme)
+        )
+    }
+
+    private static func makeTerminalConfiguration(colorTheme: TerminalColorTheme?) -> TerminalConfiguration {
+        guard let colorTheme else { return TerminalConfiguration() }
+
+        return TerminalConfiguration { builder in
+            builder.withBackground(ghosttyColor(colorTheme.background))
+            builder.withForeground(ghosttyColor(colorTheme.foreground))
+
+            if let cursorColor = colorTheme.cursorColor {
+                builder.withCursorColor(ghosttyColor(cursorColor))
+            }
+
+            if let selectionBackground = colorTheme.selectionBackground {
+                builder.withSelectionBackground(ghosttyColor(selectionBackground))
+            }
+
+            if let selectionForeground = colorTheme.selectionForeground {
+                builder.withSelectionForeground(ghosttyColor(selectionForeground))
+            }
+
+            for index in colorTheme.palette.keys.sorted() {
+                guard let color = colorTheme.palette[index] else { continue }
+                builder.withPalette(index, color: ghosttyColor(color))
+            }
+        }
+    }
+
+    private static func ghosttyColor(_ color: String) -> String {
+        let trimmed = color.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.hasPrefix("#") || trimmed.lowercased().hasPrefix("0x") {
+            return trimmed
+        }
+        return "#\(trimmed)"
+    }
+
     static func configSource(for userConfig: GhosttyConfig?) -> TerminalController.ConfigSource {
         guard let userConfig else { return .none }
+        if userConfig.colorTheme != nil {
+            return .generated(contentsWithoutActiveThemeLines(userConfig.contents))
+        }
         return .generated(userConfig.contents)
+    }
+
+    private static func contentsWithoutActiveThemeLines(_ contents: String) -> String {
+        let lines = contents.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
+        let filteredLines = lines.filter { line in
+            let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty, !trimmed.hasPrefix("#") else { return true }
+
+            let parts = trimmed.split(separator: "=", maxSplits: 1, omittingEmptySubsequences: false)
+            guard parts.count == 2 else { return true }
+            return parts[0].trimmingCharacters(in: .whitespaces) != "theme"
+        }
+
+        var updated = filteredLines.joined(separator: "\n")
+        if !updated.isEmpty, !updated.hasSuffix("\n") {
+            updated.append("\n")
+        }
+        return updated
     }
 
     func startIfNeeded() {

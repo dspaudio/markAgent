@@ -4,6 +4,7 @@ import SwiftUI
 
 struct PreferencesView: View {
     @State private var preferences: GhosttyPreferences
+    @State private var selectedThemeFilter: ThemeFilter
     @State private var saveErrorMessage: String?
     @AppStorage("isLeftSidebarVisible") private var isLeftSidebarVisible = true
     @AppStorage("isOneClickPreviewEnabled") private var isOneClickPreviewEnabled = true
@@ -17,7 +18,10 @@ struct PreferencesView: View {
 
     init(onSaved: @escaping () -> Void) {
         self.onSaved = onSaved
-        _preferences = State(initialValue: GhosttyConfig.preferences())
+        let initialPreferences = GhosttyConfig.preferences()
+        let initialTheme = GhosttyThemeCatalog.theme(named: initialPreferences.themeName)
+        _preferences = State(initialValue: initialPreferences)
+        _selectedThemeFilter = State(initialValue: ThemeFilter(colorScheme: initialTheme?.previewColorScheme ?? .dark))
     }
 
     var body: some View {
@@ -180,38 +184,42 @@ struct PreferencesView: View {
 
     private var themePreviewList: some View {
         ScrollViewReader { proxy in
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: 14) {
-                    ForEach(themeSections) { section in
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text(section.title)
-                                .font(.system(size: 12, weight: .semibold))
-                                .foregroundStyle(.secondary)
-                                .padding(.horizontal, 2)
-
-                            ForEach(section.themes) { theme in
-                                Button {
-                                    preferences.themeName = theme.name
-                                } label: {
-                                    ThemePreview(
-                                        theme: theme,
-                                        isSelected: theme.name == selectedTheme.name
-                                    )
-                                }
-                                .buttonStyle(.plain)
-                                .id(theme.name)
-                            }
-                        }
+            VStack(alignment: .leading, spacing: 10) {
+                Picker("Theme Type", selection: $selectedThemeFilter) {
+                    ForEach(ThemeFilter.allCases) { filter in
+                        Text(filter.title).tag(filter)
                     }
                 }
-                .padding(.vertical, 2)
-                .padding(.trailing, 8)
+                .pickerStyle(.segmented)
+                .labelsHidden()
+
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: 14) {
+                        ForEach(filteredThemes) { theme in
+                            Button {
+                                preferences.themeName = theme.name
+                            } label: {
+                                ThemePreview(
+                                    theme: theme,
+                                    isSelected: theme.name == selectedTheme.name
+                                )
+                            }
+                            .buttonStyle(.plain)
+                            .id(theme.name)
+                        }
+                    }
+                    .padding(.vertical, 2)
+                    .padding(.trailing, 8)
+                }
             }
             .onAppear {
-                proxy.scrollTo(selectedTheme.name, anchor: .center)
+                scrollToSelectedTheme(proxy)
             }
             .onChange(of: preferences.themeName) { _, _ in
-                proxy.scrollTo(selectedTheme.name, anchor: .center)
+                scrollToSelectedTheme(proxy)
+            }
+            .onChange(of: selectedThemeFilter) { _, _ in
+                scrollToSelectedTheme(proxy)
             }
         }
     }
@@ -222,12 +230,13 @@ struct PreferencesView: View {
             ?? GhosttyThemeDefinition(name: "Default", background: "1f1f1f", foreground: "d4d4d4")
     }
 
-    private var themeSections: [ThemeSection] {
-        let grouped = Dictionary(grouping: themes, by: \.previewColorScheme)
-        return [
-            ThemeSection(title: String(localized: "Light Themes"), themes: grouped[.light] ?? []),
-            ThemeSection(title: String(localized: "Dark Themes"), themes: grouped[.dark] ?? []),
-        ].filter { !$0.themes.isEmpty }
+    private var filteredThemes: [GhosttyThemeDefinition] {
+        themes.filter { ThemeFilter(colorScheme: $0.previewColorScheme) == selectedThemeFilter }
+    }
+
+    private func scrollToSelectedTheme(_ proxy: ScrollViewProxy) {
+        guard filteredThemes.contains(where: { $0.name == selectedTheme.name }) else { return }
+        proxy.scrollTo(selectedTheme.name, anchor: .center)
     }
 
     private func save(_ preferences: GhosttyPreferences) {
@@ -255,11 +264,24 @@ struct PreferencesView: View {
     }
 }
 
-private struct ThemeSection: Identifiable {
-    let title: String
-    let themes: [GhosttyThemeDefinition]
+private enum ThemeFilter: String, CaseIterable, Identifiable {
+    case light
+    case dark
 
-    var id: String { title }
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .light:
+            String(localized: "Light Themes")
+        case .dark:
+            String(localized: "Dark Themes")
+        }
+    }
+
+    init(colorScheme: ColorScheme) {
+        self = colorScheme == .light ? .light : .dark
+    }
 }
 
 private struct ThemePreview: View {
