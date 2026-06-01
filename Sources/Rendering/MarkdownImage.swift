@@ -1,5 +1,6 @@
 import AppKit
 import Foundation
+import ImageIO
 import SwiftUI
 
 struct MarkdownImageReference: Equatable {
@@ -89,10 +90,13 @@ struct MarkdownImagePreview: View {
     private var imageSurface: some View {
         if reference.isMissing {
             missingSurface
-        } else if let url = reference.resolvedURL, url.isFileURL, let nsImage = NSImage(contentsOf: url) {
-            Image(nsImage: nsImage)
-                .resizable()
-                .scaledToFit()
+        } else if let url = reference.resolvedURL, url.isFileURL {
+            LocalThumbnailImage(
+                url: url,
+                maxPixelSize: compact ? 360 : 1440,
+                maxWidth: compact ? 180 : 720,
+                maxHeight: compact ? 120 : 420
+            )
                 .frame(maxWidth: compact ? 180 : 720, maxHeight: compact ? 120 : 420, alignment: .leading)
                 .clipShape(RoundedRectangle(cornerRadius: 6))
                 .overlay(RoundedRectangle(cornerRadius: 6).stroke(.quaternary))
@@ -149,12 +153,14 @@ struct MarkdownImagePreview: View {
 
     @ViewBuilder
     private var hoverPreview: some View {
-        if let url = reference.resolvedURL, !reference.isMissing, url.isFileURL, let nsImage = NSImage(contentsOf: url) {
+        if let url = reference.resolvedURL, !reference.isMissing, url.isFileURL {
             VStack(alignment: .leading, spacing: 8) {
-                Image(nsImage: nsImage)
-                    .resizable()
-                    .scaledToFit()
-                    .frame(maxWidth: 900, maxHeight: 640)
+                LocalThumbnailImage(
+                    url: url,
+                    maxPixelSize: 1800,
+                    maxWidth: 900,
+                    maxHeight: 640
+                )
                 Text(reference.displayPath)
                     .font(.caption.monospaced())
                     .foregroundStyle(.secondary)
@@ -168,6 +174,86 @@ struct MarkdownImagePreview: View {
     private func openImage() {
         guard let url = reference.resolvedURL, !reference.isMissing else { return }
         NSWorkspace.shared.open(url)
+    }
+}
+
+enum MarkdownImageThumbnailLoader {
+    static func thumbnail(for url: URL, maxPixelSize: CGFloat) -> NSImage? {
+        guard url.isFileURL, maxPixelSize > 0 else { return nil }
+
+        let sourceOptions = [
+            kCGImageSourceShouldCache: false
+        ] as CFDictionary
+        guard let source = CGImageSourceCreateWithURL(url as CFURL, sourceOptions) else {
+            return nil
+        }
+
+        let thumbnailOptions = [
+            kCGImageSourceCreateThumbnailFromImageAlways: true,
+            kCGImageSourceCreateThumbnailWithTransform: true,
+            kCGImageSourceShouldCacheImmediately: true,
+            kCGImageSourceThumbnailMaxPixelSize: Int(maxPixelSize.rounded(.up))
+        ] as CFDictionary
+
+        guard let cgImage = CGImageSourceCreateThumbnailAtIndex(source, 0, thumbnailOptions) else {
+            return nil
+        }
+
+        return NSImage(
+            cgImage: cgImage,
+            size: NSSize(width: cgImage.width, height: cgImage.height)
+        )
+    }
+}
+
+struct LocalThumbnailImage: View {
+    let url: URL
+    let maxPixelSize: CGFloat
+    let maxWidth: CGFloat
+    let maxHeight: CGFloat
+
+    @State private var image: NSImage?
+    @State private var didFail = false
+
+    var body: some View {
+        Group {
+            if let image {
+                Image(nsImage: image)
+                    .resizable()
+                    .scaledToFit()
+            } else if didFail {
+                Image(systemName: "photo.badge.exclamationmark")
+                    .font(.title3)
+                    .foregroundStyle(.secondary)
+            } else {
+                ProgressView()
+                    .scaleEffect(0.6)
+            }
+        }
+        .frame(maxWidth: maxWidth, maxHeight: maxHeight)
+        .task(id: taskID) {
+            await loadThumbnail()
+        }
+    }
+
+    private var taskID: String {
+        "\(url.path)-\(Int(maxPixelSize.rounded(.up)))"
+    }
+
+    private func loadThumbnail() async {
+        image = nil
+        didFail = false
+
+        let loadedImage = await Task.detached(priority: .utility) {
+            MarkdownImageThumbnailLoader.thumbnail(for: url, maxPixelSize: maxPixelSize)
+        }.value
+
+        guard !Task.isCancelled else { return }
+        if let loadedImage {
+            image = loadedImage
+        } else {
+            didFail = true
+        }
     }
 }
 

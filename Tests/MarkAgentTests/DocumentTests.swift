@@ -1,4 +1,7 @@
 import XCTest
+import AppKit
+import ImageIO
+import UniformTypeIdentifiers
 @testable import ma
 
 final class DocumentTests: XCTestCase {
@@ -93,6 +96,36 @@ final class DocumentTests: XCTestCase {
         XCTAssertFalse(FileEntry.isImageURL(URL(fileURLWithPath: "/tmp/readme.md")))
     }
 
+    func testMarkdownImageThumbnailLoaderDownsamplesLargeImages() throws {
+        let tempDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("MarkAgentThumbnailTests-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        let imageURL = tempDir.appendingPathComponent("large.png")
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        try makePNG(width: 1600, height: 900, at: imageURL)
+
+        let thumbnail = try XCTUnwrap(MarkdownImageThumbnailLoader.thumbnail(for: imageURL, maxPixelSize: 200))
+
+        XCTAssertLessThanOrEqual(max(thumbnail.size.width, thumbnail.size.height), 200)
+    }
+
+    func testSidebarTextPreviewReadsOnlyConfiguredPrefix() throws {
+        let tempDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("MarkAgentTextPreviewTests-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        let fileURL = tempDir.appendingPathComponent("large.md")
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        try String(repeating: "a", count: 128).write(to: fileURL, atomically: true, encoding: .utf8)
+
+        let preview = try loadTextPreview(from: fileURL, byteLimit: 32)
+
+        XCTAssertTrue(preview.hasPrefix(String(repeating: "a", count: 32)))
+        XCTAssertFalse(preview.hasPrefix(String(repeating: "a", count: 64)))
+        XCTAssertTrue(preview.contains("미리보기"))
+    }
+
     @MainActor
     func testRecentDocumentStoreMovesExistingDocumentToFront() {
         let suiteName = "RecentDocumentStoreTests-\(UUID().uuidString)"
@@ -110,5 +143,36 @@ final class DocumentTests: XCTestCase {
         store.record(url: first)
 
         XCTAssertEqual(store.documents.map(\.path), [first.path, second.path])
+    }
+}
+
+private func makePNG(width: Int, height: Int, at url: URL) throws {
+    let colorSpace = CGColorSpaceCreateDeviceRGB()
+    guard let context = CGContext(
+        data: nil,
+        width: width,
+        height: height,
+        bitsPerComponent: 8,
+        bytesPerRow: 0,
+        space: colorSpace,
+        bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+    ) else {
+        XCTFail("Failed to create image context")
+        return
+    }
+
+    context.setFillColor(NSColor.systemBlue.cgColor)
+    context.fill(CGRect(x: 0, y: 0, width: width, height: height))
+
+    guard let image = context.makeImage(),
+          let destination = CGImageDestinationCreateWithURL(url as CFURL, UTType.png.identifier as CFString, 1, nil)
+    else {
+        XCTFail("Failed to create image destination")
+        return
+    }
+
+    CGImageDestinationAddImage(destination, image, nil)
+    if !CGImageDestinationFinalize(destination) {
+        XCTFail("Failed to write PNG")
     }
 }
