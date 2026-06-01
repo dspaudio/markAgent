@@ -49,6 +49,25 @@ final class GitDiffStateTests: XCTestCase {
     }
 
     @MainActor
+    func testRefreshCompletesWhenGitStatusOutputExceedsPipeBuffer() async throws {
+        let repository = try makeRepository()
+        defer { try? FileManager.default.removeItem(at: repository) }
+
+        for index in 0..<12000 {
+            let fileName = String(format: "generated-%04d.md", index)
+            let fileURL = repository.appendingPathComponent(fileName)
+            try "line \(index)\n".write(to: fileURL, atomically: true, encoding: .utf8)
+        }
+
+        let state = GitDiffState()
+        state.refresh(for: repository)
+
+        try await waitUntil(timeout: .seconds(5)) {
+            state.changedFiles.count == 12000 && !state.isRefreshing
+        }
+    }
+
+    @MainActor
     func testToggleSidebarOutsideRepositoryShowsSidebarImmediately() {
         let nonRepository = FileManager.default.temporaryDirectory
             .appendingPathComponent("GitDiffStateTests-NonRepo-\(UUID().uuidString)")

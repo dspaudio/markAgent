@@ -5,6 +5,7 @@ struct RightSidebarView: View {
     var snippetStore: PromptSnippetStore
     var timelineStore: AgentTimelineStore
     var width: Double
+    var isGitDiffTabOpen: Bool
     var onSelectFile: (GitChangedFile) -> Void
     var mentionedFileIDs: Set<GitChangedFile.ID> = []
 
@@ -88,7 +89,9 @@ struct RightSidebarView: View {
         case .gitChanges:
             GitChangesSidebar(
                 state: gitDiffState,
-                onSelectFile: onSelectFile,
+                isGitDiffTabOpen: isGitDiffTabOpen,
+                onOpenFileInTab: onSelectFile,
+                onFocusFileInTab: onSelectFile,
                 mentionedFileIDs: mentionedFileIDs
             )
         case .snippets:

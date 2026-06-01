@@ -95,6 +95,7 @@ struct MainContainerView: View {
                             snippetStore: snippetStore,
                             timelineStore: timelineStore,
                             width: clampedSidebarWidth(for: geometry.size.width),
+                            isGitDiffTabOpen: isGitDiffTabOpen,
                             onSelectFile: openGitDiffFile,
                             mentionedFileIDs: openMarkdownMentionedGitFileIDs
                         )
@@ -158,6 +159,10 @@ struct MainContainerView: View {
             .compactMap { ($0 as? MarkdownTab)?.state.document.editableContent }
             .joined(separator: "\n")
         return MarkdownGitReferenceIndex.mentionedFileIDs(in: String(markdown), changedFiles: gitDiffState.changedFiles)
+    }
+
+    private var isGitDiffTabOpen: Bool {
+        tabs.tabs.contains { $0 is GitDiffTab }
     }
 
     private func sidebarResizeHandle(
