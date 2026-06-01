@@ -44,6 +44,7 @@
 40. [세션 40: 원 클릭 미리보기, 내부 도움말 및 v1.5.0 릴리즈](#세션-40-원-클릭-미리보기-내부-도움말-및-v150-릴리즈)
 41. [세션 41: 원 클릭 미리보기 메모리 피크 완화 및 v1.5.1 릴리즈](#세션-41-원-클릭-미리보기-메모리-피크-완화-및-v151-릴리즈)
 42. [세션 42: Git Diff 사이드바 미리보기 안정화 및 v1.5.2 릴리즈](#세션-42-git-diff-사이드바-미리보기-안정화-및-v152-릴리즈)
+43. [세션 43: 테마 선택 UX와 Git Diff 단일 클릭 미리보기 및 v1.5.3 릴리즈](#세션-43-테마-선택-ux와-git-diff-단일-클릭-미리보기-및-v153-릴리즈)
 
 ---
 
@@ -110,6 +111,7 @@
 | 57 | 원 클릭 미리보기, 내부 도움말 및 v1.5.0 릴리즈 | 왼쪽 사이드바 전체 파일 미리보기, Settings 토글, 포커스 한정 Esc 닫기, Help 메뉴 내부 Markdown 탭 열기, 앱 번들 버전 1.5.0 갱신 |
 | 58 | 원 클릭 미리보기 메모리 피크 완화 및 v1.5.1 릴리즈 | 이미지 미리보기를 ImageIO 썸네일 로딩으로 전환하고 텍스트 미리보기 크기를 제한해 앱 번들 버전 1.5.1 갱신 |
 | 59 | Git Diff 사이드바 미리보기 안정화 및 v1.5.2 릴리즈 | Git Diff 로딩 hang 수정, 우측 사이드바 Diff 미리보기/탭 승격/열린 Diff 탭 스크롤 연동, 앱 번들 버전 1.5.2 갱신 |
+| 60 | 테마 선택 UX와 Git Diff 단일 클릭 미리보기 및 v1.5.3 릴리즈 | Settings 테마 목록을 라이트/다크로 그룹화, 선택 테마 기반 사이드바 컬러, Apple SD Gothic Neo fallback, Git Diff 파일 단일 클릭 미리보기, 앱 번들 버전 1.5.3 갱신 |
 
 ---
 
@@ -1515,6 +1517,52 @@ MarkAgent 메뉴의 `Settings…` 창을 추가하고, Ghostty theme/font-size/c
 
 **응답:**
 명시 버전 `1.2.0`으로 앱 번들 버전을 갱신하고, README 기능 소개와 `history.md` 세션 기록을 이번 변경분에 맞게 업데이트한 뒤 릴리즈 빌드, GitHub Release, 커밋/푸시, main 대상 PR 생성 및 머지를 진행.
+
+변경 파일: `Sources/App/Info.plist`, `README.md`, `history.md`
+
+
+## 세션 43: 테마 선택 UX와 Git Diff 단일 클릭 미리보기 및 v1.5.3 릴리즈
+
+> 날짜: 2026-06-01
+> 경로: ~/workspace/markAgent
+
+Settings의 터미널 테마 선택을 라이트/다크 테마 그룹으로 정리하고, 앱 사이드바 색상이 OS 테마가 아니라 선택한 터미널 컬러 테마를 따르도록 조정했다. fallback 한글 폰트 기본값과 우측 Git Diff 사이드바 클릭 흐름을 보강해 `v1.5.3` 패치 릴리즈를 준비했다.
+
+### 대화 1: 테마 그룹화, 사이드바 컬러, 한글 fallback 폰트 보강
+
+**사용자:**
+> 터미널 테마가 다크만 있다고해서 아쉬워 하는 사람이 있어. 라이트 테마와 다크 테마로 그룹화 해서 표시해서 원하는 테마를 쉽게 선택할 수 있게 해줘. 그리고 양옆의 사이드바 컬러도 os 테마에 따라 컬러가 따라가는데, 설정한 컬러테마에 따라가도록 수정해줘. fallback 한글 폰트가 지정되어 있지 않으면 기본적으로 Apple SD Gothic으로 선택되어 바로 적용되게 해줘
+
+**응답:**
+Settings의 Ghostty 테마 미리보기 목록을 배경 밝기 기준으로 `라이트 테마`와 `다크 테마` 섹션으로 나눴다. 왼쪽 파일 사이드바와 오른쪽 Git Diff 미리보기 배경은 선택한 터미널 테마의 앱 컬러를 따르도록 바꿨고, Ghostty 설정에 코딩 폰트만 있는 경우 fallback 폰트로 `Apple SD Gothic Neo`를 자동 적용하도록 했다.
+
+검증: `swift build` 통과, `swift test` 52개 통과, 변경 Swift 파일 LSP diagnostics 문제 없음, `git diff --check` 통과.
+
+변경 파일: `Sources/App/PreferencesView.swift`, `Sources/App/Resources/en.lproj/Localizable.strings`, `Sources/App/Resources/ko.lproj/Localizable.strings`, `Sources/Core/Tabs/GhosttyConfig.swift`, `Sources/Views/Sidebar/FileBrowserSidebar.swift`, `Sources/Views/Sidebar/GitChangesSidebar.swift`, `Tests/MarkAgentTests/GhosttyConfigTests.swift`
+
+---
+
+### 대화 2: 우측 Git Diff 파일 단일 클릭 미리보기
+
+**사용자:**
+> 오른쪽 사이드바 Git diff 파일 클릭을 더블클릭에서 단일 클릭으로 바꿔줘
+
+**응답:**
+우측 사이드바의 Git 변경 파일 목록에서 더블 클릭 제스처를 제거하고, 단일 클릭으로 바로 사이드바 Diff 미리보기가 열리도록 변경했다.
+
+검증: `swift build` 통과, `swift test --filter GitDiffStateTests` 4개 통과, `Sources/Views/Sidebar/GitChangesSidebar.swift` LSP diagnostics 문제 없음.
+
+변경 파일: `Sources/Views/Sidebar/GitChangesSidebar.swift`
+
+---
+
+### 대화 3: v1.5.3 릴리즈 빌드 준비
+
+**사용자:**
+> /release-build 1.5.3
+
+**응답:**
+명시 버전 `1.5.3`으로 `Info.plist`의 `CFBundleVersion`과 `CFBundleShortVersionString`을 갱신하고, README 기능 소개와 `history.md`를 테마 선택 UX, fallback 한글 폰트, 선택 테마 기반 사이드바 컬러, 우측 Git Diff 단일 클릭 미리보기 내용에 맞게 업데이트한 뒤 릴리즈 빌드 절차를 진행한다.
 
 변경 파일: `Sources/App/Info.plist`, `README.md`, `history.md`
 
