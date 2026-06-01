@@ -18,6 +18,8 @@ struct FileBrowserSidebar: View {
     @State private var previewState: SidebarPreviewState?
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.terminalAppTheme) private var terminalAppTheme
+
+    private let textPreviewByteLimit = 256 * 1024
     
     var body: some View {
         VStack(spacing: 0) {
@@ -366,16 +368,15 @@ struct FileBrowserSidebar: View {
                                 .frame(maxWidth: .infinity, alignment: .leading)
                                 .padding(10)
                         }
-                    case .image(let image):
+                    case .image(let url):
                         GeometryReader { geometry in
                             ScrollView([.vertical, .horizontal]) {
-                                Image(nsImage: image)
-                                    .resizable()
-                                    .scaledToFit()
-                                    .frame(
-                                        maxWidth: max(geometry.size.width - 20, 120),
-                                        maxHeight: max(geometry.size.height - 20, 120)
-                                    )
+                                LocalThumbnailImage(
+                                    url: url,
+                                    maxPixelSize: 720,
+                                    maxWidth: max(geometry.size.width - 20, 120),
+                                    maxHeight: max(geometry.size.height - 20, 120)
+                                )
                                     .padding(10)
                             }
                         }
@@ -429,18 +430,15 @@ struct FileBrowserSidebar: View {
         previewState = SidebarPreviewState(entry: entry, content: .loading)
 
         if entry.isImage {
-            if let image = NSImage(contentsOf: entry.url) {
-                previewState = SidebarPreviewState(entry: entry, content: .image(image))
-            } else {
-                previewState = SidebarPreviewState(entry: entry, content: .message(String(localized: "이미지를 열 수 없습니다.")))
-            }
+            previewState = SidebarPreviewState(entry: entry, content: .image(entry.url))
             return
         }
 
+        let byteLimit = textPreviewByteLimit
         Task { [entry] in
             do {
                 let source = try await Task.detached(priority: .userInitiated) {
-                    try String(contentsOf: entry.url, encoding: .utf8)
+                    try loadTextPreview(from: entry.url, byteLimit: byteLimit)
                 }.value
 
                 guard !Task.isCancelled, selectedEntryID == entry.id else { return }
@@ -493,8 +491,23 @@ private enum SidebarPreviewContent {
     case loading
     case markdown(String)
     case text(String)
-    case image(NSImage)
+    case image(URL)
     case message(String)
+}
+
+func loadTextPreview(from url: URL, byteLimit: Int) throws -> String {
+    let handle = try FileHandle(forReadingFrom: url)
+    defer { try? handle.close() }
+
+    let data = try handle.read(upToCount: byteLimit + 1) ?? Data()
+    if data.count <= byteLimit {
+        return String(decoding: data, as: UTF8.self)
+    }
+
+    let prefix = data.prefix(byteLimit)
+    return String(decoding: prefix, as: UTF8.self)
+        + "\n\n..."
+        + String(localized: "미리보기는 파일 앞부분만 표시합니다.")
 }
 
 private struct FocusedEscapeContainer<Content: View>: NSViewRepresentable {
@@ -536,7 +549,6 @@ private struct SidebarImageViewer: View {
     let url: URL
 
     @Environment(\.dismiss) private var dismiss
-    @State private var image: NSImage?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -545,9 +557,6 @@ private struct SidebarImageViewer: View {
             content
         }
         .frame(minWidth: 720, minHeight: 520)
-        .onAppear {
-            image = NSImage(contentsOf: url)
-        }
     }
 
     private var header: some View {
@@ -586,31 +595,16 @@ private struct SidebarImageViewer: View {
 
     @ViewBuilder
     private var content: some View {
-        if let image {
-            ScrollView([.horizontal, .vertical]) {
-                Image(nsImage: image)
-                    .resizable()
-                    .scaledToFit()
-                    .frame(maxWidth: 1400, maxHeight: 1000)
-                    .padding(18)
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(Color(nsColor: .textBackgroundColor))
-        } else {
-            VStack(spacing: 10) {
-                Image(systemName: "photo.badge.exclamationmark")
-                    .font(.system(size: 42))
-                    .foregroundStyle(.red)
-                Text("이미지를 열 수 없습니다.")
-                    .font(.headline)
-                Text(url.path)
-                    .font(.caption.monospaced())
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-                    .textSelection(.enabled)
-            }
-            .padding()
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        ScrollView([.horizontal, .vertical]) {
+            LocalThumbnailImage(
+                url: url,
+                maxPixelSize: 2400,
+                maxWidth: 1400,
+                maxHeight: 1000
+            )
+            .padding(18)
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color(nsColor: .textBackgroundColor))
     }
 }

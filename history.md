@@ -42,6 +42,7 @@
 38. [세션 38: .agents Timeline persistence와 AI 요약 구현](#세션-38-agents-timeline-persistence와-ai-요약-구현)
 39. [세션 39: Timeline 공유 정책 논리 모순 수정](#세션-39-timeline-공유-정책-논리-모순-수정)
 40. [세션 40: 원 클릭 미리보기, 내부 도움말 및 v1.5.0 릴리즈](#세션-40-원-클릭-미리보기-내부-도움말-및-v150-릴리즈)
+41. [세션 41: 원 클릭 미리보기 메모리 피크 완화 및 v1.5.1 릴리즈](#세션-41-원-클릭-미리보기-메모리-피크-완화-및-v151-릴리즈)
 
 ---
 
@@ -106,6 +107,7 @@
 | 55 | .agents Timeline persistence와 AI 요약 구현 | `.agents/timeline.jsonl` source of truth, `.agents/timeline.md` 요약, commit_created 이벤트와 HEAD 커밋 변경 요약 기록 구현 |
 | 56 | Timeline 공유 정책 논리 모순 수정 | post-commit `commit_created` 자동 기록을 제거하고, 커밋 전 공유 가능한 `change_summary` 중심으로 `.agents` Timeline 정책 정리 |
 | 57 | 원 클릭 미리보기, 내부 도움말 및 v1.5.0 릴리즈 | 왼쪽 사이드바 전체 파일 미리보기, Settings 토글, 포커스 한정 Esc 닫기, Help 메뉴 내부 Markdown 탭 열기, 앱 번들 버전 1.5.0 갱신 |
+| 58 | 원 클릭 미리보기 메모리 피크 완화 및 v1.5.1 릴리즈 | 이미지 미리보기를 ImageIO 썸네일 로딩으로 전환하고 텍스트 미리보기 크기를 제한해 앱 번들 버전 1.5.1 갱신 |
 
 ---
 
@@ -1511,6 +1513,38 @@ MarkAgent 메뉴의 `Settings…` 창을 추가하고, Ghostty theme/font-size/c
 
 **응답:**
 명시 버전 `1.2.0`으로 앱 번들 버전을 갱신하고, README 기능 소개와 `history.md` 세션 기록을 이번 변경분에 맞게 업데이트한 뒤 릴리즈 빌드, GitHub Release, 커밋/푸시, main 대상 PR 생성 및 머지를 진행.
+
+변경 파일: `Sources/App/Info.plist`, `README.md`, `history.md`
+
+
+## 세션 41: 원 클릭 미리보기 메모리 피크 완화 및 v1.5.1 릴리즈
+
+> 날짜: 2026-06-01
+> 경로: ~/workspace/markAgent
+
+원 클릭 미리보기에서 큰 이미지와 큰 텍스트 파일을 열 때 메모리가 크게 튀는 문제를 확인하고, 미리보기용 로딩 경로를 제한된 썸네일/부분 텍스트 중심으로 조정해 `v1.5.1` 패치 릴리즈를 준비했다.
+
+### 대화 1: 미리보기 메모리 피크 원인 수정
+
+**사용자:**
+> 새로 추가한 미리보기 기능으로 인해 메모리 피크 치는 문제가 발생되었어.
+
+**응답:**
+사이드바 원 클릭 미리보기와 Markdown 이미지 미리보기 경로에서 `NSImage(contentsOf:)`로 원본 이미지를 즉시 디코딩하고 상태에 보관하던 구조를 확인했다. ImageIO 기반 썸네일 로더를 추가해 로컬 이미지를 필요한 최대 픽셀 크기로 다운샘플링하고, 사이드바 이미지 상태는 원본 `NSImage` 대신 URL만 보관하도록 바꿨다. 텍스트/Markdown 사이드바 미리보기는 전체 파일을 읽지 않고 앞 256KB만 읽도록 제한했다.
+
+검증: `swift test` 48개 통과, `swift build` 성공, `scripts/bundle.sh`로 debug 앱 번들 생성 성공, 변경 파일 LSP diagnostics 문제 없음.
+
+변경 파일: `Sources/Rendering/MarkdownImage.swift`, `Sources/Views/Sidebar/FileBrowserSidebar.swift`, `Tests/MarkAgentTests/DocumentTests.swift`
+
+---
+
+### 대화 2: v1.5.1 릴리즈 빌드 준비
+
+**사용자:**
+> .claude/commands/release-build.md 1.5.1
+
+**응답:**
+명시 버전 `1.5.1`로 `Info.plist`의 `CFBundleVersion`과 `CFBundleShortVersionString`을 갱신하고, README 기능 소개와 `history.md`를 원 클릭 미리보기 메모리 피크 완화 내용에 맞게 업데이트한 뒤 릴리즈 빌드 절차를 진행한다.
 
 변경 파일: `Sources/App/Info.plist`, `README.md`, `history.md`
 
