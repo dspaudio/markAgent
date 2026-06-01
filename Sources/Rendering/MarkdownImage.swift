@@ -179,6 +179,14 @@ struct MarkdownImagePreview: View {
 
 enum MarkdownImageThumbnailLoader {
     static func thumbnail(for url: URL, maxPixelSize: CGFloat) -> NSImage? {
+        guard let data = thumbnailData(for: url, maxPixelSize: maxPixelSize) else {
+            return nil
+        }
+
+        return NSImage(data: data)
+    }
+
+    static func thumbnailData(for url: URL, maxPixelSize: CGFloat) -> Data? {
         guard url.isFileURL, maxPixelSize > 0 else { return nil }
 
         let sourceOptions = [
@@ -199,10 +207,17 @@ enum MarkdownImageThumbnailLoader {
             return nil
         }
 
-        return NSImage(
-            cgImage: cgImage,
-            size: NSSize(width: cgImage.width, height: cgImage.height)
-        )
+        let data = NSMutableData()
+        guard let destination = CGImageDestinationCreateWithData(data, "public.png" as CFString, 1, nil) else {
+            return nil
+        }
+
+        CGImageDestinationAddImage(destination, cgImage, nil)
+        guard CGImageDestinationFinalize(destination) else {
+            return nil
+        }
+
+        return data as Data
     }
 }
 
@@ -244,12 +259,12 @@ struct LocalThumbnailImage: View {
         image = nil
         didFail = false
 
-        let loadedImage = await Task.detached(priority: .utility) {
-            MarkdownImageThumbnailLoader.thumbnail(for: url, maxPixelSize: maxPixelSize)
+        let loadedData = await Task.detached(priority: .utility) {
+            MarkdownImageThumbnailLoader.thumbnailData(for: url, maxPixelSize: maxPixelSize)
         }.value
 
         guard !Task.isCancelled else { return }
-        if let loadedImage {
+        if let loadedData, let loadedImage = NSImage(data: loadedData) {
             image = loadedImage
         } else {
             didFail = true

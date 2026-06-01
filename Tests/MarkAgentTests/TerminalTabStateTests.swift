@@ -28,6 +28,36 @@ final class TerminalTabStateTests: XCTestCase {
     }
 
     @MainActor
+    func testNamedGhosttyThemeRendersExplicitTerminalColors() {
+        let contents = """
+        theme = Catppuccin Latte
+        background-opacity = 0.9
+        """
+        let state = TerminalTabState(
+            workingDirectory: FileManager.default.temporaryDirectory,
+            userConfigProvider: {
+                GhosttyConfig(
+                    url: URL(fileURLWithPath: "/tmp/ghostty-config"),
+                    contents: contents,
+                    fontFamilies: [],
+                    fontSize: nil,
+                    colorTheme: GhosttyConfig.parseColorTheme(from: contents),
+                    keybinds: []
+                )
+            }
+        )
+
+        let renderedConfig = state.terminalViewState.renderedConfig
+
+        XCTAssertTrue(renderedConfig.contains("background = #eff1f5"))
+        XCTAssertTrue(renderedConfig.contains("foreground = #4c4f69"))
+        XCTAssertTrue(renderedConfig.contains("cursor-color = #dc8a78"))
+        XCTAssertTrue(renderedConfig.contains("palette = 4=#1e66f5"))
+        XCTAssertTrue(renderedConfig.contains("background-opacity = 0.9"))
+        XCTAssertFalse(renderedConfig.contains("theme = Catppuccin Latte"))
+    }
+
+    @MainActor
     func testTerminalTabStateCanDeallocateAfterConfigurationReload() {
         weak var weakState: TerminalTabState?
         var currentContents = "font-size = 14"
