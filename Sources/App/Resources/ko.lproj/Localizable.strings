@@ -118,6 +118,8 @@
 "Coding Font" = "코딩 글꼴";
 "Fallback Font" = "대체 글꼴";
 "Theme Preview" = "테마 미리보기";
+"Light Themes" = "라이트 테마";
+"Dark Themes" = "다크 테마";
 "Selected" = "선택됨";
 "Font Preview" = "글꼴 미리보기";
 "Fallback: %@ · 한글 미리보기 123" = "대체 글꼴: %@ · 한글 미리보기 123";

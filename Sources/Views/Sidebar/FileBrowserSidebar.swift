@@ -396,7 +396,7 @@ struct FileBrowserSidebar: View {
                     }
                 }
                 .frame(maxHeight: .infinity)
-                .background(Color(nsColor: .textBackgroundColor).opacity(0.72))
+                .background(appColors?.elevated ?? Color(nsColor: .textBackgroundColor).opacity(0.72))
             }
         }
     }

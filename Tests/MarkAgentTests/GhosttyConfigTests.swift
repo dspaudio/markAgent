@@ -70,6 +70,26 @@ final class GhosttyConfigTests: XCTestCase {
         XCTAssertTrue(config?.contents.contains("font-family = \"Noto Sans CJK KR\"") == true)
     }
 
+    func testUserConfigAddsDefaultKoreanFallbackFontWhenMissing() throws {
+        let home = FileManager.default.temporaryDirectory
+            .appendingPathComponent("GhosttyConfigTests-\(UUID().uuidString)")
+        let xdgConfig = home.appendingPathComponent(".config/ghostty/config")
+        defer { try? FileManager.default.removeItem(at: home) }
+
+        try FileManager.default.createDirectory(
+            at: xdgConfig.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        try """
+        font-family = "JetBrains Mono"
+        font-size = 16
+        """.write(to: xdgConfig, atomically: true, encoding: .utf8)
+
+        let config = GhosttyConfig.userConfig(homeDirectory: home)
+
+        XCTAssertEqual(config?.fontFamilies, ["\"JetBrains Mono\"", "\"Apple SD Gothic Neo\""])
+    }
+
     func testPreferencesReadThemeAndFontChoices() throws {
         let home = FileManager.default.temporaryDirectory
             .appendingPathComponent("GhosttyConfigTests-\(UUID().uuidString)")
@@ -94,6 +114,28 @@ final class GhosttyConfigTests: XCTestCase {
         XCTAssertEqual(preferences.primaryFontFamily, "JetBrains Mono")
         XCTAssertEqual(preferences.fallbackFontFamily, "Noto Sans CJK KR")
         XCTAssertEqual(preferences.fontSize, 16)
+    }
+
+    func testPreferencesUseDefaultKoreanFallbackFontWhenMissing() throws {
+        let home = FileManager.default.temporaryDirectory
+            .appendingPathComponent("GhosttyConfigTests-\(UUID().uuidString)")
+        let xdgConfig = home.appendingPathComponent(".config/ghostty/config")
+        defer { try? FileManager.default.removeItem(at: home) }
+
+        try FileManager.default.createDirectory(
+            at: xdgConfig.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        try """
+        theme = Dracula
+        font-family = "JetBrains Mono"
+        font-size = 16
+        """.write(to: xdgConfig, atomically: true, encoding: .utf8)
+
+        let preferences = GhosttyConfig.preferences(homeDirectory: home)
+
+        XCTAssertEqual(preferences.primaryFontFamily, "JetBrains Mono")
+        XCTAssertEqual(preferences.fallbackFontFamily, "Apple SD Gothic Neo")
     }
 
     func testUpdatingPreferencesReplacesManagedLinesAndPreservesOtherConfig() {

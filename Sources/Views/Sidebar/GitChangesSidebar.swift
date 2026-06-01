@@ -8,6 +8,8 @@ struct GitChangesSidebar: View {
     var mentionedFileIDs: Set<GitChangedFile.ID> = []
 
     @State private var previewFile: GitChangedFile?
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.terminalAppTheme) private var terminalAppTheme
 
     var body: some View {
         content
@@ -63,9 +65,6 @@ struct GitChangesSidebar: View {
                                 isMentionedInDocument: mentionedFileIDs.contains(file.id)
                             )
                             .onTapGesture {
-                                selectFile(file)
-                            }
-                            .onTapGesture(count: 2) {
                                 openPreview(for: file)
                             }
                         }
@@ -172,7 +171,7 @@ struct GitChangesSidebar: View {
                 )
                 .padding(10)
             }
-            .background(Color(nsColor: .textBackgroundColor).opacity(0.72))
+            .background(appColors?.elevated ?? Color(nsColor: .textBackgroundColor).opacity(0.72))
         } else if state.isLoadingDiffs || state.isRefreshing {
             ProgressView("Diff 불러오는 중...")
                 .font(.system(size: 12))
@@ -184,6 +183,10 @@ struct GitChangesSidebar: View {
                 .padding()
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
+    }
+
+    private var appColors: TerminalAppColors? {
+        terminalAppTheme?.colors(for: colorScheme)
     }
 }
 

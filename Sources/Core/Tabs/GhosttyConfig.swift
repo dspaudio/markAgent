@@ -2,6 +2,8 @@ import Foundation
 import GhosttyTheme
 
 struct GhosttyConfig {
+    static let defaultFallbackFontFamily = "Apple SD Gothic Neo"
+
     let url: URL
     let contents: String
     let fontFamilies: [String]
@@ -28,7 +30,7 @@ struct GhosttyConfig {
         return GhosttyConfig(
             url: url,
             contents: contents,
-            fontFamilies: parseFontFamilies(from: contents),
+            fontFamilies: fontFamiliesWithDefaultFallback(from: contents),
             fontSize: parseFontSize(from: contents),
             colorTheme: parseColorTheme(from: contents),
             keybinds: parseKeybinds(from: contents)
@@ -192,7 +194,7 @@ struct GhosttyConfig {
             themeName: parseThemeName(from: contents) ?? "Dark Modern",
             fontSize: Double(parseFontSize(from: contents) ?? 14),
             primaryFontFamily: fontFamilies.first ?? "Menlo",
-            fallbackFontFamily: fontFamilies.dropFirst().first ?? "SF Mono"
+            fallbackFontFamily: fontFamilies.dropFirst().first ?? defaultFallbackFontFamily
         )
     }
 
@@ -311,6 +313,18 @@ struct GhosttyConfig {
         stripQuotes(name)
             .lowercased()
             .filter { $0.isLetter || $0.isNumber }
+    }
+
+    private static func fontFamiliesWithDefaultFallback(from contents: String) -> [String] {
+        let families = parseFontFamilies(from: contents)
+        guard families.count == 1 else { return families }
+
+        let fallbackLine = "\"\(defaultFallbackFontFamily)\""
+        if families.contains(where: { stripQuotes($0) == defaultFallbackFontFamily }) {
+            return families
+        }
+
+        return families + [fallbackLine]
     }
 }
 
