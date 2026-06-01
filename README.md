@@ -35,7 +35,7 @@ MarkAgent is a visual bridge for that workflow.
 ## Features
 
 - **Ghostty terminal tabs:** Embedded terminal tabs powered by `libghostty-spm` for handling multiple work sessions in one window. Inactive terminal tabs are marked as hidden to reduce unnecessary Ghostty Metal redraw work and lower energy usage when multiple sessions are open.
-- **Ghostty config integration:** Reads `~/.config/ghostty/config` and reflects your existing terminal preferences such as theme, font family, and font size in the app. The Settings tab groups Ghostty theme preview cards into light and dark sections, lets you choose font size, coding font, and fallback font with live previews, and defaults the fallback font to Apple SD Gothic Neo when only a primary coding font is configured; changes are saved back to the Ghostty config file and immediately reloaded into open terminal tabs. It also checks Ghostty's macOS Application Support config path, lets you re-read the current config from the MarkAgent menu, opens the current Ghostty config file directly from the app menu, reloads the live terminal configuration after saving that file, and restores action-aware Ghostty keybind dispatch so `text:` payloads and binding actions take the intended path.
+- **Ghostty config integration:** Reads `~/.config/ghostty/config` and reflects your existing terminal preferences such as theme, font family, and font size in the app. The Settings tab lets you switch between light and dark theme lists with a segmented selector, choose font size, coding font, and fallback font with live previews, and defaults the fallback font to Apple SD Gothic Neo when only a primary coding font is configured; changes are saved back to the Ghostty config file and immediately reloaded into open terminal tabs. Named Ghostty themes are converted into explicit terminal colors so embedded tabs match the selected theme even when the embedded Ghostty runtime cannot resolve the theme name directly. It also checks Ghostty's macOS Application Support config path, lets you re-read the current config from the MarkAgent menu, opens the current Ghostty config file directly from the app menu, reloads the live terminal configuration after saving that file, and restores action-aware Ghostty keybind dispatch so `text:` payloads and binding actions take the intended path.
 - **Markdown editing and preview:** Supports raw Markdown editing, GFM rendering, tables, checklists, strikethrough, highlighted code blocks, and a local markdown toolbar with preview/raw mode switching plus inline formatting actions. Wide markdown tables can be scrolled horizontally, table columns keep clearer separators, and preview memory is released more aggressively when returning to raw edit. When the opened file is not Markdown, markdown-only editing controls stay hidden so raw text files keep a cleaner editor UI.
 - **Close confirmation:** Closing a terminal tab asks for confirmation, and closing a modified Markdown document lets you save, discard changes, or cancel.
 - **Working directory file browser:** Updates the file browser based on the active terminal or Markdown tab's working directory, and both left and right sidebars can be resized directly in the window. The left file sidebar can be toggled from the toolbar or View menu, with Settings options for default visibility and one-click preview. When one-click preview is enabled, selecting a file uses the full left sidebar as a focused preview surface while terminal tabs keep running independently; the preview can be closed with the back button or with Esc only when the preview itself has focus, and the edit button opens the file in a tab. Image previews are downsampled and text previews are capped so large files do not spike memory just to fill the sidebar.
@@ -185,7 +185,7 @@ MarkAgent looks for Ghostty config files in this order:
 1. `~/.config/ghostty/config`
 2. `~/Library/Application Support/com.mitchellh.ghostty/config`
 
-The current implementation reads `font-family`, `font-size`, `theme`, `background`, `foreground`, `cursor-color`, `selection-background`, `selection-foreground`, and `palette`, then applies those values to the terminal and app theme.
+The current implementation reads `font-family`, `font-size`, `theme`, `background`, `foreground`, `cursor-color`, `selection-background`, `selection-foreground`, and `palette`, then applies those values to the terminal and app theme. When a named theme is found in the bundled Ghostty theme catalog, MarkAgent injects the resolved colors into the embedded terminal config and omits the raw `theme` line from that runtime config.
 
 ## Open Source
 
@@ -370,7 +370,7 @@ MarkAgent는 다음 순서로 Ghostty 설정 파일을 찾습니다.
 1. `~/.config/ghostty/config`
 2. `~/Library/Application Support/com.mitchellh.ghostty/config`
 
-현재 구현은 `font-family`, `font-size`, `theme`, `background`, `foreground`, `cursor-color`, `selection-background`, `selection-foreground`, `palette` 값을 읽어 터미널과 앱 테마에 반영합니다.
+현재 구현은 `font-family`, `font-size`, `theme`, `background`, `foreground`, `cursor-color`, `selection-background`, `selection-foreground`, `palette` 값을 읽어 터미널과 앱 테마에 반영합니다. 번들된 Ghostty 테마 카탈로그에서 이름 있는 테마를 찾으면 MarkAgent가 해석된 색상을 내장 터미널 설정에 직접 주입하고, 해당 런타임 설정에서는 원본 `theme` 줄을 제외합니다.
 
 ## 오픈소스
 
