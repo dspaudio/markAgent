@@ -38,6 +38,10 @@
 34. [세션 34: 앱 국제화 및 v1.4.1 릴리즈](#세션-34-앱-국제화-및-v141-릴리즈)
 35. [세션 35: 번들 도움말, 코드 서명 릴리즈 빌드 및 v1.4.2 릴리즈](#세션-35-번들-도움말-코드-서명-릴리즈-빌드-및-v142-릴리즈)
 36. [세션 36: 공증 릴리스 자동화 보강 및 v1.4.2 재배포](#세션-36-공증-릴리스-자동화-보강-및-v142-재배포)
+37. [세션 37: 에이전트 검토 워크스페이스 1차 구현](#세션-37-에이전트-검토-워크스페이스-1차-구현)
+38. [세션 38: .agents Timeline persistence와 AI 요약 구현](#세션-38-agents-timeline-persistence와-ai-요약-구현)
+39. [세션 39: Timeline 공유 정책 논리 모순 수정](#세션-39-timeline-공유-정책-논리-모순-수정)
+40. [세션 40: 원 클릭 미리보기, 내부 도움말 및 v1.5.0 릴리즈](#세션-40-원-클릭-미리보기-내부-도움말-및-v150-릴리즈)
 
 ---
 
@@ -98,6 +102,10 @@
 | 51 | 앱 국제화 및 v1.4.1 릴리즈 | 영어 기본 UI와 한국어 로컬라이제이션 리소스 추가, 메뉴/사이드바/Git/스니펫 문구 정리, 앱 번들 버전 1.4.1 갱신 |
 | 52 | 번들 도움말, 코드 서명 릴리즈 빌드 및 v1.4.2 릴리즈 | Help 메뉴에서 번들 README를 열도록 변경, release/install 번들 코드 서명 자동화, 앱 번들 버전 1.4.2 갱신 |
 | 53 | 공증 릴리스 자동화 보강 및 v1.4.2 재배포 | release 빌드에 Developer ID 서명, notarization, stapling, ditto ZIP 생성, 압축 해제 후 Gatekeeper 검증을 추가하고 GitHub Release v1.4.2 자산을 공증 ZIP으로 교체 |
+| 54 | 에이전트 검토 워크스페이스 1차 구현 | 에이전트 작업 타임라인, 마크다운-Git diff 연결 표시, 구현 플랜 문서와 테스트 추가 |
+| 55 | .agents Timeline persistence와 AI 요약 구현 | `.agents/timeline.jsonl` source of truth, `.agents/timeline.md` 요약, commit_created 이벤트와 HEAD 커밋 변경 요약 기록 구현 |
+| 56 | Timeline 공유 정책 논리 모순 수정 | post-commit `commit_created` 자동 기록을 제거하고, 커밋 전 공유 가능한 `change_summary` 중심으로 `.agents` Timeline 정책 정리 |
+| 57 | 원 클릭 미리보기, 내부 도움말 및 v1.5.0 릴리즈 | 왼쪽 사이드바 전체 파일 미리보기, Settings 토글, 포커스 한정 Esc 닫기, Help 메뉴 내부 Markdown 탭 열기, 앱 번들 버전 1.5.0 갱신 |
 
 ---
 
@@ -1956,3 +1964,219 @@ GitHub에서 다운로드한 `v1.4.2` 앱이 코드 서명/Gatekeeper 경고를 
 변경 파일: 없음
 
 ---
+
+## 세션 37: 에이전트 검토 워크스페이스 1차 구현
+
+> 날짜: 2026-05-30
+> 경로: ~/workspace/markAgent
+
+MarkAgent를 CLI 에이전트 산출물 검토용 비주얼 브릿지로 강화하기 위해, 제안 기능의 구현 가능성을 정리하고 우선순위가 높은 작업 타임라인과 마크다운-Git diff 연결 기능을 1차 범위로 구현.
+
+### 대화 1: 에이전트 검토 기능 후보 분석 및 구현
+
+**사용자:**
+> `$omo:ultragoal` 다음 내용을 확인하고 구현가능한 부분을 찾아서 상세 플랜으로 만들어줘. 그리고 구현 가능한 부분부터 구현해줘. markAgent 성격 파악함: Ghostty 멀티탭 터미널 + 마크다운 워크스페이스 + Git diff 뷰어를 한 창에 묶은 macOS 네이티브 앱. "CLI 에이전트로 개발할 때 사람이 검토하기 좋게" 보조하는 비주얼 브릿지.
+
+**응답:**
+5개 기능 후보를 MarkAgent의 기존 구조와 검토 워크플로우 기준으로 분석하고 `plans/agent-review-workspace-plan.md`에 상세 플랜을 작성했다. 실행 중 사용한 계획과 RED-GREEN/QA 증거는 저장소에서 추적할 수 있도록 `plans/agent-review-workspace-execution.md`에 별도 기록했다. 1차 구현으로 열린 마크다운 문서가 Git 변경 파일 경로를 언급하면 Git 변경 목록과 diff 섹션에 `문서 언급` 표시를 보여주는 연결 인덱스를 추가했다. 이어서 우측 작업 사이드바에 `타임라인` 탭을 추가하고, 터미널 탭 생성, 마크다운 문서 열기, Git diff 파일 포커스 이벤트를 최신순으로 기록하는 `AgentTimelineStore`와 UI를 구현했다. 기존 pasteboard 테스트는 전역 pasteboard 의존으로 인한 flake를 피하도록 고유 named pasteboard를 사용하게 보정했다.
+
+검증:
+- `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer swift test --filter AgentTimelineStoreTests` — 3개 통과
+- `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer swift test --filter MarkdownGitReferenceIndexTests` — 3개 통과
+- `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer swift test --disable-sandbox` — 43개 통과
+- `git diff --check` — 성공
+- tmux QA transcript: `/private/tmp/markagent-agent-review-qa-20260530-155630.txt`
+
+변경 파일: `plans/agent-review-workspace-plan.md`, `plans/agent-review-workspace-execution.md`, `Sources/Core/AgentTimelineStore.swift`, `Sources/Core/MarkdownGitReferenceIndex.swift`, `Sources/Views/Main/ActiveTabContentView.swift`, `Sources/Views/Main/MainContainerView.swift`, `Sources/Views/Sidebar/AgentTimelineSidebarView.swift`, `Sources/Views/Sidebar/GitChangesSidebar.swift`, `Sources/Views/Sidebar/RightSidebarView.swift`, `Sources/Views/Tabs/GitDiffTabView.swift`, `Tests/MarkAgentTests/AgentTimelineStoreTests.swift`, `Tests/MarkAgentTests/MarkdownGitReferenceIndexTests.swift`, `Tests/MarkAgentTests/PromptSnippetClipboardTests.swift`
+
+---
+
+### 대화 2: dev 브랜치 커밋 요청 및 히스토리 기록
+
+**사용자:**
+> 작업된 내역을 history.md 파일에 기록하고 dev 브랜치에 커밋해야 해. main 브랜치에서 작업한 것은 잘못이야.
+
+**응답:**
+현재 브랜치가 `dev`임을 확인하고, 커밋 전 규칙에 따라 이번 세션 작업 내용을 `history.md` 목차, 전체 타임라인 요약, 세션 본문에 기록했다. 변경사항은 `history.md` 포함 dev 브랜치에 커밋한다.
+
+변경 파일: `history.md`
+
+---
+
+
+## 세션 38: .agents Timeline persistence와 AI 요약 구현
+
+> 날짜: 2026-05-30
+> 경로: ~/workspace/markAgent
+
+AI CLI 도구와 연계하기 쉬운 Timeline 저장 위치와 파일 형식을 논의한 뒤, `.agents/timeline.jsonl`을 source of truth로, `.agents/timeline.md`를 사람/AI용 요약으로 사용하는 2차 구현을 진행했다. 커밋 이벤트에는 HEAD 커밋 코드와 변경 파일 요약을 포함하도록 확장했다.
+
+### 대화 1: 에이전트 검토 워크스페이스 구현 리뷰
+
+**사용자:**
+> plans 폴더 내용을 읽고 지금까지 구현한 내용을 리뷰해봐
+
+**응답:**
+`plans/agent-review-workspace-plan.md`와 `plans/agent-review-workspace-execution.md`를 읽고, 1차 구현인 마크다운-Git diff 연결 및 Timeline 탭 구현을 리뷰했다. 구현은 수용 기준을 대체로 충족하며, 열린 모든 마크다운 탭 기준의 mention 계산, Git status 경로 파싱, raw text 기반 문서 reference 탐지, Timeline persistence 부재 등을 후속 개선점으로 정리했다.
+
+변경 파일: 없음
+
+---
+
+### 대화 2: `.agents` 기반 Timeline persistence 설계 논의
+
+**사용자:**
+> .agents/timeline.json을 활용하는게 AI 연계에 맞을 것 같아. .agents 폴더는 AI cli 도구 중 호환성이 제일 낫다고 생각하기 때문이야. 다만 꼭 json이어야 하는지? 아니면 다른 추천 방식이 있을지는 고민해야 해. timeline 이벤트에는 이미 커밋했다면 해당 커밋코드와 변경내용도 포함하면 어떨까 싶어.
+
+**응답:**
+AI 연계와 append-friendly 특성을 고려해 단일 JSON 배열보다 JSONL을 추천했다. `.agents/timeline.jsonl`은 이벤트 단위 source of truth로, `.agents/timeline.md`는 AI와 사람이 읽기 쉬운 요약으로 두는 구조를 제안했다. 커밋 정보는 전체 diff 본문 대신 commit hash, subject, 변경 파일, insertions/deletions 요약을 별도 `commit_created` 이벤트로 남기는 방향을 권장했다.
+
+변경 파일: 없음
+
+---
+
+### 대화 3: `.agents/timeline.jsonl` + `timeline.md` 구현
+
+**사용자:**
+> 이 내용을 기반으로 플랜을 업데이트하고 구현해줘. ulw
+
+**응답:**
+플랜 문서에 2차 구현 상세를 추가하고, `AgentTimelineStore`를 파일 기반 persistence 구조로 확장했다. Git 저장소 루트 확인 시 `.agents/timeline.jsonl`과 `.agents/timeline.md`를 생성/갱신하며, Timeline 이벤트 기록 시 JSONL append와 MD 요약 재생성을 수행하도록 구현했다. Git refresh 완료 후 HEAD 커밋이 아직 기록되지 않았으면 `commit_created` 이벤트를 추가하고, commit hash/short hash/subject/author/committedAt 및 변경 파일 insertions/deletions 요약을 포함하도록 했다. 깨진 JSONL line은 무시하고 읽을 수 있는 이벤트만 로드하도록 테스트를 추가했다.
+
+검증: `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer swift test --filter AgentTimelineStoreTests` 6개 통과, `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer swift test` 46개 통과, `git diff --check` 성공.
+
+변경 파일: `Sources/Core/AgentTimelineStore.swift`, `Sources/Views/Main/MainContainerView.swift`, `Sources/Views/Sidebar/AgentTimelineSidebarView.swift`, `Tests/MarkAgentTests/AgentTimelineStoreTests.swift`, `plans/agent-review-workspace-plan.md`, `plans/agent-review-workspace-execution.md`
+
+---
+
+### 대화 4: 히스토리 기록 및 커밋/푸시
+
+**사용자:**
+> history.md를 업데이트하고 커밋 & 푸시해줘.
+
+**응답:**
+커밋/푸시 전 필수 규칙에 따라 이번 세션의 주요 리뷰, 설계 논의, 구현 및 검증 내용을 `history.md`에 세션 38로 기록했다.
+
+변경 파일: `history.md`
+
+
+## 세션 39: Timeline 공유 정책 논리 모순 수정
+
+> 날짜: 2026-05-30
+> 경로: ~/workspace/markAgent
+
+`.agents` Timeline을 공유 가능한 작업 히스토리로 유지하려는 목적과 post-commit `commit_created` 자동 기록 사이의 논리 모순을 확인하고, 커밋 전에 포함 가능한 `change_summary` 중심 구조로 수정했다.
+
+### 대화 1: `.agents` runtime dirty 상태 문제 확인
+
+**사용자:**
+> 커밋 후에도 timeline 관련 데이터에 변경이 생겨서 해당 저장소의 상태가 지속적으로 unstage 상태가 되는 문제가 있어.
+
+**응답:**
+앱 실행 이후 `.agents/timeline.jsonl`, `.agents/timeline.md`가 untracked/dirty 상태가 되는 원인을 확인했다. 초기에는 runtime 파일을 ignore하는 방향을 검토했으나, 사용자가 `.agents` 전체를 공유 히스토리로 사용하려는 의도를 다시 설명하면서 ignore 방식은 목적과 맞지 않음을 확인했다.
+
+변경 파일: 없음
+
+---
+
+### 대화 2: `commit_created` 자기 참조 모순 정리
+
+**사용자:**
+> commit_created도 커밋 이전에 기록되어야 하는데?
+
+**응답:**
+`commit_created`에 현재 커밋 hash를 넣어 같은 커밋에 포함하는 것은 커밋 hash 계산 방식상 불가능하다는 점을 정리했다. 커밋 후 hash를 기록하면 다시 dirty가 되고, amend하면 hash가 바뀌는 자기 참조 모순이 생기므로 post-commit 자동 기록 모델을 제거하기로 했다.
+
+변경 파일: 없음
+
+---
+
+### 대화 3: `change_summary` 중심 공유 Timeline으로 수정
+
+**사용자:**
+> 논리 모순이 생겨
+
+**응답:**
+`AgentTimelineStore`에서 `commit_created`, HEAD snapshot 자동 기록, Git refresh 후 post-commit 기록 경로를 제거했다. 대신 공유 파일에는 커밋 전에 포함 가능한 `change_summary` 이벤트만 기록하도록 조정하고, `terminal_created`, `markdown_opened`, `git_diff_focused` 같은 런타임 UI 이벤트는 앱 내부 Timeline에만 남기도록 했다. `.agents/timeline.jsonl`과 `.agents/timeline.md`는 ignore하지 않고 공유 가능한 작업 요약 파일로 정리했다. 플랜/실행 문서도 `change_summary` 정책으로 업데이트했다.
+
+검증: `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer swift test --filter AgentTimelineStoreTests` 6개 통과, `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer swift test` 46개 통과, `git diff --check` 성공.
+
+변경 파일: `Sources/Core/AgentTimelineStore.swift`, `Sources/Views/Main/MainContainerView.swift`, `Sources/Views/Sidebar/AgentTimelineSidebarView.swift`, `Tests/MarkAgentTests/AgentTimelineStoreTests.swift`, `plans/agent-review-workspace-plan.md`, `plans/agent-review-workspace-execution.md`, `.agents/timeline.jsonl`, `.agents/timeline.md`
+
+---
+
+### 대화 4: 커밋 및 푸시
+
+**사용자:**
+> 커밋 & 푸시해줘
+
+**응답:**
+커밋/푸시 전 필수 규칙에 따라 이번 논리 모순 수정 내용을 `history.md`에 세션 39로 기록했다.
+
+변경 파일: `history.md`
+
+
+## 세션 40: 원 클릭 미리보기, 내부 도움말 및 v1.5.0 릴리즈
+
+> 날짜: 2026-06-01
+> 경로: ~/workspace/markAgent
+
+왼쪽 파일 사이드바에서 파일을 단일 클릭으로 미리보고, 필요할 때만 탭 편집으로 전환하는 흐름을 추가했다. 동시에 Help 메뉴의 MarkAgent 도움말이 외부 앱이 아니라 MarkAgent 내부 Markdown 탭에서 열리도록 수정하고 `v1.5.0` 릴리즈를 준비했다.
+
+### 대화 1: 왼쪽 사이드바 원 클릭 미리보기 구현
+
+**사용자:**
+> 현재 폴더에서 md 파일을 두번 클릭하면 탭에 편집할 수 있게 열리는데, 한 번만 클릭하면 left side bar 영역에서 미리보기로 볼 수 있고, 미리보기 화면에서 편집 버튼을 클릭하면 탭으로 열리게 할 수 있을까? md 파일 말고도 일단 다른 파일도 그렇게 처리해줘. 그리고 Settings 에서도 이렇게 추가하는 one click preview를 활성화할지 선택할 수 있으면 좋겠어.
+
+**응답:**
+왼쪽 `FileBrowserSidebar`에 `isOneClickPreviewEnabled` 설정을 연결하고, 파일 단일 클릭 시 사이드바 내부 미리보기를 표시하도록 구현했다. Markdown 파일은 기존 렌더러로 렌더링하고, 일반 텍스트 파일은 monospaced raw text로, 이미지 파일은 이미지 미리보기로 보여준다. 더블 클릭과 미리보기의 편집 버튼은 기존처럼 파일을 Markdown/raw 편집 탭으로 연다. Settings의 Workspace 섹션에는 `One click preview` 토글을 추가하고 영어/한국어 로컬라이제이션 문자열을 보강했다.
+
+변경 파일: `Sources/Views/Sidebar/FileBrowserSidebar.swift`, `Sources/App/PreferencesView.swift`, `Sources/App/Resources/en.lproj/Localizable.strings`, `Sources/App/Resources/ko.lproj/Localizable.strings`
+
+---
+
+### 대화 2: 미리보기 닫기와 터미널 Esc 동작 분리
+
+**사용자:**
+> esc키를 누르거나 <- 버튼을 누르면 one click preview 화면은 닫히고 기존의 lefe side bar를 이용할 수 있어야 해.
+
+**응답:**
+미리보기 헤더에 뒤로가기 버튼을 추가해 기존 파일 목록/최근 문서 사이드바로 돌아갈 수 있게 했다. Esc 닫기는 전역 이벤트 모니터가 아니라 미리보기 컨테이너가 실제 포커스를 가진 경우에만 처리하도록 `NSHostingView` 기반 포커스 컨테이너로 좁혔다. 따라서 터미널 탭에 포커스가 있을 때는 Esc가 터미널로 전달되고, 미리보기 비활성화 상태에서도 Esc를 가로채지 않는다.
+
+변경 파일: `Sources/Views/Sidebar/FileBrowserSidebar.swift`
+
+---
+
+### 대화 3: 미리보기 영역을 왼쪽 사이드바 전체로 확장
+
+**사용자:**
+> 미리 보기 영역은 왼쪽 사이드바 전체를 다 쓰도록 수정해줘.
+
+**응답:**
+미리보기를 파일 목록 아래에 삽입하던 구조를 변경해, 원 클릭 미리보기가 열렸을 때 파일 목록과 최근 문서 영역을 미리보기 화면으로 완전히 대체하도록 했다. 뒤로가기 버튼으로 닫으면 기존 파일 브라우저와 최근 문서 목록이 다시 표시된다.
+
+변경 파일: `Sources/Views/Sidebar/FileBrowserSidebar.swift`
+
+---
+
+### 대화 4: Help 메뉴를 MarkAgent 내부 탭으로 열기
+
+**사용자:**
+> 도움말에서 MarkAgent 도움말을 클릭하면 해당 파일이 다른 프로그램으로 열리는 문제가 있어. MarkAgent 앱 내에서 열리게 수정해줘.
+
+**응답:**
+`showHelp()`가 번들 `README.md`를 `NSWorkspace.shared.open`으로 열던 동작을 제거하고, 앱 내부 Markdown 탭으로 열도록 변경했다. 번들 README가 없을 경우에는 About 탭으로 fallback한다.
+
+변경 파일: `Sources/App/AppDelegate.swift`
+
+---
+
+### 대화 5: v1.5.0 릴리즈 빌드 준비
+
+**사용자:**
+> .claude/commands/release-build.md 1.5.0
+
+**응답:**
+명시 버전 `1.5.0`으로 `Info.plist`의 `CFBundleVersion`과 `CFBundleShortVersionString`을 갱신하고, README 기능 소개와 `history.md`를 이번 원 클릭 미리보기/내부 도움말 변경에 맞게 업데이트한 뒤 릴리즈 빌드 절차를 진행한다.
+
+변경 파일: `Sources/App/Info.plist`, `README.md`, `history.md`

@@ -35,6 +35,11 @@
 "불러오는 중..." = "Loading...";
 "닫기" = "Close";
 "이미지를 열 수 없습니다." = "Cannot open image.";
+"미리보기" = "Preview";
+"편집" = "Edit";
+"탭에서 편집" = "Edit in Tab";
+"미리보기 닫기" = "Close Preview";
+"파일을 읽을 수 없습니다: %@" = "Cannot read file: %@";
 
 /* RecentDocumentsSection */
 "최근 문서" = "Recent Documents";
@@ -100,6 +105,7 @@
 "Settings" = "Settings";
 "Workspace" = "Workspace";
 "Show left sidebar by default" = "Show left sidebar by default";
+"One click preview" = "One click preview";
 "Terminal" = "Terminal";
 "Theme" = "Theme";
 "Choose from preview" = "Choose from preview";

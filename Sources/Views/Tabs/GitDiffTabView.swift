@@ -3,6 +3,7 @@ import SwiftUI
 struct GitDiffTabView: View {
     var state: GitDiffState
     let isActive: Bool
+    var mentionedFileIDs: Set<GitChangedFile.ID> = []
 
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.terminalAppTheme) private var terminalAppTheme
@@ -87,7 +88,10 @@ struct GitDiffTabView: View {
                 ScrollView {
                     LazyVStack(spacing: 14) {
                         ForEach(state.fileDiffs) { fileDiff in
-                            GitDiffFileSection(fileDiff: fileDiff)
+                            GitDiffFileSection(
+                                fileDiff: fileDiff,
+                                isMentionedInDocument: mentionedFileIDs.contains(fileDiff.file.id)
+                            )
                                 .id(fileDiff.id)
                         }
                     }
@@ -131,6 +135,7 @@ struct GitDiffTabView: View {
 
 private struct GitDiffFileSection: View {
     let fileDiff: GitFileDiff
+    let isMentionedInDocument: Bool
 
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.terminalAppTheme) private var terminalAppTheme
@@ -167,6 +172,17 @@ private struct GitDiffFileSection: View {
                 .lineLimit(1)
                 .truncationMode(.middle)
                 .textSelection(.enabled)
+
+            if isMentionedInDocument {
+                Label(String(localized: "열린 문서 언급"), systemImage: "doc.text.magnifyingglass")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(appColors?.accent ?? Color.accentColor)
+                    .labelStyle(.titleAndIcon)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 3)
+                    .background((appColors?.accent ?? Color.accentColor).opacity(0.12), in: RoundedRectangle(cornerRadius: 4))
+                    .help(String(localized: "열린 마크다운 문서에서 언급된 변경 파일"))
+            }
 
             Spacer(minLength: 8)
 

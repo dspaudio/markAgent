@@ -12,6 +12,7 @@ struct MainContainerView: View {
 
     @State private var isShowingNewTabChooser = false
     @State private var gitDiffState = GitDiffState()
+    @State private var timelineStore = AgentTimelineStore()
     @AppStorage("isLeftSidebarVisible") private var isLeftSidebarVisible = true
     @AppStorage("leftSidebarWidth") private var leftSidebarWidth: Double = 260
     @AppStorage("rightSidebarWidth") private var rightSidebarWidth: Double = 420
@@ -71,7 +72,8 @@ struct MainContainerView: View {
                         onOpenFile: onOpenFile,
                         onNewTab: { isShowingNewTabChooser = true },
                         onDocumentChanged: onDocumentChanged,
-                        onConfigurationSaved: onConfigurationSaved
+                        onConfigurationSaved: onConfigurationSaved,
+                        mentionedGitFileIDs: openMarkdownMentionedGitFileIDs
                     )
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
 
@@ -91,8 +93,10 @@ struct MainContainerView: View {
                         RightSidebarView(
                             gitDiffState: gitDiffState,
                             snippetStore: snippetStore,
+                            timelineStore: timelineStore,
                             width: clampedSidebarWidth(for: geometry.size.width),
-                            onSelectFile: openGitDiffFile
+                            onSelectFile: openGitDiffFile,
+                            mentionedFileIDs: openMarkdownMentionedGitFileIDs
                         )
                     }
                 }
@@ -132,6 +136,14 @@ struct MainContainerView: View {
             gitDiffState.refresh(for: directory)
             onDirectoryChanged(directory)
         }
+        .onChange(of: gitDiffState.repositoryRoot) { _, _ in
+            syncTimelineToGitRepository()
+        }
+        .onChange(of: gitDiffState.isRefreshing) { _, isRefreshing in
+            if !isRefreshing {
+                syncTimelineToGitRepository()
+            }
+        }
         .background(appColors?.background ?? Color(nsColor: .windowBackgroundColor))
         .foregroundStyle(appColors?.foreground ?? Color.primary)
         .tint(appColors?.accent ?? Color.accentColor)
@@ -139,6 +151,13 @@ struct MainContainerView: View {
 
     private var appColors: TerminalAppColors? {
         terminalAppTheme?.colors(for: colorScheme)
+    }
+
+    private var openMarkdownMentionedGitFileIDs: Set<GitChangedFile.ID> {
+        let markdown = tabs.tabs
+            .compactMap { ($0 as? MarkdownTab)?.state.document.editableContent }
+            .joined(separator: "\n")
+        return MarkdownGitReferenceIndex.mentionedFileIDs(in: String(markdown), changedFiles: gitDiffState.changedFiles)
     }
 
     private func sidebarResizeHandle(
@@ -201,6 +220,15 @@ struct MainContainerView: View {
         return max(220, min(520, min(proposedWidth, max(containerWidth - 240, 220))))
     }
 
+    private func syncTimelineToGitRepository() {
+        guard let repositoryRoot = gitDiffState.repositoryRoot else {
+            timelineStore.configureRepositoryRoot(nil)
+            return
+        }
+
+        timelineStore.configureRepositoryRoot(repositoryRoot)
+    }
+
     private func createTerminalTab() {
         tabs.createTerminalTab(
             workingDirectory: scanner.currentDirectory,
@@ -209,6 +237,7 @@ struct MainContainerView: View {
                 self.scanner.setDirectory(url)
             }
         )
+        timelineStore.record(.terminalCreated(directory: scanner.currentDirectory))
     }
     
     private func createMarkdownTab() {
@@ -223,12 +252,14 @@ struct MainContainerView: View {
         tabs.createMarkdownTab(fileURL: url)
         recentStore.record(url: url)
         scanner.setDirectory(url.deletingLastPathComponent())
+        timelineStore.record(.markdownOpened(url: url))
         onDocumentChanged()
     }
 
     private func openGitDiffFile(_ file: GitChangedFile) {
         tabs.showGitDiffTab(state: gitDiffState)
         gitDiffState.focus(file)
+        timelineStore.record(.gitDiffFocused(relativePath: file.relativePath))
         onDocumentChanged()
     }
 

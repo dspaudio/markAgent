@@ -3,6 +3,7 @@ import SwiftUI
 struct GitChangesSidebar: View {
     var state: GitDiffState
     var onSelectFile: (GitChangedFile) -> Void
+    var mentionedFileIDs: Set<GitChangedFile.ID> = []
 
     var body: some View {
         fileList
@@ -46,7 +47,8 @@ struct GitChangesSidebar: View {
                                     file: file,
                                     diffResult: state.fileDiffs.first { $0.file.id == file.id }?.diffResult,
                                     isLoadingDiff: state.isLoadingDiffs,
-                                    isSelected: state.selectedFile == file
+                                    isSelected: state.selectedFile == file,
+                                    isMentionedInDocument: mentionedFileIDs.contains(file.id)
                                 )
                             }
                             .buttonStyle(.plain)
@@ -66,6 +68,7 @@ private struct GitChangedFileRow: View {
     let diffResult: DiffResult?
     let isLoadingDiff: Bool
     let isSelected: Bool
+    let isMentionedInDocument: Bool
 
     var body: some View {
         HStack(spacing: 8) {
@@ -80,6 +83,13 @@ private struct GitChangedFileRow: View {
                         .font(.system(size: 13, weight: .medium))
                         .lineLimit(1)
                         .truncationMode(.middle)
+
+                    if isMentionedInDocument {
+                        Image(systemName: "doc.text.magnifyingglass")
+                            .font(.system(size: 10, weight: .semibold))
+                            .foregroundStyle(Color.accentColor)
+                            .help(String(localized: "열린 마크다운 문서에서 언급됨"))
+                    }
 
                     diffSummary
                 }

@@ -619,10 +619,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func showHelp() {
-        let bundledReadmeURL = Bundle.main.url(forResource: "README", withExtension: "md")
-        let url = bundledReadmeURL ?? URL(string: AboutView.githubURLString)
-        guard let url else { return }
-        NSWorkspace.shared.open(url)
+        guard let url = Bundle.main.url(forResource: "README", withExtension: "md") else {
+            tabs.showAboutTab()
+            updateWindowTitle()
+            window?.makeKeyAndOrderFront(nil)
+            NSRunningApplication.current.activate()
+            return
+        }
+
+        openFileInMarkdownTab(url)
+    }
+
+    private func openFileInMarkdownTab(_ url: URL) {
+        tabs.createMarkdownTab(fileURL: url)
+        recentStore.record(url: url)
+        directoryScanner.setDirectory(url.deletingLastPathComponent())
+        updateWindowTitle()
+        window?.makeKeyAndOrderFront(nil)
+        NSRunningApplication.current.activate()
     }
 
     private func updateWindowTitle() {
