@@ -510,7 +510,7 @@ func loadTextPreview(from url: URL, byteLimit: Int) throws -> String {
         + String(localized: "미리보기는 파일 앞부분만 표시합니다.")
 }
 
-private struct FocusedEscapeContainer<Content: View>: NSViewRepresentable {
+struct FocusedEscapeContainer<Content: View>: NSViewRepresentable {
     let onEscape: () -> Void
     @ViewBuilder var content: () -> Content
 
@@ -526,7 +526,7 @@ private struct FocusedEscapeContainer<Content: View>: NSViewRepresentable {
     }
 }
 
-private final class FocusedEscapeHostingView<Content: View>: NSHostingView<Content> {
+final class FocusedEscapeHostingView<Content: View>: NSHostingView<Content> {
     var onEscape: (() -> Void)?
 
     override var acceptsFirstResponder: Bool { true }

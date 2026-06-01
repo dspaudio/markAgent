@@ -43,6 +43,7 @@
 39. [세션 39: Timeline 공유 정책 논리 모순 수정](#세션-39-timeline-공유-정책-논리-모순-수정)
 40. [세션 40: 원 클릭 미리보기, 내부 도움말 및 v1.5.0 릴리즈](#세션-40-원-클릭-미리보기-내부-도움말-및-v150-릴리즈)
 41. [세션 41: 원 클릭 미리보기 메모리 피크 완화 및 v1.5.1 릴리즈](#세션-41-원-클릭-미리보기-메모리-피크-완화-및-v151-릴리즈)
+42. [세션 42: Git Diff 사이드바 미리보기 안정화 및 v1.5.2 릴리즈](#세션-42-git-diff-사이드바-미리보기-안정화-및-v152-릴리즈)
 
 ---
 
@@ -108,6 +109,7 @@
 | 56 | Timeline 공유 정책 논리 모순 수정 | post-commit `commit_created` 자동 기록을 제거하고, 커밋 전 공유 가능한 `change_summary` 중심으로 `.agents` Timeline 정책 정리 |
 | 57 | 원 클릭 미리보기, 내부 도움말 및 v1.5.0 릴리즈 | 왼쪽 사이드바 전체 파일 미리보기, Settings 토글, 포커스 한정 Esc 닫기, Help 메뉴 내부 Markdown 탭 열기, 앱 번들 버전 1.5.0 갱신 |
 | 58 | 원 클릭 미리보기 메모리 피크 완화 및 v1.5.1 릴리즈 | 이미지 미리보기를 ImageIO 썸네일 로딩으로 전환하고 텍스트 미리보기 크기를 제한해 앱 번들 버전 1.5.1 갱신 |
+| 59 | Git Diff 사이드바 미리보기 안정화 및 v1.5.2 릴리즈 | Git Diff 로딩 hang 수정, 우측 사이드바 Diff 미리보기/탭 승격/열린 Diff 탭 스크롤 연동, 앱 번들 버전 1.5.2 갱신 |
 
 ---
 
@@ -1545,6 +1547,67 @@ MarkAgent 메뉴의 `Settings…` 창을 추가하고, Ghostty theme/font-size/c
 
 **응답:**
 명시 버전 `1.5.1`로 `Info.plist`의 `CFBundleVersion`과 `CFBundleShortVersionString`을 갱신하고, README 기능 소개와 `history.md`를 원 클릭 미리보기 메모리 피크 완화 내용에 맞게 업데이트한 뒤 릴리즈 빌드 절차를 진행한다.
+
+변경 파일: `Sources/App/Info.plist`, `README.md`, `history.md`
+
+---
+
+## 세션 42: Git Diff 사이드바 미리보기 안정화 및 v1.5.2 릴리즈
+
+> 날짜: 2026-06-01
+> 경로: ~/workspace/markAgent
+
+Git 변경 파일 Diff View에서 로딩이 끝나지 않는 문제를 수정하고, 우측 사이드바의 Git Diff 확인 흐름을 목록 중심 미리보기와 필요 시 탭 승격 방식으로 조정해 `v1.5.2` 패치 릴리즈를 준비했다.
+
+### 대화 1: Git Diff 로딩 hang 수정
+
+**사용자:**
+> Git 변경파일에서 Diff View 탭을 보는 화면에서 변경내역을 표시하지 못하고 loading 화면이 계속 나오는 버그가 있어.
+
+**응답:**
+`GitDiffState.runGit`이 하위 `git` 프로세스 종료를 기다린 뒤 stdout/stderr 파이프를 읽어, 변경 파일 또는 diff 출력이 큰 경우 파이프 버퍼에서 프로세스가 멈출 수 있는 문제를 확인했다. 프로세스 실행 중 stdout/stderr를 동시에 수집하는 잠금 기반 버퍼를 추가하고, 12,000개 변경 파일 상태 출력에서도 refresh가 완료되는 회귀 테스트를 추가했다.
+
+검증: `swift test` 49개 통과, `swift build` 성공, `scripts/bundle.sh`로 debug 앱 번들 생성 성공, 변경 파일 LSP diagnostics 문제 없음.
+
+변경 파일: `Sources/Core/GitDiffState.swift`, `Tests/MarkAgentTests/GitDiffStateTests.swift`
+
+---
+
+### 대화 2: 우측 사이드바 Diff 미리보기 흐름 전환
+
+**사용자:**
+> DiffView를 처음부터 탭으로 표시했더니 활용하는데 불편한 것 같아. left side bar에 추가한 원클릭 미리보기 처럼 더블 클릭하면 오른쪽 사이드 바에서 표시하는게 더 나을 것 같아. 다만 상세하게 보고 싶을 때에는 탭으로 열기 버튼을 추가해서 해당 버튼을 클릭하면 탭으로 표시하도록 수정해줘.
+
+**응답:**
+Git 변경 파일 목록의 단일 클릭은 선택만 하고, 더블 클릭하면 우측 사이드바 안에서 해당 파일 Diff 미리보기를 표시하도록 변경했다. 미리보기 상단에는 뒤로가기와 탭 열기 버튼을 추가하고, 기존 전체 Diff 탭의 파일 섹션 UI를 사이드바 미리보기에서도 재사용하도록 공개 범위를 조정했다. Diff 미리보기 관련 영어/한국어 로컬라이제이션 문자열도 추가했다.
+
+검증: `swift test` 50개 통과, `swift build` 성공, `scripts/bundle.sh`로 debug 앱 번들 생성 성공, 변경 파일 LSP diagnostics 문제 없음.
+
+변경 파일: `Sources/Views/Sidebar/GitChangesSidebar.swift`, `Sources/Views/Sidebar/RightSidebarView.swift`, `Sources/Views/Tabs/GitDiffTabView.swift`, `Sources/Views/Sidebar/FileBrowserSidebar.swift`, `Sources/App/Resources/en.lproj/Localizable.strings`, `Sources/App/Resources/ko.lproj/Localizable.strings`, `Tests/MarkAgentTests/TabCollectionTests.swift`
+
+---
+
+### 대화 3: 열린 Diff 탭 스크롤 연동
+
+**사용자:**
+> Diff를 탭에서 열기 버튼을 클릭하면 변경파일 목록으로 돌아가도록 하고, Diff View 탭이 열린 상태에서는 Git 변경 파일을 클릭하면 Diff View 의 해당 위치로 스크롤하도록 해줘.
+
+**응답:**
+사이드바 Diff 미리보기의 탭 열기 버튼을 누르면 Git Diff 탭을 열고 미리보기 상태를 닫아 변경 파일 목록으로 돌아가도록 했다. 또한 Git Diff 탭이 이미 열린 상태에서는 변경 파일 목록의 단일 클릭이 기존 Diff 탭을 재사용해 활성화하고 `focusRequestID`를 갱신해 해당 파일 섹션으로 스크롤하도록 연결했다.
+
+검증: `swift test` 50개 통과, `swift build` 성공, `scripts/bundle.sh`로 debug 앱 번들 생성 성공, 변경 Swift 파일 LSP diagnostics 문제 없음.
+
+변경 파일: `Sources/Views/Main/MainContainerView.swift`, `Sources/Views/Sidebar/GitChangesSidebar.swift`, `Sources/Views/Sidebar/RightSidebarView.swift`
+
+---
+
+### 대화 4: v1.5.2 릴리즈 빌드 준비
+
+**사용자:**
+> .claude/commands/release-build.md 1.5.2
+
+**응답:**
+명시 버전 `1.5.2`로 `Info.plist`의 `CFBundleVersion`과 `CFBundleShortVersionString`을 갱신하고, README 기능 소개와 `history.md`를 Git Diff 로딩 안정화 및 우측 사이드바 Diff 미리보기 흐름에 맞게 업데이트한 뒤 릴리즈 빌드 절차를 진행한다.
 
 변경 파일: `Sources/App/Info.plist`, `README.md`, `history.md`
 

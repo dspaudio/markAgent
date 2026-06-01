@@ -263,15 +263,66 @@ final class GitDiffState {
         process.standardOutput = outputPipe
         process.standardError = errorPipe
 
-        try process.run()
-        process.waitUntilExit()
+        let outputData = PipeDataCollector()
+        let errorData = PipeDataCollector()
+        let readGroup = DispatchGroup()
 
-        let output = String(data: outputPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+        collectPipe(outputPipe, into: outputData, group: readGroup)
+        collectPipe(errorPipe, into: errorData, group: readGroup)
+
+        do {
+            try process.run()
+        } catch {
+            outputPipe.fileHandleForReading.readabilityHandler = nil
+            errorPipe.fileHandleForReading.readabilityHandler = nil
+            throw error
+        }
+
+        process.waitUntilExit()
+        readGroup.wait()
+
+        let output = String(data: outputData.snapshot(), encoding: .utf8) ?? ""
         guard process.terminationStatus == 0 else {
-            let message = String(data: errorPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+            let message = String(data: errorData.snapshot(), encoding: .utf8) ?? ""
             throw GitDiffError.commandFailed(message.trimmingCharacters(in: .whitespacesAndNewlines))
         }
         return output
+    }
+
+    private nonisolated static func collectPipe(
+        _ pipe: Pipe,
+        into data: PipeDataCollector,
+        group: DispatchGroup
+    ) {
+        group.enter()
+        pipe.fileHandleForReading.readabilityHandler = { handle in
+            let chunk = handle.availableData
+            guard !chunk.isEmpty else {
+                handle.readabilityHandler = nil
+                group.leave()
+                return
+            }
+
+            data.append(chunk)
+        }
+    }
+}
+
+private final class PipeDataCollector: @unchecked Sendable {
+    private let lock = NSLock()
+    private var data = Data()
+
+    func append(_ chunk: Data) {
+        lock.lock()
+        data.append(chunk)
+        lock.unlock()
+    }
+
+    func snapshot() -> Data {
+        lock.lock()
+        let snapshot = data
+        lock.unlock()
+        return snapshot
     }
 }
 

@@ -133,7 +133,7 @@ struct GitDiffTabView: View {
     }
 }
 
-private struct GitDiffFileSection: View {
+struct GitDiffFileSection: View {
     let fileDiff: GitFileDiff
     let isMentionedInDocument: Bool
 

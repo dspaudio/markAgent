@@ -82,6 +82,10 @@
 /* GitDiffTabView */
 "Files changed" = "Files changed";
 "Diff 불러오는 중..." = "Loading diff...";
+"Diff 미리보기" = "Diff Preview";
+"Diff 미리보기 닫기" = "Close Diff Preview";
+"탭에서 열기" = "Open in Tab";
+"Diff를 탭에서 열기" = "Open Diff in Tab";
 "Git 저장소" = "Git Repository";
 "%@ · %@개 파일 · +%@ -%@" = "%1$@ · %2$@ files · +%3$@ -%4$@";
 
