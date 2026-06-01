@@ -8,12 +8,14 @@ struct FileBrowserSidebar: View {
     var onOpenOtherFile: (URL) -> Void
     var width: Double = 260
     
+    @AppStorage("isOneClickPreviewEnabled") private var isOneClickPreviewEnabled = true
     @State private var selectedEntryID: String?
     @State private var expandedDirectoryIDs: Set<String> = []
     @State private var expandedDirectoryEntries: [String: [FileEntry]] = [:]
     @State private var loadingDirectoryIDs: Set<String> = []
     @State private var directoryErrors: [String: String] = [:]
     @State private var previewImage: SidebarImageSelection?
+    @State private var previewState: SidebarPreviewState?
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.terminalAppTheme) private var terminalAppTheme
     
@@ -42,6 +44,59 @@ struct FileBrowserSidebar: View {
             
             Divider()
             
+            if isOneClickPreviewEnabled, let previewState {
+                sidebarPreview(previewState)
+                    .frame(maxHeight: .infinity)
+            } else {
+                sidebarBrowser
+            }
+        }
+        .frame(width: width)
+        .frame(maxHeight: .infinity)
+        .background(appColors?.panel ?? Color(NSColor.controlBackgroundColor))
+        .foregroundStyle(appColors?.foreground ?? Color.primary)
+        .sheet(item: $previewImage) { selection in
+            SidebarImageViewer(url: selection.url)
+        }
+        .onChange(of: isOneClickPreviewEnabled) { _, isEnabled in
+            if !isEnabled {
+                closePreview()
+            }
+        }
+    }
+
+    private var appColors: TerminalAppColors? {
+        terminalAppTheme?.colors(for: colorScheme)
+    }
+
+    private var directoryEntries: [FileEntry] {
+        scanner.entries.filter(\.isDirectory)
+    }
+
+    private var fileEntries: [FileEntry] {
+        scanner.entries.filter { !$0.isDirectory }
+    }
+
+    private var displayRows: [SidebarDisplayRow] {
+        var rows: [SidebarDisplayRow] = []
+
+        if !directoryEntries.isEmpty {
+            rows.append(.header(id: "root-folders", title: String(localized: "폴더"), depth: 0))
+            for entry in directoryEntries {
+                appendDirectoryRows(for: entry, depth: 0, rows: &rows)
+            }
+        }
+
+        if !fileEntries.isEmpty {
+            rows.append(.header(id: "root-files", title: String(localized: "파일"), depth: 0))
+            rows.append(contentsOf: fileEntries.map { .entry($0, depth: 0) })
+        }
+
+        return rows
+    }
+
+    private var sidebarBrowser: some View {
+        VStack(spacing: 0) {
             ScrollView {
                 LazyVStack(spacing: 2) {
                     if scanner.isLoading {
@@ -74,9 +129,9 @@ struct FileBrowserSidebar: View {
                 .padding(.horizontal, 6)
                 .padding(.vertical, 6)
             }
-            
+
             Divider()
-            
+
             ScrollView {
                 RecentDocumentsSection(
                     store: recentStore,
@@ -88,43 +143,6 @@ struct FileBrowserSidebar: View {
             }
             .frame(maxHeight: 200)
         }
-        .frame(width: width)
-        .frame(maxHeight: .infinity)
-        .background(appColors?.panel ?? Color(NSColor.controlBackgroundColor))
-        .foregroundStyle(appColors?.foreground ?? Color.primary)
-        .sheet(item: $previewImage) { selection in
-            SidebarImageViewer(url: selection.url)
-        }
-    }
-
-    private var appColors: TerminalAppColors? {
-        terminalAppTheme?.colors(for: colorScheme)
-    }
-
-    private var directoryEntries: [FileEntry] {
-        scanner.entries.filter(\.isDirectory)
-    }
-
-    private var fileEntries: [FileEntry] {
-        scanner.entries.filter { !$0.isDirectory }
-    }
-
-    private var displayRows: [SidebarDisplayRow] {
-        var rows: [SidebarDisplayRow] = []
-
-        if !directoryEntries.isEmpty {
-            rows.append(.header(id: "root-folders", title: String(localized: "폴더"), depth: 0))
-            for entry in directoryEntries {
-                appendDirectoryRows(for: entry, depth: 0, rows: &rows)
-            }
-        }
-
-        if !fileEntries.isEmpty {
-            rows.append(.header(id: "root-files", title: String(localized: "파일"), depth: 0))
-            rows.append(contentsOf: fileEntries.map { .entry($0, depth: 0) })
-        }
-
-        return rows
     }
 
     private func appendDirectoryRows(for entry: FileEntry, depth: Int, rows: inout [SidebarDisplayRow]) {
@@ -226,7 +244,10 @@ struct FileBrowserSidebar: View {
         selectedEntryID = entry.id
 
         if entry.isDirectory {
+            previewState = nil
             toggleExpandedDirectory(entry)
+        } else if isOneClickPreviewEnabled {
+            loadPreview(for: entry)
         }
     }
 
@@ -279,6 +300,163 @@ struct FileBrowserSidebar: View {
             onOpenOtherFile(entry.url)
         }
     }
+
+    @ViewBuilder
+    private func sidebarPreview(_ state: SidebarPreviewState) -> some View {
+        FocusedEscapeContainer(onEscape: closePreview) {
+            VStack(spacing: 0) {
+                HStack(spacing: 8) {
+                    Button {
+                        closePreview()
+                    } label: {
+                        Label(String(localized: "미리보기 닫기"), systemImage: "chevron.left")
+                            .labelStyle(.iconOnly)
+                            .frame(width: 24, height: 24)
+                    }
+                    .buttonStyle(.plain)
+                    .help(String(localized: "미리보기 닫기"))
+
+                    Image(systemName: previewIconName(for: state.entry.kind))
+                        .foregroundStyle(.secondary)
+
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(state.entry.name)
+                            .font(.system(size: 12, weight: .semibold))
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+
+                        Text(String(localized: "미리보기"))
+                            .font(.system(size: 10))
+                            .foregroundStyle(.secondary)
+                    }
+
+                    Spacer(minLength: 0)
+
+                    Button {
+                        openPreviewInTab(state.entry)
+                    } label: {
+                        Label(String(localized: "편집"), systemImage: "square.and.pencil")
+                            .labelStyle(.iconOnly)
+                            .frame(width: 24, height: 24)
+                    }
+                    .buttonStyle(.plain)
+                    .help(String(localized: "탭에서 편집"))
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 8)
+
+                Group {
+                    switch state.content {
+                    case .loading:
+                        ProgressView()
+                            .scaleEffect(0.55)
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    case .markdown(let source):
+                        ScrollView {
+                            renderMarkdown(source, baseURL: state.entry.url.deletingLastPathComponent())
+                                .textSelection(.enabled)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(10)
+                        }
+                    case .text(let source):
+                        ScrollView([.vertical, .horizontal]) {
+                            Text(source)
+                                .font(.system(size: 11, design: .monospaced))
+                                .textSelection(.enabled)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(10)
+                        }
+                    case .image(let image):
+                        GeometryReader { geometry in
+                            ScrollView([.vertical, .horizontal]) {
+                                Image(nsImage: image)
+                                    .resizable()
+                                    .scaledToFit()
+                                    .frame(
+                                        maxWidth: max(geometry.size.width - 20, 120),
+                                        maxHeight: max(geometry.size.height - 20, 120)
+                                    )
+                                    .padding(10)
+                            }
+                        }
+                    case .message(let message):
+                        VStack(spacing: 8) {
+                            Image(systemName: "doc.badge.exclamationmark")
+                                .font(.system(size: 24))
+                                .foregroundStyle(.secondary)
+                            Text(message)
+                                .font(.system(size: 11))
+                                .foregroundStyle(.secondary)
+                                .multilineTextAlignment(.center)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                        .padding(12)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    }
+                }
+                .frame(maxHeight: .infinity)
+                .background(Color(nsColor: .textBackgroundColor).opacity(0.72))
+            }
+        }
+    }
+
+    private func previewIconName(for kind: FileEntry.Kind) -> String {
+        switch kind {
+        case .directory: return "folder.fill"
+        case .markdown: return "doc.text"
+        case .image: return "photo"
+        case .file: return "doc"
+        }
+    }
+
+    private func openPreviewInTab(_ entry: FileEntry) {
+        switch entry.kind {
+        case .directory:
+            break
+        case .markdown:
+            onOpenMarkdown(entry.url)
+        case .image, .file:
+            onOpenOtherFile(entry.url)
+        }
+    }
+
+    private func closePreview() {
+        previewState = nil
+        selectedEntryID = nil
+    }
+
+    private func loadPreview(for entry: FileEntry) {
+        previewState = SidebarPreviewState(entry: entry, content: .loading)
+
+        if entry.isImage {
+            if let image = NSImage(contentsOf: entry.url) {
+                previewState = SidebarPreviewState(entry: entry, content: .image(image))
+            } else {
+                previewState = SidebarPreviewState(entry: entry, content: .message(String(localized: "이미지를 열 수 없습니다.")))
+            }
+            return
+        }
+
+        Task { [entry] in
+            do {
+                let source = try await Task.detached(priority: .userInitiated) {
+                    try String(contentsOf: entry.url, encoding: .utf8)
+                }.value
+
+                guard !Task.isCancelled, selectedEntryID == entry.id else { return }
+                previewState = SidebarPreviewState(
+                    entry: entry,
+                    content: entry.isMarkdown ? .markdown(source) : .text(source)
+                )
+            } catch {
+                guard !Task.isCancelled, selectedEntryID == entry.id else { return }
+                previewState = SidebarPreviewState(
+                    entry: entry,
+                    content: .message(String(format: String(localized: "파일을 읽을 수 없습니다: %@"), error.localizedDescription))
+                )
+            }
+        }
+    }
 }
 
 private enum SidebarDisplayRow: Identifiable {
@@ -302,6 +480,56 @@ private struct SidebarImageSelection: Identifiable {
     let url: URL
 
     var id: String { url.path }
+}
+
+private struct SidebarPreviewState: Identifiable {
+    let entry: FileEntry
+    let content: SidebarPreviewContent
+
+    var id: String { entry.id }
+}
+
+private enum SidebarPreviewContent {
+    case loading
+    case markdown(String)
+    case text(String)
+    case image(NSImage)
+    case message(String)
+}
+
+private struct FocusedEscapeContainer<Content: View>: NSViewRepresentable {
+    let onEscape: () -> Void
+    @ViewBuilder var content: () -> Content
+
+    func makeNSView(context: Context) -> FocusedEscapeHostingView<Content> {
+        let view = FocusedEscapeHostingView(rootView: content())
+        view.onEscape = onEscape
+        return view
+    }
+
+    func updateNSView(_ nsView: FocusedEscapeHostingView<Content>, context: Context) {
+        nsView.rootView = content()
+        nsView.onEscape = onEscape
+    }
+}
+
+private final class FocusedEscapeHostingView<Content: View>: NSHostingView<Content> {
+    var onEscape: (() -> Void)?
+
+    override var acceptsFirstResponder: Bool { true }
+
+    override func mouseDown(with event: NSEvent) {
+        window?.makeFirstResponder(self)
+        super.mouseDown(with: event)
+    }
+
+    override func keyDown(with event: NSEvent) {
+        if event.keyCode == 53 {
+            onEscape?()
+        } else {
+            super.keyDown(with: event)
+        }
+    }
 }
 
 private struct SidebarImageViewer: View {

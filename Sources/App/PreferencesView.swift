@@ -6,6 +6,7 @@ struct PreferencesView: View {
     @State private var preferences: GhosttyPreferences
     @State private var saveErrorMessage: String?
     @AppStorage("isLeftSidebarVisible") private var isLeftSidebarVisible = true
+    @AppStorage("isOneClickPreviewEnabled") private var isOneClickPreviewEnabled = true
 
     let onSaved: () -> Void
 
@@ -67,6 +68,7 @@ struct PreferencesView: View {
         Form {
             Section("Workspace") {
                 Toggle("Show left sidebar by default", isOn: $isLeftSidebarVisible)
+                Toggle("One click preview", isOn: $isOneClickPreviewEnabled)
             }
 
             Section("Terminal") {

@@ -41,6 +41,7 @@
 37. [세션 37: 에이전트 검토 워크스페이스 1차 구현](#세션-37-에이전트-검토-워크스페이스-1차-구현)
 38. [세션 38: .agents Timeline persistence와 AI 요약 구현](#세션-38-agents-timeline-persistence와-ai-요약-구현)
 39. [세션 39: Timeline 공유 정책 논리 모순 수정](#세션-39-timeline-공유-정책-논리-모순-수정)
+40. [세션 40: 원 클릭 미리보기, 내부 도움말 및 v1.5.0 릴리즈](#세션-40-원-클릭-미리보기-내부-도움말-및-v150-릴리즈)
 
 ---
 
@@ -104,6 +105,7 @@
 | 54 | 에이전트 검토 워크스페이스 1차 구현 | 에이전트 작업 타임라인, 마크다운-Git diff 연결 표시, 구현 플랜 문서와 테스트 추가 |
 | 55 | .agents Timeline persistence와 AI 요약 구현 | `.agents/timeline.jsonl` source of truth, `.agents/timeline.md` 요약, commit_created 이벤트와 HEAD 커밋 변경 요약 기록 구현 |
 | 56 | Timeline 공유 정책 논리 모순 수정 | post-commit `commit_created` 자동 기록을 제거하고, 커밋 전 공유 가능한 `change_summary` 중심으로 `.agents` Timeline 정책 정리 |
+| 57 | 원 클릭 미리보기, 내부 도움말 및 v1.5.0 릴리즈 | 왼쪽 사이드바 전체 파일 미리보기, Settings 토글, 포커스 한정 Esc 닫기, Help 메뉴 내부 Markdown 탭 열기, 앱 번들 버전 1.5.0 갱신 |
 
 ---
 
@@ -2112,3 +2114,69 @@ AI 연계와 append-friendly 특성을 고려해 단일 JSON 배열보다 JSONL�
 커밋/푸시 전 필수 규칙에 따라 이번 논리 모순 수정 내용을 `history.md`에 세션 39로 기록했다.
 
 변경 파일: `history.md`
+
+
+## 세션 40: 원 클릭 미리보기, 내부 도움말 및 v1.5.0 릴리즈
+
+> 날짜: 2026-06-01
+> 경로: ~/workspace/markAgent
+
+왼쪽 파일 사이드바에서 파일을 단일 클릭으로 미리보고, 필요할 때만 탭 편집으로 전환하는 흐름을 추가했다. 동시에 Help 메뉴의 MarkAgent 도움말이 외부 앱이 아니라 MarkAgent 내부 Markdown 탭에서 열리도록 수정하고 `v1.5.0` 릴리즈를 준비했다.
+
+### 대화 1: 왼쪽 사이드바 원 클릭 미리보기 구현
+
+**사용자:**
+> 현재 폴더에서 md 파일을 두번 클릭하면 탭에 편집할 수 있게 열리는데, 한 번만 클릭하면 left side bar 영역에서 미리보기로 볼 수 있고, 미리보기 화면에서 편집 버튼을 클릭하면 탭으로 열리게 할 수 있을까? md 파일 말고도 일단 다른 파일도 그렇게 처리해줘. 그리고 Settings 에서도 이렇게 추가하는 one click preview를 활성화할지 선택할 수 있으면 좋겠어.
+
+**응답:**
+왼쪽 `FileBrowserSidebar`에 `isOneClickPreviewEnabled` 설정을 연결하고, 파일 단일 클릭 시 사이드바 내부 미리보기를 표시하도록 구현했다. Markdown 파일은 기존 렌더러로 렌더링하고, 일반 텍스트 파일은 monospaced raw text로, 이미지 파일은 이미지 미리보기로 보여준다. 더블 클릭과 미리보기의 편집 버튼은 기존처럼 파일을 Markdown/raw 편집 탭으로 연다. Settings의 Workspace 섹션에는 `One click preview` 토글을 추가하고 영어/한국어 로컬라이제이션 문자열을 보강했다.
+
+변경 파일: `Sources/Views/Sidebar/FileBrowserSidebar.swift`, `Sources/App/PreferencesView.swift`, `Sources/App/Resources/en.lproj/Localizable.strings`, `Sources/App/Resources/ko.lproj/Localizable.strings`
+
+---
+
+### 대화 2: 미리보기 닫기와 터미널 Esc 동작 분리
+
+**사용자:**
+> esc키를 누르거나 <- 버튼을 누르면 one click preview 화면은 닫히고 기존의 lefe side bar를 이용할 수 있어야 해.
+
+**응답:**
+미리보기 헤더에 뒤로가기 버튼을 추가해 기존 파일 목록/최근 문서 사이드바로 돌아갈 수 있게 했다. Esc 닫기는 전역 이벤트 모니터가 아니라 미리보기 컨테이너가 실제 포커스를 가진 경우에만 처리하도록 `NSHostingView` 기반 포커스 컨테이너로 좁혔다. 따라서 터미널 탭에 포커스가 있을 때는 Esc가 터미널로 전달되고, 미리보기 비활성화 상태에서도 Esc를 가로채지 않는다.
+
+변경 파일: `Sources/Views/Sidebar/FileBrowserSidebar.swift`
+
+---
+
+### 대화 3: 미리보기 영역을 왼쪽 사이드바 전체로 확장
+
+**사용자:**
+> 미리 보기 영역은 왼쪽 사이드바 전체를 다 쓰도록 수정해줘.
+
+**응답:**
+미리보기를 파일 목록 아래에 삽입하던 구조를 변경해, 원 클릭 미리보기가 열렸을 때 파일 목록과 최근 문서 영역을 미리보기 화면으로 완전히 대체하도록 했다. 뒤로가기 버튼으로 닫으면 기존 파일 브라우저와 최근 문서 목록이 다시 표시된다.
+
+변경 파일: `Sources/Views/Sidebar/FileBrowserSidebar.swift`
+
+---
+
+### 대화 4: Help 메뉴를 MarkAgent 내부 탭으로 열기
+
+**사용자:**
+> 도움말에서 MarkAgent 도움말을 클릭하면 해당 파일이 다른 프로그램으로 열리는 문제가 있어. MarkAgent 앱 내에서 열리게 수정해줘.
+
+**응답:**
+`showHelp()`가 번들 `README.md`를 `NSWorkspace.shared.open`으로 열던 동작을 제거하고, 앱 내부 Markdown 탭으로 열도록 변경했다. 번들 README가 없을 경우에는 About 탭으로 fallback한다.
+
+변경 파일: `Sources/App/AppDelegate.swift`
+
+---
+
+### 대화 5: v1.5.0 릴리즈 빌드 준비
+
+**사용자:**
+> .claude/commands/release-build.md 1.5.0
+
+**응답:**
+명시 버전 `1.5.0`으로 `Info.plist`의 `CFBundleVersion`과 `CFBundleShortVersionString`을 갱신하고, README 기능 소개와 `history.md`를 이번 원 클릭 미리보기/내부 도움말 변경에 맞게 업데이트한 뒤 릴리즈 빌드 절차를 진행한다.
+
+변경 파일: `Sources/App/Info.plist`, `README.md`, `history.md`
