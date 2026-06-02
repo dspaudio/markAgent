@@ -131,7 +131,7 @@ struct ContentView: View {
 
     private var previewContent: some View {
         ScrollView {
-            renderMarkdown(document.editableContent, baseURL: documentImageBaseURL)
+            MarkdownPreviewView(content: document.editableContent, baseURL: documentImageBaseURL)
                 .textSelection(.enabled)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(20)

@@ -236,8 +236,10 @@ struct MarkdownRenderer: MarkupVisitor {
     }
 
     static func renderBlock(_ node: Markup, baseURL: URL? = nil) -> AnyView {
-        var renderer = MarkdownRenderer(baseURL: baseURL)
-        return renderer.visit(node)
+        autoreleasepool {
+            var renderer = MarkdownRenderer(baseURL: baseURL)
+            return renderer.visit(node)
+        }
     }
 
     private static func renderTableRow(
@@ -736,7 +738,70 @@ func renderMarkdown(_ source: String, baseURL: URL? = nil) -> AnyView {
 
 @MainActor
 private func renderMarkdownDocument(_ source: String, baseURL: URL?) -> AnyView {
-    let document = Document(parsing: source, options: [.parseBlockDirectives, .disableSmartOpts])
-    var renderer = MarkdownRenderer(baseURL: baseURL)
-    return renderer.visit(document)
+    autoreleasepool {
+        let document = Document(parsing: source, options: [.parseBlockDirectives, .disableSmartOpts])
+        var renderer = MarkdownRenderer(baseURL: baseURL)
+        return renderer.visit(document)
+    }
+}
+
+// MARK: - MarkdownPreviewView
+
+struct MarkdownPreviewView: View {
+    let content: String
+    let baseURL: URL?
+
+    @State private var renderedView: AnyView? = nil
+    @State private var renderTask: Task<Void, Never>? = nil
+
+    var body: some View {
+        Group {
+            if let renderedView {
+                renderedView
+            } else {
+                VStack(spacing: 12) {
+                    ProgressView()
+                        .controlSize(.small)
+                    Text("렌더링 중...")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+        }
+        .onAppear {
+            performRender(debounce: false)
+        }
+        .onDisappear {
+            renderTask?.cancel()
+            renderedView = nil // 메모리 즉시 반환
+        }
+        .onChange(of: content) { _, _ in
+            performRender(debounce: true)
+        }
+    }
+
+    @MainActor
+    private func performRender(debounce: Bool) {
+        renderTask?.cancel()
+        renderTask = Task {
+            if debounce {
+                do {
+                    // 300ms 디바운스
+                    try await Task.sleep(nanoseconds: 300_000_000)
+                } catch {
+                    return
+                }
+            }
+            guard !Task.isCancelled else { return }
+
+            let view = autoreleasepool {
+                renderMarkdown(content, baseURL: baseURL)
+            }
+
+            if !Task.isCancelled {
+                self.renderedView = view
+            }
+        }
+    }
 }

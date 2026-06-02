@@ -7,9 +7,6 @@ struct MarkdownTabView: View {
     var onDocumentChanged: () -> Void
 
     @State private var selectedRange: NSRange = NSRange(location: 0, length: 0)
-    @State private var cachedPreviewSource: String?
-    @State private var cachedPreviewBaseURL: URL?
-    @State private var cachedPreview: AnyView?
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.terminalAppTheme) private var terminalAppTheme
 
@@ -35,22 +32,6 @@ struct MarkdownTabView: View {
             }
             .onChange(of: state.document.editableContent) { _, _ in
                 onDocumentChanged()
-                if state.document.viewMode == .preview {
-                    refreshPreviewIfNeeded()
-                }
-            }
-            .onChange(of: state.document.viewMode) { _, mode in
-                switch mode {
-                case .preview:
-                    refreshPreviewIfNeeded()
-                case .rawEdit:
-                    clearPreviewCache()
-                }
-            }
-            .onChange(of: state.document.fileURL) { _, _ in
-                if state.document.viewMode == .preview {
-                    refreshPreviewIfNeeded(force: true)
-                }
             }
             .background(appColors?.background ?? Color(nsColor: .windowBackgroundColor))
             .foregroundStyle(appColors?.foreground ?? Color.primary)
@@ -173,19 +154,10 @@ struct MarkdownTabView: View {
 
     private var previewContent: some View {
         ScrollView {
-            Group {
-                if let cachedPreview {
-                    cachedPreview
-                } else {
-                    EmptyView()
-                }
-            }
-            .textSelection(.enabled)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(20)
-        }
-        .onAppear {
-            refreshPreviewIfNeeded()
+            MarkdownPreviewView(content: state.document.editableContent, baseURL: documentImageBaseURL)
+                .textSelection(.enabled)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(20)
         }
     }
 
@@ -235,24 +207,5 @@ struct MarkdownTabView: View {
 
     private var appColors: TerminalAppColors? {
         terminalAppTheme?.colors(for: colorScheme)
-    }
-
-    private func refreshPreviewIfNeeded(force: Bool = false) {
-        let source = state.document.editableContent
-        let baseURL = documentImageBaseURL
-
-        guard force || cachedPreview == nil || cachedPreviewSource != source || cachedPreviewBaseURL != baseURL else {
-            return
-        }
-
-        cachedPreviewSource = source
-        cachedPreviewBaseURL = baseURL
-        cachedPreview = renderMarkdown(source, baseURL: baseURL)
-    }
-
-    private func clearPreviewCache() {
-        cachedPreview = nil
-        cachedPreviewSource = nil
-        cachedPreviewBaseURL = nil
     }
 }
