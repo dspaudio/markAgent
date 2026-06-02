@@ -46,7 +46,8 @@
 42. [세션 42: Git Diff 사이드바 미리보기 안정화 및 v1.5.2 릴리즈](#세션-42-git-diff-사이드바-미리보기-안정화-및-v152-릴리즈)
 43. [세션 43: 테마 선택 UX와 Git Diff 단일 클릭 미리보기 및 v1.5.3 릴리즈](#세션-43-테마-선택-ux와-git-diff-단일-클릭-미리보기-및-v153-릴리즈)
 44. [세션 44: Ghostty 테마 적용 수정과 Settings 테마 필터 및 v1.5.4 릴리즈](#세션-44-ghostty-테마-적용-수정과-settings-테마-필터-및-v154-릴리즈)
-45. [세션 45: 탭 그룹과 대용량 편집 안정화 및 v1.6.0 릴리즈](#세션-45-탭-그룹과-대용량-편집-안정화-및-v160-릴리즈)
+49. [세션 45: 탭 그룹과 대용량 편집 안정화 및 v1.6.0 릴리즈](#세션-45-탭-그룹과-대용량-편집-안정화-및-v160-릴리즈)
+50. [세션 46: 메모리 피크 해결 및 중복 탭 버그 수정](#세션-46-메모리-피크-해결-및-중복-탭-버그-수정)
 
 ---
 
@@ -116,6 +117,7 @@
 | 60 | 테마 선택 UX와 Git Diff 단일 클릭 미리보기 및 v1.5.3 릴리즈 | Settings 테마 목록을 라이트/다크로 그룹화, 선택 테마 기반 사이드바 컬러, Apple SD Gothic Neo fallback, Git Diff 파일 단일 클릭 미리보기, 앱 번들 버전 1.5.3 갱신 |
 | 61 | Ghostty 테마 적용 수정과 Settings 테마 필터 및 v1.5.4 릴리즈 | 이름 있는 Ghostty 테마를 명시 색상으로 내장 터미널에 적용, Light/Dark selector 기반 테마 목록 전환, Swift 6 이미지 썸네일 Sendable 오류 수정, 앱 번들 버전 1.5.4 갱신 |
 | 62 | 탭 그룹과 대용량 편집 안정화 및 v1.6.0 릴리즈 | 작업 세션별 탭 그룹, Cmd+숫자 그룹 전환, 그룹별 Git Diff/Timeline 상태 분리, 대용량 문서 자동 Diff 제한과 raw editor 성능 개선, 앱 번들 버전 1.6.0 갱신 |
+| 63 | 메모리 피크 해결 및 중복 탭 버그 수정 | FileBrowserSidebar, MarkdownImage, MarkdownRenderer, GitDiffState, TabCollection 수정 완료 |
 
 ---
 
@@ -2434,3 +2436,38 @@ AI 연계와 append-friendly 특성을 고려해 단일 JSON 배열보다 JSONL�
 명시 버전 `1.5.0`으로 `Info.plist`의 `CFBundleVersion`과 `CFBundleShortVersionString`을 갱신하고, README 기능 소개와 `history.md`를 이번 원 클릭 미리보기/내부 도움말 변경에 맞게 업데이트한 뒤 릴리즈 빌드 절차를 진행한다.
 
 변경 파일: `Sources/App/Info.plist`, `README.md`, `history.md`
+
+## 세션 46: 메모리 피크 해결 및 중복 탭 버그 수정
+
+> 날짜: 2026-06-02
+> 경로: ~/workspace/markAgent
+
+앱 내 여러 기능에서 발생 가능한 비동기 Task 누적, Core Foundation 임시 객체 미해제, 파이프의 readabilityHandler 미해제 등의 성능 문제를 확인하고 이를 구조적으로 개선하여 메모리 사용량이 비정상적으로 급증하는 피크 현상을 해결했다. 또한 최근 문서에서 동일한 파일을 반복 클릭할 때 탭이 계속 중복 생성되는 사용성 버그를 수정했다.
+
+### 대화 1: 메모리 피크 발생 지점 진단 및 수정
+
+**사용자:**
+> 메모리 피크치는 문제가 아직도 안잡혔네. 어디에서 문제가 발생하는지 조사하고 수정해줘.
+
+**응답:**
+사용자가 여러 파일을 빠르게 단일 클릭하며 훑어 내릴 때 `FileBrowserSidebar`에서 이전 비동기 미리보기 로딩 `Task`가 취소되지 않은 채 전부 백그라운드에서 동시 다발적으로 가동되는 문제를 확인했다. 이를 `@State private var loadPreviewTask` 변수로 제어하고 새 로딩 전에 이전 Task를 확실히 취소(`cancel()`)하도록 변경했다. 
+또한 `MarkdownImage`에서 썸네일을 생성할 때 ImageIO(CoreGraphics) 객체 및 데이터가, 그리고 `MarkdownRenderer`에서 대형 테이블 셀을 파싱할 때 AST `Document` 객체가 즉시 해제되도록 각각의 내부 루프 및 유틸리티 로직을 `autoreleasepool`로 감싸 일시적인 메모리 피크 현상을 해소했다.
+마지막으로 `GitDiffState`에서 git process의 출력을 처리할 때 파이프 `readabilityHandler`가 프로세스 종료 후에도 힙에 남아 `Process`와 `Pipe`가 잔존할 가능성을 배제하기 위해, 프로세스 종료 및 대기가 끝난 시점에 핸들러에 명시적으로 `nil`을 주입하여 가비지 수집이 즉각적으로 일어나도록 조치했다.
+
+검증: `swift test` 73개 통과, `scripts/bundle.sh`로 debug 앱 번들 생성 성공, 변경 Swift 파일 LSP diagnostics 문제 없음.
+
+변경 파일: `Sources/Views/Sidebar/FileBrowserSidebar.swift`, `Sources/Rendering/MarkdownImage.swift`, `Sources/Rendering/MarkdownRenderer.swift`, `Sources/Core/GitDiffState.swift`
+
+---
+
+### 대화 2: 최근 문서 중복 탭 버그 해결
+
+**사용자:**
+> 최근 문서에서 여러번 클릭하면 동일 문서가 자꾸 열리는 버그도 있어.
+
+**응답:**
+`TabCollection.createMarkdownTab(fileURL:)`에서 탭을 생성할 때 이미 동일한 `fileURL`을 래핑하여 열어 둔 `MarkdownTab`이 존재하는지 확인하지 않고 항상 새로운 탭 인스턴스를 어펜드하는 것을 확인했다. `standardizedFileURL` 비교를 통해 기존 열린 탭이 있을 경우 새 탭 생성 과정을 건너뛰고 기존 탭의 ID를 `activeTabID`로 설정(활성화)하여 반환하도록 탭 재사용 정책을 수립했다.
+
+검증: `swift test` 73개 통과, `scripts/bundle.sh`로 debug 앱 번들 생성 성공.
+
+변경 파일: `Sources/Views/Sidebar/FileBrowserSidebar.swift`, `Sources/Rendering/MarkdownImage.swift`, `Sources/Rendering/MarkdownRenderer.swift`, `Sources/Core/GitDiffState.swift`, `Sources/Core/Tabs/TabCollection.swift`, `Sources/App/Info.plist`, `README.md`, `history.md`
