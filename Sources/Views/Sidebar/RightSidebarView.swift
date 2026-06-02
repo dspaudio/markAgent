@@ -9,7 +9,7 @@ struct RightSidebarView: View {
     var onSelectFile: (GitChangedFile) -> Void
     var mentionedFileIDs: Set<GitChangedFile.ID> = []
 
-    @State private var selectedTab: RightSidebarTab = .gitChanges
+    @Binding var selectedTab: RightSidebarTab
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.terminalAppTheme) private var terminalAppTheme
 
@@ -102,13 +102,7 @@ struct RightSidebarView: View {
     }
 }
 
-private enum RightSidebarTab: String, CaseIterable, Identifiable {
-    case gitChanges
-    case timeline
-    case snippets
-
-    var id: String { rawValue }
-
+private extension RightSidebarTab {
     var title: String {
         switch self {
         case .gitChanges:

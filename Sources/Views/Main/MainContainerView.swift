@@ -11,8 +11,6 @@ struct MainContainerView: View {
     var onDirectoryChanged: (URL) -> Void = { _ in }
 
     @State private var isShowingNewTabChooser = false
-    @State private var gitDiffState = GitDiffState()
-    @State private var timelineStore = AgentTimelineStore()
     @AppStorage("isLeftSidebarVisible") private var isLeftSidebarVisible = true
     @AppStorage("leftSidebarWidth") private var leftSidebarWidth: Double = 260
     @AppStorage("rightSidebarWidth") private var rightSidebarWidth: Double = 420
@@ -34,10 +32,10 @@ struct MainContainerView: View {
                         isLeftSidebarVisible.toggle()
                     }
                 },
-                isDiffEnabled: gitDiffState.isInGitRepository,
-                isDiffVisible: gitDiffState.isShowingSidebar,
+                isDiffEnabled: activeGitDiffState?.isInGitRepository ?? false,
+                isDiffVisible: activeGitDiffState?.isShowingSidebar ?? false,
                 onToggleDiff: {
-                    gitDiffState.toggleSidebar(for: scanner.currentDirectory)
+                    activeGitDiffState?.toggleSidebar(for: scanner.currentDirectory)
                 }
             )
             
@@ -77,7 +75,9 @@ struct MainContainerView: View {
                     )
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
 
-                    if gitDiffState.isShowingSidebar {
+                    if let gitDiffState = activeGitDiffState,
+                       let timelineStore = activeTimelineStore,
+                       gitDiffState.isShowingSidebar {
                         sidebarResizeHandle(
                             currentWidth: rightSidebarWidth,
                             isHovering: isHoveringSidebarResizeHandle,
@@ -97,8 +97,10 @@ struct MainContainerView: View {
                             width: clampedSidebarWidth(for: geometry.size.width),
                             isGitDiffTabOpen: isGitDiffTabOpen,
                             onSelectFile: openGitDiffFile,
-                            mentionedFileIDs: openMarkdownMentionedGitFileIDs
+                            mentionedFileIDs: openMarkdownMentionedGitFileIDs,
+                            selectedTab: activeRightSidebarTab
                         )
+                        .id(tabs.activeTabGroup?.id.rawValue)
                     }
                 }
                 .coordinateSpace(name: "main-container")
@@ -122,27 +124,27 @@ struct MainContainerView: View {
         .onAppear {
             syncDirectoryToActiveTab()
             scanner.reload()
-            gitDiffState.refresh(for: scanner.currentDirectory)
+            activeGitDiffState?.refresh(for: scanner.currentDirectory)
             onDirectoryChanged(scanner.currentDirectory)
             setupActiveTabDirectoryObserver()
         }
         .onChange(of: tabs.activeTabID) { _, _ in
             syncDirectoryToActiveTab()
-            gitDiffState.refresh(for: scanner.currentDirectory)
+            activeGitDiffState?.refresh(for: scanner.currentDirectory)
             onDirectoryChanged(scanner.currentDirectory)
             setupActiveTabDirectoryObserver()
             onDocumentChanged()
         }
         .onChange(of: scanner.currentDirectory) { _, directory in
-            gitDiffState.refresh(for: directory)
+            activeGitDiffState?.refresh(for: directory)
             onDirectoryChanged(directory)
         }
-        .onChange(of: gitDiffState.repositoryRoot) { _, _ in
-            syncTimelineToGitRepository()
+        .onChange(of: activeGitDiffState?.repositoryRoot?.path) { _, _ in
+            tabs.activeTabGroup?.syncTimelineToGitRepository()
         }
-        .onChange(of: gitDiffState.isRefreshing) { _, isRefreshing in
-            if !isRefreshing {
-                syncTimelineToGitRepository()
+        .onChange(of: activeGitDiffState?.isRefreshing) { _, isRefreshing in
+            if isRefreshing == false {
+                tabs.activeTabGroup?.syncTimelineToGitRepository()
             }
         }
         .background(appColors?.background ?? Color(nsColor: .windowBackgroundColor))
@@ -156,13 +158,38 @@ struct MainContainerView: View {
 
     private var openMarkdownMentionedGitFileIDs: Set<GitChangedFile.ID> {
         let markdown = tabs.tabs
-            .compactMap { ($0 as? MarkdownTab)?.state.document.editableContent }
+            .compactMap { tab -> String? in
+                guard let markdownTab = tab as? MarkdownTab,
+                      markdownTab.groupState?.id == tabs.activeTabGroup?.id
+                else { return nil }
+                return markdownTab.state.document.editableContent
+            }
             .joined(separator: "\n")
-        return MarkdownGitReferenceIndex.mentionedFileIDs(in: String(markdown), changedFiles: gitDiffState.changedFiles)
+        return MarkdownGitReferenceIndex.mentionedFileIDs(in: String(markdown), changedFiles: activeGitDiffState?.changedFiles ?? [])
     }
 
     private var isGitDiffTabOpen: Bool {
-        tabs.tabs.contains { $0 is GitDiffTab }
+        tabs.tabs.contains { tab in
+            guard let gitDiffTab = tab as? GitDiffTab else { return false }
+            return gitDiffTab.groupState?.id == tabs.activeTabGroup?.id
+        }
+    }
+
+    private var activeGitDiffState: GitDiffState? {
+        tabs.activeTabGroup?.gitDiffState
+    }
+
+    private var activeTimelineStore: AgentTimelineStore? {
+        tabs.activeTabGroup?.timelineStore
+    }
+
+    private var activeRightSidebarTab: Binding<RightSidebarTab> {
+        Binding(
+            get: { tabs.activeTabGroup?.rightSidebarTab ?? .gitChanges },
+            set: { newValue in
+                tabs.activeTabGroup?.rightSidebarTab = newValue
+            }
+        )
     }
 
     private func sidebarResizeHandle(
@@ -225,24 +252,15 @@ struct MainContainerView: View {
         return max(220, min(520, min(proposedWidth, max(containerWidth - 240, 220))))
     }
 
-    private func syncTimelineToGitRepository() {
-        guard let repositoryRoot = gitDiffState.repositoryRoot else {
-            timelineStore.configureRepositoryRoot(nil)
-            return
-        }
-
-        timelineStore.configureRepositoryRoot(repositoryRoot)
-    }
-
     private func createTerminalTab() {
-        tabs.createTerminalTab(
+        let tab = tabs.createTerminalTab(
             workingDirectory: scanner.currentDirectory,
             onDirectoryChanged: { url in
                 guard self.tabs.activeTerminalTab?.state.workingDirectory == url else { return }
                 self.scanner.setDirectory(url)
             }
         )
-        timelineStore.record(.terminalCreated(directory: scanner.currentDirectory))
+        tab.groupState.recordTimeline(.terminalCreated(directory: scanner.currentDirectory))
     }
     
     private func createMarkdownTab() {
@@ -257,14 +275,14 @@ struct MainContainerView: View {
         tabs.createMarkdownTab(fileURL: url)
         recentStore.record(url: url)
         scanner.setDirectory(url.deletingLastPathComponent())
-        timelineStore.record(.markdownOpened(url: url))
+        tabs.activeTabGroup?.recordTimeline(.markdownOpened(url: url))
         onDocumentChanged()
     }
 
     private func openGitDiffFile(_ file: GitChangedFile) {
-        tabs.showGitDiffTab(state: gitDiffState)
-        gitDiffState.focus(file)
-        timelineStore.record(.gitDiffFocused(relativePath: file.relativePath))
+        let tab = tabs.showGitDiffTabForActiveGroup()
+        tab.state.focus(file)
+        tab.groupState?.recordTimeline(.gitDiffFocused(relativePath: file.relativePath))
         onDocumentChanged()
     }
 
@@ -280,6 +298,7 @@ struct MainContainerView: View {
     private func setupActiveTabDirectoryObserver() {
         guard let terminalTab = tabs.activeTerminalTab else { return }
         terminalTab.state.onDirectoryChanged = { url in
+            terminalTab.groupState.updateWorkingDirectory(url)
             guard self.tabs.activeTerminalTab?.id == terminalTab.id else { return }
             self.scanner.setDirectory(url)
         }
