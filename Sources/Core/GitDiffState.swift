@@ -281,6 +281,9 @@ final class GitDiffState {
         process.waitUntilExit()
         readGroup.wait()
 
+        outputPipe.fileHandleForReading.readabilityHandler = nil
+        errorPipe.fileHandleForReading.readabilityHandler = nil
+
         let output = String(data: outputData.snapshot(), encoding: .utf8) ?? ""
         guard process.terminationStatus == 0 else {
             let message = String(data: errorData.snapshot(), encoding: .utf8) ?? ""

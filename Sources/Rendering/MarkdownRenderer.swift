@@ -628,12 +628,14 @@ private func isFenceStart(_ trimmedLine: String) -> Bool {
 }
 
 private func parseInlineTableCell(_ source: String) -> ParsedMarkdownTableCell {
-    let document = Document(parsing: source, options: [.parseBlockDirectives, .disableSmartOpts])
-    var visitor = InlineOnlyMarkdownVisitor()
-    let text = document.children.reduce(SwiftUI.Text("")) { result, child in
-        result + visitor.visit(child)
+    autoreleasepool {
+        let document = Document(parsing: source, options: [.parseBlockDirectives, .disableSmartOpts])
+        var visitor = InlineOnlyMarkdownVisitor()
+        let text = document.children.reduce(SwiftUI.Text("")) { result, child in
+            result + visitor.visit(child)
+        }
+        return ParsedMarkdownTableCell(text: text)
     }
-    return ParsedMarkdownTableCell(text: text)
 }
 
 private func parseTable(lines: [String], start: Int) -> (value: ParsedMarkdownTable, nextIndex: Int)? {
