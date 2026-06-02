@@ -48,6 +48,7 @@
 44. [세션 44: Ghostty 테마 적용 수정과 Settings 테마 필터 및 v1.5.4 릴리즈](#세션-44-ghostty-테마-적용-수정과-settings-테마-필터-및-v154-릴리즈)
 49. [세션 45: 탭 그룹과 대용량 편집 안정화 및 v1.6.0 릴리즈](#세션-45-탭-그룹과-대용량-편집-안정화-및-v160-릴리즈)
 50. [세션 46: 메모리 피크 해결 및 중복 탭 버그 수정](#세션-46-메모리-피크-해결-및-중복-탭-버그-수정)
+51. [세션 47: 마크다운 미리보기 메모리 피크 및 리소스 환수 최적화](#세션-47-마크다운-미리보기-메모리-피크-및-리소스-환수-최적화)
 
 ---
 
@@ -118,6 +119,7 @@
 | 61 | Ghostty 테마 적용 수정과 Settings 테마 필터 및 v1.5.4 릴리즈 | 이름 있는 Ghostty 테마를 명시 색상으로 내장 터미널에 적용, Light/Dark selector 기반 테마 목록 전환, Swift 6 이미지 썸네일 Sendable 오류 수정, 앱 번들 버전 1.5.4 갱신 |
 | 62 | 탭 그룹과 대용량 편집 안정화 및 v1.6.0 릴리즈 | 작업 세션별 탭 그룹, Cmd+숫자 그룹 전환, 그룹별 Git Diff/Timeline 상태 분리, 대용량 문서 자동 Diff 제한과 raw editor 성능 개선, 앱 번들 버전 1.6.0 갱신 |
 | 63 | 메모리 피크 해결 및 중복 탭 버그 수정 | FileBrowserSidebar, MarkdownImage, MarkdownRenderer, GitDiffState, TabCollection 수정 완료 |
+| 64 | 마크다운 미리보기 메모리 피크 및 리소스 환수 최적화 | MarkdownRenderer에 MarkdownPreviewView 추가(디바운스 300ms 도입), 렌더러 함수에 autoreleasepool 적용, ContentView 적용 완료 |
 
 ---
 
@@ -2471,3 +2473,69 @@ AI 연계와 append-friendly 특성을 고려해 단일 JSON 배열보다 JSONL�
 검증: `swift test` 73개 통과, `scripts/bundle.sh`로 debug 앱 번들 생성 성공.
 
 변경 파일: `Sources/Views/Sidebar/FileBrowserSidebar.swift`, `Sources/Rendering/MarkdownImage.swift`, `Sources/Rendering/MarkdownRenderer.swift`, `Sources/Core/GitDiffState.swift`, `Sources/Core/Tabs/TabCollection.swift`, `Sources/App/Info.plist`, `README.md`, `history.md`
+
+---
+
+## 세션 47: 마크다운 미리보기 메모리 피크 및 리소스 환수 최적화
+
+> 날짜: 2026-06-02
+> 경로: ~/workspace/markAgent
+
+사용자가 마크다운 미리보기(Preview) 모드를 활성화한 상태에서 문서를 편집하거나 뷰를 갱신할 때, 매번 전체 마크다운 파일에 대해 동기식 파싱(Document)과 SwiftUI 뷰 생성이 일어나며 C-바인딩 객체 누적에 따른 일시적 메모리 피크 및 리소스 체증이 발생했던 문제를 해결했다.
+
+### 대화 1: Markdown Preview 메모리 릴리즈 및 디바운스 최적화
+
+**사용자:**
+> 메모리 피크 문제가 해결되지 않았어. markdown preview 부분에서 문제가 발생해.
+
+**응답:**
+기존 마크다운 미리보기 방식은 뷰 계층 구조가 재생성될 때마다 `renderMarkdown` 함수를 직접 동기식으로 호출하여 전체 마크다운 AST 파싱(`Document(parsing:...)`)을 반복 수행했습니다. 
+이로 인해 타이핑 시 극심한 CPU 부하와 함께 임시 메모리가 급증하는 메모리 피크 현상이 발생했습니다.
+
+이를 근본적으로 해결하기 위해 다음의 조치를 취했습니다:
+1. **`MarkdownPreviewView` 컴포넌트 도입:** 기존의 `renderMarkdown` 함수를 뷰 body에서 직접 실행하는 대신, 상태 기반 뷰 컴포넌트를 정의했습니다.
+2. **300ms 디바운싱(Debouncing) 적용:** 사용자가 타이핑하는 동안에는 렌더링 작업을 지연시키고(Task 취소 및 재스케줄링), 타이핑이 잠시 멈춘 시점에만 렌더링 작업을 가동함으로써 렌더링 연산 횟수를 획기적으로 축소했습니다.
+3. **`onDisappear` 즉각적 메모리 환수:** 사용자가 다른 탭으로 가거나 Raw Edit 모드로 진입하여 Preview 뷰가 사라질 때, 동작 중인 렌더링 Task를 즉각 취소하고 캐싱해 둔 `renderedView` 상태를 `nil`로 갱신하여 힙 메모리를 완전하게 즉시 해제하도록 구성했습니다.
+4. **`autoreleasepool` 추가 적용:** `MarkdownRenderer.swift` 내부의 `renderBlock`과 `renderMarkdownDocument` 함수를 `autoreleasepool`로 감싸 C-바인딩 기반 AST 객체와 C 할당 영역이 렌더링 후 지체 없이 해제되도록 최적화했습니다.
+
+검증: `swift test` 73개 케이스 성공, `scripts/bundle.sh` debug 빌드 성공.
+
+변경 파일: `Sources/Rendering/MarkdownRenderer.swift`, `Sources/Views/ContentView.swift`, `history.md`
+
+---
+
+### 대화 2: 디버그 빌드 생성 및 실행
+
+**사용자:**
+> 디버그 빌드를 생성하고 실행해줘
+
+**응답:**
+디버그 빌드 번들 생성 스크립트(`scripts/bundle.sh`)를 실행하여 `.build/MarkAgent.app`을 빌드하고, `open .build/MarkAgent.app`을 실행하여 성공적으로 구동했습니다.
+
+변경 파일: 없음 (실행 확인)
+
+---
+
+### 대화 3: 탭 전환 및 뷰 모드 이동 시 메모리 튐 개선
+
+**사용자:**
+> 탭 전환 후 preview <-> edit 모드를 이동할 때 메모리 사용량이 약간 튀는 문제가 있었어.
+
+**응답:**
+사용자가 여러 마크다운 탭을 열고 탭 간 이동을 하거나, 탭 내에서 미리보기(Preview)와 원시 편집(Raw Edit) 간 모드 이동을 할 때 순간적으로 메모리 사용량이 튀는 현상을 확인했습니다.
+
+`ActiveTabContentView`는 비활성 상태의 마크다운 탭이 되면 해당 `MarkdownTabView`를 `Color.clear`로 대체하여 화면에서 완전히 언마운트시킵니다. 하지만 기존 `MarkdownTabView`는 내부 로컬 `@State` 변수(`cachedPreview`, `cachedPreviewSource`, `cachedPreviewBaseURL`)를 통해 컴포넌트 밖에서 이전 렌더링된 뷰를 계속 캐싱하고 있었습니다. 이로 인해 탭 전환(마운트/언마운트)이나 모드 이동이 일어날 때마다:
+1. 마운트되자마자 preview가 켜져 있으면 메인 스레드에서 무겁게 `renderMarkdown`을 동기적으로 다시 가동시켰고,
+2. 이전 캐시 데이터가 즉시 힙에서 지워지지 않고 잔존하면서 가비지 수집이 늦어져 힙이 비대해졌습니다.
+
+이를 완벽하게 해결하기 위해 `MarkdownTabView` 내부의 무거운 로컬 캐시 관리 구조와 헬퍼 함수(`refreshPreviewIfNeeded`, `clearPreviewCache`, 관련 `.onChange` 옵저버)를 전부 걷어냈습니다. 대신, 미리 생성해 둔 비동기 디바운싱 및 리소스 자가 반환 기능이 통합된 **`MarkdownPreviewView`**로 미리보기 영역을 대체했습니다.
+
+이로 인해:
+- **리소스 릴리즈 극대화:** 탭 전환으로 인해 `MarkdownTabView`가 언마운트되거나 모드가 `rawEdit`로 변경될 때, `MarkdownPreviewView`가 SwiftUI 뷰 계층에서 제외되면서 `onDisappear`가 트리거됩니다. 이 시점에 백그라운드 렌더링 Task가 취소되고 `@State` 뷰 레퍼런스(`renderedView`)에 `nil`이 즉시 할당되어 힙에 남아 있던 뷰 트리가 완전하게 즉시 해제됩니다.
+- **초기 로딩 Peak 방지:** 탭이 활성화되는 시점에 즉각 렌더링이 일어나더라도, 내부 `renderMarkdownDocument`와 `renderBlock`에 적용된 `autoreleasepool`을 통해 파싱용 임시 C-바인딩 객체들이 렌더링 직후 즉시 릴리즈되도록 보장합니다.
+
+검증: `swift test` 73개 케이스 성공, `scripts/bundle.sh` 빌드 및 실행 확인.
+
+변경 파일: `Sources/Views/Tabs/MarkdownTabView.swift`, `history.md`
+
+
