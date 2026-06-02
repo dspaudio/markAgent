@@ -16,6 +16,7 @@ struct FileBrowserSidebar: View {
     @State private var directoryErrors: [String: String] = [:]
     @State private var previewImage: SidebarImageSelection?
     @State private var previewState: SidebarPreviewState?
+    @State private var loadPreviewTask: Task<Void, Never>? = nil
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.terminalAppTheme) private var terminalAppTheme
 
@@ -422,11 +423,14 @@ struct FileBrowserSidebar: View {
     }
 
     private func closePreview() {
+        loadPreviewTask?.cancel()
+        loadPreviewTask = nil
         previewState = nil
         selectedEntryID = nil
     }
 
     private func loadPreview(for entry: FileEntry) {
+        loadPreviewTask?.cancel()
         previewState = SidebarPreviewState(entry: entry, content: .loading)
 
         if entry.isImage {
@@ -435,7 +439,7 @@ struct FileBrowserSidebar: View {
         }
 
         let byteLimit = textPreviewByteLimit
-        Task { [entry] in
+        loadPreviewTask = Task { [entry] in
             do {
                 let source = try await Task.detached(priority: .userInitiated) {
                     try loadTextPreview(from: entry.url, byteLimit: byteLimit)
