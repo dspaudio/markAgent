@@ -23,6 +23,7 @@ final class MarkdownDocument {
 
     private var pendingExternalContent: String?
     private var lastSaveTime: Date?
+    private var diffGeneration = 0
 
     var isDirty: Bool {
         editableContent != content
@@ -46,7 +47,7 @@ final class MarkdownDocument {
                 let oldContent = content
                 content = newContent
                 editableContent = newContent
-                computeDiffInBackground(old: oldContent, new: newContent)
+                computeDiffIfNeeded(old: oldContent, new: newContent)
             }
         } catch {
             isLoaded = false
@@ -55,6 +56,7 @@ final class MarkdownDocument {
     }
 
     func clearDiff() {
+        diffGeneration += 1
         diffResult = nil
         showDiff = false
         previousContent = nil
@@ -73,17 +75,37 @@ final class MarkdownDocument {
         clearDiff()
     }
 
+    private func computeDiffIfNeeded(old: String, new: String) {
+        guard shouldComputeAutomaticDiff(old: old, new: new) else {
+            clearDiff()
+            return
+        }
+
+        computeDiffInBackground(old: old, new: new)
+    }
+
     private func computeDiffInBackground(old: String, new: String) {
+        diffGeneration += 1
+        let generation = diffGeneration
         previousContent = old
         Task.detached(priority: .utility) {
             let result = DiffEngine.compute(old: old, new: new)
             await MainActor.run {
+                guard generation == self.diffGeneration else { return }
                 self.diffResult = result.isEmpty ? nil : result
                 if self.diffResult != nil {
                     self.showDiff = true
                 }
             }
         }
+    }
+
+    private func shouldComputeAutomaticDiff(old: String, new: String) -> Bool {
+        guard !old.isEmpty else { return false }
+        let maxBytes = max(old.utf8.count, new.utf8.count)
+        guard maxBytes <= Self.automaticDiffByteBudget else { return false }
+        return old.newlineCount <= Self.automaticDiffLineBudget
+            && new.newlineCount <= Self.automaticDiffLineBudget
     }
 
     // FileWatcher 콜백에서 호출 — 앱 자체 저장 직후 이벤트는 무시
@@ -111,9 +133,11 @@ final class MarkdownDocument {
 
     func acceptExternalUpdate() {
         if let pending = pendingExternalContent {
+            let oldContent = content
             content = pending
             editableContent = pending
             pendingExternalContent = nil
+            computeDiffIfNeeded(old: oldContent, new: pending)
         }
         isExternalUpdatePending = false
     }
@@ -148,6 +172,19 @@ final class MarkdownDocument {
     nonisolated static func isMarkdownURL(_ url: URL) -> Bool {
         let pathExtension = url.pathExtension.lowercased()
         return pathExtension == "md" || pathExtension == "markdown"
+    }
+
+    nonisolated private static let automaticDiffByteBudget = 2_000_000
+    nonisolated private static let automaticDiffLineBudget = 60_000
+}
+
+private extension String {
+    var newlineCount: Int {
+        reduce(into: 0) { count, character in
+            if character == "\n" {
+                count += 1
+            }
+        }
     }
 }
 

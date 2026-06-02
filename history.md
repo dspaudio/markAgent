@@ -46,6 +46,7 @@
 42. [세션 42: Git Diff 사이드바 미리보기 안정화 및 v1.5.2 릴리즈](#세션-42-git-diff-사이드바-미리보기-안정화-및-v152-릴리즈)
 43. [세션 43: 테마 선택 UX와 Git Diff 단일 클릭 미리보기 및 v1.5.3 릴리즈](#세션-43-테마-선택-ux와-git-diff-단일-클릭-미리보기-및-v153-릴리즈)
 44. [세션 44: Ghostty 테마 적용 수정과 Settings 테마 필터 및 v1.5.4 릴리즈](#세션-44-ghostty-테마-적용-수정과-settings-테마-필터-및-v154-릴리즈)
+45. [세션 45: 탭 그룹과 대용량 편집 안정화 및 v1.6.0 릴리즈](#세션-45-탭-그룹과-대용량-편집-안정화-및-v160-릴리즈)
 
 ---
 
@@ -114,6 +115,7 @@
 | 59 | Git Diff 사이드바 미리보기 안정화 및 v1.5.2 릴리즈 | Git Diff 로딩 hang 수정, 우측 사이드바 Diff 미리보기/탭 승격/열린 Diff 탭 스크롤 연동, 앱 번들 버전 1.5.2 갱신 |
 | 60 | 테마 선택 UX와 Git Diff 단일 클릭 미리보기 및 v1.5.3 릴리즈 | Settings 테마 목록을 라이트/다크로 그룹화, 선택 테마 기반 사이드바 컬러, Apple SD Gothic Neo fallback, Git Diff 파일 단일 클릭 미리보기, 앱 번들 버전 1.5.3 갱신 |
 | 61 | Ghostty 테마 적용 수정과 Settings 테마 필터 및 v1.5.4 릴리즈 | 이름 있는 Ghostty 테마를 명시 색상으로 내장 터미널에 적용, Light/Dark selector 기반 테마 목록 전환, Swift 6 이미지 썸네일 Sendable 오류 수정, 앱 번들 버전 1.5.4 갱신 |
+| 62 | 탭 그룹과 대용량 편집 안정화 및 v1.6.0 릴리즈 | 작업 세션별 탭 그룹, Cmd+숫자 그룹 전환, 그룹별 Git Diff/Timeline 상태 분리, 대용량 문서 자동 Diff 제한과 raw editor 성능 개선, 앱 번들 버전 1.6.0 갱신 |
 
 ---
 
@@ -1519,6 +1521,24 @@ MarkAgent 메뉴의 `Settings…` 창을 추가하고, Ghostty theme/font-size/c
 
 **응답:**
 명시 버전 `1.2.0`으로 앱 번들 버전을 갱신하고, README 기능 소개와 `history.md` 세션 기록을 이번 변경분에 맞게 업데이트한 뒤 릴리즈 빌드, GitHub Release, 커밋/푸시, main 대상 PR 생성 및 머지를 진행.
+
+변경 파일: `Sources/App/Info.plist`, `README.md`, `history.md`
+
+
+## 세션 45: 탭 그룹과 대용량 편집 안정화 및 v1.6.0 릴리즈
+
+> 날짜: 2026-06-02
+> 경로: ~/workspace/markAgent
+
+터미널 중심 병렬 작업 세션을 더 명확하게 다루기 위해 탭 그룹 상태를 추가하고, 큰 Markdown/raw text 파일을 열거나 편집할 때 발생할 수 있는 자동 Diff와 스타일 적용 비용을 줄였다. 명시 버전 `1.6.0`으로 릴리즈 빌드 절차를 진행한다.
+
+### 대화 1: v1.6.0 릴리즈 빌드 실행
+
+**사용자:**
+> .claude/commands/release-build.md 1.6.0
+
+**응답:**
+릴리즈 명령 문서를 확인하고, 명시 버전 `1.6.0`을 사용해 `Info.plist`의 `CFBundleVersion`과 `CFBundleShortVersionString`을 갱신했다. README 기능 소개에는 실제 변경 범위인 작업 세션별 탭 그룹, Cmd+숫자 그룹 전환/순환, 그룹별 Git Diff/Timeline 상태 분리, 대용량 문서 자동 Diff 제한, line index 기반 커서 위치 계산, raw editor 스타일 재적용 축소를 반영했다. 커밋/푸시 전 필수 규칙에 따라 이번 세션 내용을 `history.md` 목차, 타임라인 요약, 세션 본문에 기록했다.
 
 변경 파일: `Sources/App/Info.plist`, `README.md`, `history.md`
 

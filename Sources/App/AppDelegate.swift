@@ -57,6 +57,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         window.tabbingMode = .disallowed
         window.level = .normal
         window.delegate = self
+        window.tabGroupKeybindHandler = { [weak self] event in
+            self?.handleTabGroupKeybind(event) ?? false
+        }
         window.terminalKeybindHandler = { [weak self] event in
             self?.handleTerminalTextKeybind(event) ?? false
         }
@@ -646,6 +649,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         window?.title = title
         window?.isDocumentEdited = tabs.tabs.contains { $0.isDirty }
         updateViewMenuState()
+    }
+
+    private func handleTabGroupKeybind(_ event: NSEvent) -> Bool {
+        let modifiers = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+        guard modifiers == .command,
+              let key = event.charactersIgnoringModifiers,
+              let shortcutNumber = Int(key),
+              tabs.selectGroup(shortcutNumber: shortcutNumber) else {
+            return false
+        }
+
+        updateWindowTitle()
+        return true
     }
 
     private func handleTerminalTextKeybind(_ event: NSEvent) -> Bool {

@@ -13,6 +13,69 @@ final class DocumentTests: XCTestCase {
     }
 
     @MainActor
+    func testInitialLargeLoadSkipsAutomaticDiff() throws {
+        let tempDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("MarkAgentLargeLoadTests-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        let fileURL = tempDir.appendingPathComponent("history.md")
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        try largeMarkdown(lineCount: 70_000).write(to: fileURL, atomically: true, encoding: .utf8)
+
+        let document = MarkdownDocument()
+        document.load(from: fileURL)
+
+        XCTAssertTrue(document.isLoaded)
+        XCTAssertNil(document.diffResult)
+        XCTAssertFalse(document.showDiff)
+        XCTAssertNil(document.previousContent)
+    }
+
+    @MainActor
+    func testSmallExternalUpdateStillComputesDiff() async throws {
+        let tempDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("MarkAgentSmallDiffTests-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        let fileURL = tempDir.appendingPathComponent("note.md")
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        try "first\nsecond\n".write(to: fileURL, atomically: true, encoding: .utf8)
+        let document = MarkdownDocument()
+        document.load(from: fileURL)
+
+        try "first\nchanged\n".write(to: fileURL, atomically: true, encoding: .utf8)
+        document.load(from: fileURL)
+
+        await waitUntil {
+            document.diffResult != nil
+        }
+
+        XCTAssertEqual(document.diffResult?.addedCount, 1)
+        XCTAssertEqual(document.diffResult?.removedCount, 1)
+        XCTAssertTrue(document.showDiff)
+    }
+
+    @MainActor
+    func testLargeExternalUpdateSkipsAutomaticDiff() throws {
+        let tempDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("MarkAgentLargeDiffTests-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        let fileURL = tempDir.appendingPathComponent("history.md")
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        try "small\nfile\n".write(to: fileURL, atomically: true, encoding: .utf8)
+        let document = MarkdownDocument()
+        document.load(from: fileURL)
+
+        try largeMarkdown(lineCount: 70_000).write(to: fileURL, atomically: true, encoding: .utf8)
+        document.load(from: fileURL)
+
+        XCTAssertNil(document.diffResult)
+        XCTAssertFalse(document.showDiff)
+        XCTAssertNil(document.previousContent)
+    }
+
+    @MainActor
     func testPlainTextFileDisablesPreview() throws {
         let tempDir = FileManager.default.temporaryDirectory
         let tempFile = tempDir.appendingPathComponent("test_markagent.swift")
@@ -143,6 +206,26 @@ final class DocumentTests: XCTestCase {
         store.record(url: first)
 
         XCTAssertEqual(store.documents.map(\.path), [first.path, second.path])
+    }
+}
+
+private func largeMarkdown(lineCount: Int) -> String {
+    (0..<lineCount)
+        .map { "line \($0)" }
+        .joined(separator: "\n")
+}
+
+@MainActor
+private func waitUntil(
+    timeout: TimeInterval = 2,
+    condition: @escaping @MainActor () -> Bool
+) async {
+    let deadline = Date().addingTimeInterval(timeout)
+    while Date() < deadline {
+        if condition() {
+            return
+        }
+        try? await Task.sleep(nanoseconds: 20_000_000)
     }
 }
 

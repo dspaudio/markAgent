@@ -54,6 +54,16 @@ struct EditorView: View {
 private struct CursorPosition: Equatable {
     var line: Int
     var column: Int
+
+    init(line: Int, column: Int) {
+        self.line = line
+        self.column = column
+    }
+
+    init(_ position: EditorCursorPosition) {
+        line = position.line
+        column = position.column
+    }
 }
 
 private struct EditorStatusBar: View {
@@ -282,6 +292,7 @@ private struct MarkdownTextEditor: NSViewRepresentable {
 
         let textStorage = NSTextStorage()
         let layoutManager = NSLayoutManager()
+        layoutManager.allowsNonContiguousLayout = true
         let textContainer = NSTextContainer(
             containerSize: NSSize(width: scrollView.contentSize.width, height: CGFloat.greatestFiniteMagnitude)
         )
@@ -315,7 +326,8 @@ private struct MarkdownTextEditor: NSViewRepresentable {
 
         scrollView.documentView = textView
         context.coordinator.appColors = appColors
-        context.coordinator.applyMarkdownStyle(to: textView)
+        context.coordinator.resetTextMetrics(for: text)
+        context.coordinator.applyMarkdownStyleIfNeeded(to: textView, force: true)
         return scrollView
     }
 
@@ -327,13 +339,14 @@ private struct MarkdownTextEditor: NSViewRepresentable {
         textView.backgroundColor = appColors?.textBackground ?? .textBackgroundColor
         textView.insertionPointColor = appColors?.insertionPoint ?? .controlAccentColor
 
-        if textView.string != text {
+        if context.coordinator.needsExternalTextUpdate(textView: textView, text: text) {
             textView.string = text
+            context.coordinator.resetTextMetrics(for: text)
         }
 
         context.coordinator.rendersMarkdownStyle = rendersMarkdownStyle
         textView.textContainerInset = NSSize(width: 20, height: 20)
-        context.coordinator.applyMarkdownStyle(to: textView)
+        context.coordinator.applyMarkdownStyleIfNeeded(to: textView)
         textView.textContainer?.widthTracksTextView = true
         configureTextContainer(for: textView, in: scrollView)
         textView.needsDisplay = true
@@ -403,6 +416,10 @@ private struct MarkdownTextEditor: NSViewRepresentable {
         @Binding var cursorPosition: CursorPosition
         var rendersMarkdownStyle: Bool
         var appColors: TerminalAppColors?
+        private var lineIndex = EditorLineIndex(text: "")
+        private var lastAppliedText: String
+        private var didReceiveLocalEdit = false
+        private var stylePolicy: EditorStylePolicy
 
         init(
             text: Binding<String>,
@@ -414,12 +431,20 @@ private struct MarkdownTextEditor: NSViewRepresentable {
             _selectedRange = selectedRange
             _cursorPosition = cursorPosition
             self.rendersMarkdownStyle = rendersMarkdownStyle
+            self.lastAppliedText = text.wrappedValue
+            self.stylePolicy = EditorStylePolicy(mode: rendersMarkdownStyle ? .renderedMarkdown : .raw)
+            self.lineIndex = EditorLineIndex(text: text.wrappedValue)
         }
 
         func textDidChange(_ notification: Notification) {
             guard let textView = notification.object as? NSTextView else { return }
             text = textView.string
-            applyMarkdownStyle(to: textView)
+            didReceiveLocalEdit = true
+            lastAppliedText = textView.string
+            resetTextMetrics(for: textView.string)
+            if rendersMarkdownStyle {
+                applyMarkdownStyle(to: textView)
+            }
             textView.needsDisplay = true
             updateCursorPosition(textView: textView)
         }
@@ -432,18 +457,48 @@ private struct MarkdownTextEditor: NSViewRepresentable {
 
         @MainActor
         func updateCursorPosition(textView: NSTextView) {
-            cursorPosition = Self.cursorPosition(
-                in: textView.string as NSString,
-                location: textView.selectedRange().location
-            )
+            cursorPosition = CursorPosition(lineIndex.cursorPosition(for: textView.selectedRange().location))
         }
 
-        private static func cursorPosition(in text: NSString, location: Int) -> CursorPosition {
-            let safeLocation = min(max(location, 0), text.length)
-            let prefix = text.substring(to: safeLocation) as NSString
-            let line = prefix.components(separatedBy: "\n").count
-            let lineRange = text.lineRange(for: NSRange(location: safeLocation, length: 0))
-            return CursorPosition(line: line, column: safeLocation - lineRange.location + 1)
+        func resetTextMetrics(for text: String) {
+            lineIndex = EditorLineIndex(text: text)
+        }
+
+        @MainActor
+        func needsExternalTextUpdate(textView: NSTextView, text: String) -> Bool {
+            if didReceiveLocalEdit, text == lastAppliedText {
+                didReceiveLocalEdit = false
+                return false
+            }
+
+            if text == lastAppliedText {
+                return false
+            }
+
+            guard textView.string != text else {
+                lastAppliedText = text
+                return false
+            }
+
+            didReceiveLocalEdit = false
+            lastAppliedText = text
+            return true
+        }
+
+        @MainActor
+        func applyMarkdownStyleIfNeeded(to textView: NSTextView, force: Bool = false) {
+            let mode: EditorStyleMode = rendersMarkdownStyle ? .renderedMarkdown : .raw
+            if force || stylePolicy.shouldApplyFullStyle(mode: mode, colorSignature: colorSignature) {
+                applyMarkdownStyle(to: textView)
+            }
+        }
+
+        private var colorSignature: String {
+            [
+                appColors?.textForeground.description ?? NSColor.textColor.description,
+                appColors?.textBackground.description ?? NSColor.textBackgroundColor.description,
+                rendersMarkdownStyle ? "rendered" : "raw"
+            ].joined(separator: "|")
         }
 
         @MainActor

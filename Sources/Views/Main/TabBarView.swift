@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 struct TabBarView: View {
@@ -10,6 +11,7 @@ struct TabBarView: View {
     var onToggleDiff: () -> Void = {}
 
     @State private var draggedTabID: UUID?
+    @State private var isCommandKeyPressed = false
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.terminalAppTheme) private var terminalAppTheme
     
@@ -31,6 +33,8 @@ struct TabBarView: View {
                         TabItemView(
                             tab: tab,
                             isActive: tabs.activeTabID == tab.id,
+                            groupShortcutNumber: tabs.groupShortcutNumber(for: tab.groupID),
+                            showsGroupShortcut: isCommandKeyPressed,
                             onSelect: {
                                 tabs.selectTab(id: tab.id)
                             },
@@ -90,10 +94,81 @@ struct TabBarView: View {
             Divider().overlay(appColors?.border ?? Color.clear),
             alignment: .bottom
         )
+        .background(groupShortcutButtons)
+        .background(CommandKeyObserver(isCommandKeyPressed: $isCommandKeyPressed))
     }
 
     private var appColors: TerminalAppColors? {
         terminalAppTheme?.colors(for: colorScheme)
+    }
+
+    private var groupShortcutButtons: some View {
+        HStack {
+            ForEach(1...9, id: \.self) { shortcutNumber in
+                Button {
+                    tabs.selectGroup(shortcutNumber: shortcutNumber)
+                } label: {
+                    EmptyView()
+                }
+                .keyboardShortcut(KeyEquivalent(Character("\(shortcutNumber)")), modifiers: .command)
+                .frame(width: 0, height: 0)
+                .opacity(0)
+                .accessibilityHidden(true)
+            }
+        }
+        .frame(width: 0, height: 0)
+    }
+}
+
+private struct CommandKeyObserver: NSViewRepresentable {
+    @Binding var isCommandKeyPressed: Bool
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(isCommandKeyPressed: $isCommandKeyPressed)
+    }
+
+    func makeNSView(context: Context) -> NSView {
+        context.coordinator.start()
+        return NSView(frame: .zero)
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {
+        context.coordinator.isCommandKeyPressed = $isCommandKeyPressed
+    }
+
+    static func dismantleNSView(_ nsView: NSView, coordinator: Coordinator) {
+        coordinator.stop()
+    }
+
+    final class Coordinator {
+        var isCommandKeyPressed: Binding<Bool>
+        private var localMonitor: Any?
+
+        init(isCommandKeyPressed: Binding<Bool>) {
+            self.isCommandKeyPressed = isCommandKeyPressed
+        }
+
+        func start() {
+            guard localMonitor == nil else { return }
+            localMonitor = NSEvent.addLocalMonitorForEvents(matching: [.flagsChanged, .keyDown, .keyUp]) { [weak self] event in
+                self?.updateCommandState(from: event)
+                return event
+            }
+        }
+
+        func stop() {
+            if let localMonitor {
+                NSEvent.removeMonitor(localMonitor)
+            }
+            localMonitor = nil
+        }
+
+        private func updateCommandState(from event: NSEvent) {
+            let isPressed = event.modifierFlags.intersection(.deviceIndependentFlagsMask).contains(.command)
+            if isCommandKeyPressed.wrappedValue != isPressed {
+                isCommandKeyPressed.wrappedValue = isPressed
+            }
+        }
     }
 }
 
