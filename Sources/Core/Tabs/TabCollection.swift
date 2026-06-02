@@ -95,6 +95,19 @@ final class TabCollection {
 
     @discardableResult
     func createMarkdownTab(fileURL: URL?) -> MarkdownTab {
+        if let fileURL {
+            let standardURL = fileURL.standardizedFileURL
+            if let existingTab = tabs.compactMap({ $0 as? MarkdownTab }).first(where: {
+                $0.fileURL?.standardizedFileURL == standardURL
+            }) {
+                activeTabID = existingTab.id
+                if let groupState = existingTab.groupState {
+                    lastActiveGroupID = groupState.id
+                }
+                return existingTab
+            }
+        }
+
         let id = UUID()
         let state = MarkdownTabState(id: id, fileURL: fileURL)
         let groupState = ensureActiveGroup(workingDirectory: fileURL?.deletingLastPathComponent())
