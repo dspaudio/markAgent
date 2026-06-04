@@ -9,6 +9,7 @@ struct FileBrowserSidebar: View {
     var width: Double = 260
     
     @AppStorage("isOneClickPreviewEnabled") private var isOneClickPreviewEnabled = true
+    @AppStorage("sidebarShowsHiddenFiles") private var showsHiddenFiles = false
     @State private var selectedEntryID: String?
     @State private var expandedDirectoryIDs: Set<String> = []
     @State private var expandedDirectoryEntries: [String: [FileEntry]] = [:]
@@ -18,6 +19,7 @@ struct FileBrowserSidebar: View {
     @State private var previewState: SidebarPreviewState?
     @State private var loadPreviewTask: Task<Void, Never>? = nil
     @State private var searchText = ""
+    @State private var submittedSearchText = ""
     @State private var searchMode: SidebarSearchMode = .files
     @State private var searchResults: [SidebarSearchResult] = []
     @State private var isSearching = false
@@ -38,6 +40,16 @@ struct FileBrowserSidebar: View {
                     .truncationMode(.middle)
                 
                 Spacer()
+
+                Button(action: {
+                    showsHiddenFiles.toggle()
+                }) {
+                    Image(systemName: showsHiddenFiles ? "eye" : "eye.slash")
+                        .font(.system(size: 12))
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(showsHiddenFiles ? Color.accentColor : Color.secondary)
+                .help(showsHiddenFiles ? String(localized: "숨김 파일 숨기기") : String(localized: "숨김 파일 표시"))
                 
                 Button(action: {
                     scanner.goUp()
@@ -78,13 +90,29 @@ struct FileBrowserSidebar: View {
             }
         }
         .onChange(of: searchText) { _, _ in
-            scheduleSearch()
+            if searchText.trimmingCharacters(in: .whitespacesAndNewlines) != submittedSearchText {
+                searchTask?.cancel()
+                searchResults = []
+                searchError = nil
+                isSearching = false
+                selectedSearchResultID = nil
+            }
         }
         .onChange(of: searchMode) { _, _ in
-            scheduleSearch()
+            rerunSubmittedSearch()
+        }
+        .onChange(of: showsHiddenFiles) { _, isEnabled in
+            expandedDirectoryEntries = [:]
+            directoryErrors = [:]
+            loadingDirectoryIDs = []
+            scanner.setIncludeHiddenFiles(isEnabled)
+            rerunSubmittedSearch()
         }
         .onChange(of: scanner.currentDirectory) { _, _ in
             clearSearchForDirectoryChange()
+        }
+        .onAppear {
+            scanner.setIncludeHiddenFiles(showsHiddenFiles)
         }
         .onDisappear {
             searchTask?.cancel()
@@ -105,6 +133,10 @@ struct FileBrowserSidebar: View {
     }
 
     private var isSearchActive: Bool {
+        !submittedSearchText.isEmpty
+    }
+
+    private var hasSearchText: Bool {
         !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
@@ -160,14 +192,14 @@ struct FileBrowserSidebar: View {
                 SidebarSearchField(
                     text: $searchText,
                     placeholder: searchMode == .grep ? String(localized: "내용 검색") : String(localized: "파일 검색"),
-                    onSubmit: previewSelectedSearchCandidate,
+                    onSubmit: submitSearch,
                     onMoveSelection: moveSearchSelection,
                     onEscape: handleSearchEscape
                 )
                     .frame(height: 17)
                     .accessibilityIdentifier("sidebar-search-field")
 
-                if isSearchActive {
+                if hasSearchText {
                     Button {
                         searchText = ""
                         resetSearchState()
@@ -410,29 +442,46 @@ struct FileBrowserSidebar: View {
         .accessibilityIdentifier("sidebar-search-result-\(entry.name)")
     }
 
-    private func scheduleSearch() {
-        searchTask?.cancel()
-
-        let query = searchText
-        guard !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            searchResults = []
-            searchError = nil
-            isSearching = false
-            selectedSearchResultID = nil
+    private func submitSearch() {
+        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !query.isEmpty else {
+            resetSearchState()
             return
         }
 
+        if query == submittedSearchText, !isSearching {
+            previewSelectedSearchCandidate()
+            return
+        }
+
+        startSearch(query: query)
+    }
+
+    private func rerunSubmittedSearch() {
+        guard !submittedSearchText.isEmpty else { return }
+        startSearch(query: submittedSearchText)
+    }
+
+    private func startSearch(query: String) {
+        searchTask?.cancel()
+
         let root = scanner.currentDirectory
         let mode = searchMode
+        let includeHidden = showsHiddenFiles
+        submittedSearchText = query
         isSearching = true
         searchError = nil
         searchResults = []
         selectedSearchResultID = nil
 
-        searchTask = Task { [query, root, mode] in
+        searchTask = Task { [query, root, mode, includeHidden] in
             do {
-                try await Task.sleep(for: .milliseconds(180))
-                let results = try await SidebarFileSearch.search(root: root, query: query, mode: mode)
+                let results = try await SidebarFileSearch.search(
+                    root: root,
+                    query: query,
+                    mode: mode,
+                    includeHidden: includeHidden
+                )
                 guard !Task.isCancelled else { return }
                 searchResults = results
                 selectedSearchResultID = results.first?.id
@@ -451,6 +500,7 @@ struct FileBrowserSidebar: View {
 
     private func resetSearchState() {
         searchTask?.cancel()
+        submittedSearchText = ""
         searchResults = []
         searchError = nil
         isSearching = false
@@ -495,6 +545,7 @@ struct FileBrowserSidebar: View {
 
         let outcome = SidebarSearchStateReducer.applyEscape(to: &state)
         searchText = state.text
+        submittedSearchText = state.text
         searchResults = state.results
         isSearching = state.isSearching
         searchError = state.error
@@ -522,6 +573,7 @@ struct FileBrowserSidebar: View {
         )
         SidebarSearchStateReducer.applyDirectoryChange(to: &state)
         searchText = state.text
+        submittedSearchText = state.text
         searchResults = state.results
         isSearching = state.isSearching
         searchError = state.error
@@ -560,11 +612,12 @@ struct FileBrowserSidebar: View {
     private func loadExpandedDirectory(_ entry: FileEntry) {
         loadingDirectoryIDs.insert(entry.id)
         directoryErrors[entry.id] = nil
+        let includeHidden = showsHiddenFiles
 
-        Task { [entry] in
+        Task { [entry, includeHidden] in
             do {
                 let entries = try await Task.detached(priority: .userInitiated) {
-                    try DirectoryScanner.scan(directory: entry.url)
+                    try DirectoryScanner.scan(directory: entry.url, includeHidden: includeHidden)
                 }.value
 
                 guard !Task.isCancelled else { return }

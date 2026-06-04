@@ -30,41 +30,56 @@ enum SidebarFileSearch {
     private static let maxResults = 80
     private static let ignoredDirectoryNames: Set<String> = [".git", ".build", "node_modules", "DerivedData"]
 
-    static func search(root: URL, query: String, mode: SidebarSearchMode) async throws -> [SidebarSearchResult] {
+    static func search(
+        root: URL,
+        query: String,
+        mode: SidebarSearchMode,
+        includeHidden: Bool = false
+    ) async throws -> [SidebarSearchResult] {
         let normalizedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !normalizedQuery.isEmpty else { return [] }
 
         return try await Task.detached(priority: .userInitiated) {
-            let entries = try searchableEntries(in: root)
-
             switch mode {
             case .files:
+                let entries = try searchableEntries(in: root, includeHidden: includeHidden)
                 return fileMatches(entries: entries, root: root, query: normalizedQuery)
             case .grep:
-                return try grepMatches(entries: entries, root: root, query: normalizedQuery)
+                if let results = try ripgrepMatches(root: root, query: normalizedQuery, includeHidden: includeHidden) {
+                    return results
+                }
+                return try grepMatches(root: root, query: normalizedQuery, includeHidden: includeHidden)
             }
         }.value
     }
 
-    private static func searchableEntries(in root: URL) throws -> [FileEntry] {
+    private static func searchableEntries(in root: URL, includeHidden: Bool) throws -> [FileEntry] {
         guard let enumerator = FileManager.default.enumerator(
             at: root,
             includingPropertiesForKeys: [.contentTypeKey, .fileSizeKey, .contentModificationDateKey, .isDirectoryKey],
-            options: [.skipsHiddenFiles]
+            options: includeHidden ? [] : [.skipsHiddenFiles]
         ) else {
             return []
         }
 
         var entries: [FileEntry] = []
         for case let url as URL in enumerator {
+            try Task.checkCancellation()
             let entry = entry(for: url)
-            if entry.isDirectory, ignoredDirectoryNames.contains(entry.name) {
+            if entry.isDirectory, shouldSkipDirectory(entry.name, includeHidden: includeHidden) {
                 enumerator.skipDescendants()
                 continue
             }
             entries.append(entry)
         }
         return entries
+    }
+
+    private static func shouldSkipDirectory(_ name: String, includeHidden: Bool) -> Bool {
+        if includeHidden, name == ".git" {
+            return false
+        }
+        return ignoredDirectoryNames.contains(name)
     }
 
     private static func entry(for url: URL) -> FileEntry {
@@ -108,11 +123,30 @@ enum SidebarFileSearch {
             .map { $0 }
     }
 
-    private static func grepMatches(entries: [FileEntry], root: URL, query: String) throws -> [SidebarSearchResult] {
+    private static func grepMatches(root: URL, query: String, includeHidden: Bool) throws -> [SidebarSearchResult] {
+        guard let enumerator = FileManager.default.enumerator(
+            at: root,
+            includingPropertiesForKeys: [.contentTypeKey, .fileSizeKey, .contentModificationDateKey, .isDirectoryKey],
+            options: includeHidden ? [] : [.skipsHiddenFiles]
+        ) else {
+            return []
+        }
+
         let needle = query.lowercased()
         var results: [SidebarSearchResult] = []
 
-        for entry in entries where !entry.isDirectory && !entry.isImage {
+        for case let url as URL in enumerator {
+            try Task.checkCancellation()
+            let entry = entry(for: url)
+
+            if entry.isDirectory {
+                if shouldSkipDirectory(entry.name, includeHidden: includeHidden) {
+                    enumerator.skipDescendants()
+                }
+                continue
+            }
+
+            guard !entry.isImage else { continue }
             guard let match = try? firstContentMatch(in: entry.url, needle: needle) else { continue }
             results.append(SidebarSearchResult(
                 entry: entry,
@@ -129,7 +163,95 @@ enum SidebarFileSearch {
         return results.sorted(by: sortResults)
     }
 
+    private static func ripgrepMatches(root: URL, query: String, includeHidden: Bool) throws -> [SidebarSearchResult]? {
+        guard let executableURL = RipgrepTool.executableURL() else { return nil }
+        try Task.checkCancellation()
+
+        let process = Process()
+        process.executableURL = executableURL
+        process.arguments = ripgrepArguments(query: query, root: root, includeHidden: includeHidden)
+
+        let outputPipe = Pipe()
+        process.standardOutput = outputPipe
+
+        do {
+            try process.run()
+        } catch {
+            return nil
+        }
+
+        let outputData = outputPipe.fileHandleForReading.readDataToEndOfFile()
+        process.waitUntilExit()
+        try Task.checkCancellation()
+
+        switch process.terminationStatus {
+        case 0:
+            return try parseRipgrepMatches(outputData, root: root)
+        case 1:
+            return []
+        default:
+            return nil
+        }
+    }
+
+    private static func ripgrepArguments(query: String, root: URL, includeHidden: Bool) -> [String] {
+        var arguments = [
+            "--json",
+            "--color", "never",
+            "--max-count", "1",
+            "--max-filesize", "\(maxFileBytes)",
+            "--glob", "!node_modules/**",
+            "--glob", "!.build/**",
+            "--glob", "!DerivedData/**",
+        ]
+
+        if includeHidden {
+            arguments.append("--hidden")
+        }
+
+        arguments += ["--", query, root.path]
+        return arguments
+    }
+
+    private static func parseRipgrepMatches(_ data: Data, root: URL) throws -> [SidebarSearchResult] {
+        let output = String(decoding: data, as: UTF8.self)
+        var results: [SidebarSearchResult] = []
+
+        for line in output.split(separator: "\n", omittingEmptySubsequences: true) {
+            try Task.checkCancellation()
+            guard let lineData = String(line).data(using: .utf8),
+                  let json = try JSONSerialization.jsonObject(with: lineData) as? [String: Any],
+                  json["type"] as? String == "match",
+                  let data = json["data"] as? [String: Any],
+                  let path = data["path"] as? [String: Any],
+                  let pathText = path["text"] as? String,
+                  let lineNumber = data["line_number"] as? Int,
+                  let lines = data["lines"] as? [String: Any],
+                  let lineText = lines["text"] as? String
+            else {
+                continue
+            }
+
+            let url = URL(fileURLWithPath: pathText)
+            let entry = entry(for: url)
+            let detail = "\(lineNumber): \(lineText.trimmingCharacters(in: .whitespacesAndNewlines))"
+            results.append(SidebarSearchResult(
+                entry: entry,
+                relativePath: relativePath(for: url, root: root),
+                detail: detail,
+                score: lineNumber
+            ))
+
+            if results.count >= maxResults {
+                break
+            }
+        }
+
+        return results.sorted(by: sortResults)
+    }
+
     private static func firstContentMatch(in url: URL, needle: String) throws -> (lineNumber: Int, detail: String)? {
+        try Task.checkCancellation()
         let handle = try FileHandle(forReadingFrom: url)
         defer { try? handle.close() }
 
@@ -138,6 +260,7 @@ enum SidebarFileSearch {
         let source = String(decoding: data, as: UTF8.self)
 
         for (offset, line) in source.split(separator: "\n", omittingEmptySubsequences: false).enumerated() {
+            try Task.checkCancellation()
             if line.localizedCaseInsensitiveContains(needle) {
                 let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
                 return (offset + 1, "\(offset + 1): \(trimmed)")

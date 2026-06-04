@@ -6,6 +6,9 @@ struct PreferencesView: View {
     @State private var preferences: GhosttyPreferences
     @State private var selectedThemeFilter: ThemeFilter
     @State private var saveErrorMessage: String?
+    @State private var ripgrepStatus = RipgrepStatus.checking
+    @State private var ripgrepInstallMessage: String?
+    @State private var isInstallingRipgrep = false
     @AppStorage("isLeftSidebarVisible") private var isLeftSidebarVisible = true
     @AppStorage("isOneClickPreviewEnabled") private var isOneClickPreviewEnabled = true
 
@@ -44,6 +47,9 @@ struct PreferencesView: View {
         .onChange(of: preferences) { _, newValue in
             save(newValue)
         }
+        .onAppear {
+            refreshRipgrepStatus()
+        }
     }
 
     private var header: some View {
@@ -73,6 +79,24 @@ struct PreferencesView: View {
             Section("Workspace") {
                 Toggle("Show left sidebar by default", isOn: $isLeftSidebarVisible)
                 Toggle("One click preview", isOn: $isOneClickPreviewEnabled)
+            }
+
+            Section("Search") {
+                LabeledContent("ripgrep") {
+                    ripgrepStatusView
+                }
+
+                Button(action: installRipgrep) {
+                    Label("Install ripgrep", systemImage: "arrow.down.circle")
+                }
+                .disabled(!canInstallRipgrep)
+
+                if let ripgrepInstallMessage {
+                    Text(ripgrepInstallMessage)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
 
             Section("Terminal") {
@@ -234,6 +258,66 @@ struct PreferencesView: View {
         themes.filter { ThemeFilter(colorScheme: $0.previewColorScheme) == selectedThemeFilter }
     }
 
+    private var ripgrepStatusView: some View {
+        HStack(spacing: 8) {
+            switch ripgrepStatus {
+            case .checking:
+                ProgressView()
+                    .scaleEffect(0.5)
+                Text("Checking")
+                    .foregroundStyle(.secondary)
+            case .installed(let path):
+                Image(systemName: "checkmark.circle.fill")
+                    .foregroundStyle(.green)
+                Text(path)
+                    .font(.system(size: 11, design: .monospaced))
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            case .missing:
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .foregroundStyle(.orange)
+                Text("Not installed")
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private var canInstallRipgrep: Bool {
+        guard !isInstallingRipgrep else { return false }
+        guard case .installed = ripgrepStatus else {
+            return RipgrepTool.homebrewURL() != nil
+        }
+        return false
+    }
+
+    private func refreshRipgrepStatus() {
+        if let executableURL = RipgrepTool.executableURL() {
+            ripgrepStatus = .installed(executableURL.path)
+        } else {
+            ripgrepStatus = .missing
+            if RipgrepTool.homebrewURL() == nil {
+                ripgrepInstallMessage = String(localized: "Homebrew가 설치되어 있으면 ripgrep을 설치할 수 있습니다.")
+            }
+        }
+    }
+
+    private func installRipgrep() {
+        isInstallingRipgrep = true
+        ripgrepStatus = .checking
+        ripgrepInstallMessage = String(localized: "ripgrep 설치 중...")
+
+        Task {
+            do {
+                try await RipgrepTool.installWithHomebrew()
+                ripgrepInstallMessage = String(localized: "ripgrep 설치가 완료되었습니다.")
+            } catch {
+                ripgrepInstallMessage = error.localizedDescription
+            }
+            isInstallingRipgrep = false
+            refreshRipgrepStatus()
+        }
+    }
+
     private func scrollToSelectedTheme(_ proxy: ScrollViewProxy) {
         guard filteredThemes.contains(where: { $0.name == selectedTheme.name }) else { return }
         proxy.scrollTo(selectedTheme.name, anchor: .center)
@@ -282,6 +366,12 @@ private enum ThemeFilter: String, CaseIterable, Identifiable {
     init(colorScheme: ColorScheme) {
         self = colorScheme == .light ? .light : .dark
     }
+}
+
+private enum RipgrepStatus: Equatable {
+    case checking
+    case installed(String)
+    case missing
 }
 
 private struct ThemePreview: View {

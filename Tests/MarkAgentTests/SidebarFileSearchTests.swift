@@ -60,6 +60,48 @@ final class SidebarFileSearchTests: XCTestCase {
         XCTAssertEqual(results.map(\.detail), ["README.md"])
     }
 
+    func testFuzzyFileSearchShowsHiddenFilesWhenRequested() async throws {
+        let root = try makeTemporaryDirectory()
+        try write("SECRET=value", to: root.appending(path: ".env"))
+
+        let hiddenResults = try await SidebarFileSearch.search(
+            root: root,
+            query: "env",
+            mode: .files
+        )
+        let visibleResults = try await SidebarFileSearch.search(
+            root: root,
+            query: "env",
+            mode: .files,
+            includeHidden: true
+        )
+
+        XCTAssertTrue(hiddenResults.isEmpty)
+        XCTAssertEqual(visibleResults.map(\.entry.name), [".env"])
+    }
+
+    func testGrepSearchShowsGitDirectoryContentsWhenHiddenFilesAreRequested() async throws {
+        let root = try makeTemporaryDirectory()
+        let gitDirectory = root.appending(path: ".git")
+        try FileManager.default.createDirectory(at: gitDirectory, withIntermediateDirectories: true)
+        try write("needle in git config", to: gitDirectory.appending(path: "config"))
+
+        let hiddenResults = try await SidebarFileSearch.search(
+            root: root,
+            query: "needle",
+            mode: .grep
+        )
+        let visibleResults = try await SidebarFileSearch.search(
+            root: root,
+            query: "needle",
+            mode: .grep,
+            includeHidden: true
+        )
+
+        XCTAssertTrue(hiddenResults.isEmpty)
+        XCTAssertEqual(visibleResults.map(\.relativePath), [".git/config"])
+    }
+
     func testGrepSearchFindsContentMatchesWithLinePreview() async throws {
         let root = try makeTemporaryDirectory()
         try write("alpha\nneedle in haystack\nomega", to: root.appending(path: "notes.md"))
@@ -240,6 +282,19 @@ final class SidebarFileSearchTests: XCTestCase {
         XCTAssertEqual(entries.map(\.name), ["Folder", "README.md"])
     }
 
+    func testDirectoryScanShowsHiddenEntriesWhenRequested() throws {
+        let root = try makeTemporaryDirectory()
+        try FileManager.default.createDirectory(at: root.appending(path: ".git"), withIntermediateDirectories: true)
+        try write("SECRET=value", to: root.appending(path: ".env"))
+        try write("Read me", to: root.appending(path: "README.md"))
+
+        let hiddenEntries = try DirectoryScanner.scan(directory: root)
+        let visibleEntries = try DirectoryScanner.scan(directory: root, includeHidden: true)
+
+        XCTAssertEqual(hiddenEntries.map(\.name), ["README.md"])
+        XCTAssertEqual(visibleEntries.map(\.name), [".git", ".env", "README.md"])
+    }
+
     func testSearchLocalizationKeysExistInKoreanAndEnglish() throws {
         let keys = [
             "파일 검색",
@@ -250,6 +305,8 @@ final class SidebarFileSearchTests: XCTestCase {
             "Grep",
             "검색 결과",
             "검색 결과 없음",
+            "숨김 파일 표시",
+            "숨김 파일 숨기기",
         ]
         let root = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
