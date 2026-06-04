@@ -49,6 +49,7 @@
 49. [세션 45: 탭 그룹과 대용량 편집 안정화 및 v1.6.0 릴리즈](#세션-45-탭-그룹과-대용량-편집-안정화-및-v160-릴리즈)
 50. [세션 46: 메모리 피크 해결 및 중복 탭 버그 수정](#세션-46-메모리-피크-해결-및-중복-탭-버그-수정)
 51. [세션 47: 마크다운 미리보기 메모리 피크 및 리소스 환수 최적화](#세션-47-마크다운-미리보기-메모리-피크-및-리소스-환수-최적화)
+52. [세션 48: 탭 그룹 자식 탭 UX 및 v1.6.3 릴리즈](#세션-48-탭-그룹-자식-탭-ux-및-v163-릴리즈)
 
 ---
 
@@ -120,6 +121,7 @@
 | 62 | 탭 그룹과 대용량 편집 안정화 및 v1.6.0 릴리즈 | 작업 세션별 탭 그룹, Cmd+숫자 그룹 전환, 그룹별 Git Diff/Timeline 상태 분리, 대용량 문서 자동 Diff 제한과 raw editor 성능 개선, 앱 번들 버전 1.6.0 갱신 |
 | 63 | 메모리 피크 해결 및 중복 탭 버그 수정 | FileBrowserSidebar, MarkdownImage, MarkdownRenderer, GitDiffState, TabCollection 수정 완료 |
 | 64 | 마크다운 미리보기 메모리 피크 및 리소스 환수 최적화 | MarkdownRenderer에 MarkdownPreviewView 추가(디바운스 300ms 도입), 렌더러 함수에 autoreleasepool 적용, ContentView 적용 완료 |
+| 65 | 탭 그룹 자식 탭 UX 및 v1.6.3 릴리즈 | Markdown 탭을 활성 그룹 옆에 삽입하고, 비활성 자식 탭 접힘/그림자/펼침 애니메이션을 추가해 앱 번들 버전 1.6.3 갱신 |
 
 ---
 
@@ -2538,4 +2540,61 @@ AI 연계와 append-friendly 특성을 고려해 단일 JSON 배열보다 JSONL�
 
 변경 파일: `Sources/Views/Tabs/MarkdownTabView.swift`, `history.md`
 
+---
 
+## 세션 48: 탭 그룹 자식 탭 UX 및 v1.6.3 릴리즈
+
+> 날짜: 2026-06-04
+> 경로: ~/workspace/markAgent
+
+탭 1, 2, 3이 있는 상태에서 2번 탭의 작업 세션으로 Markdown 파일을 열 때 새 탭이 전체 탭 끝에 붙던 문제를 수정하고, 같은 작업 세션의 자식 탭을 더 명확하게 식별할 수 있도록 접힘/그림자/펼침 애니메이션을 추가했다. 이어서 `v1.6.3` 릴리즈를 준비했다.
+
+### 대화 1: Markdown 탭을 활성 그룹에 인접 삽입
+
+**사용자:**
+> 1,2,3 탭이 있을 때 2 탭에서 md파일을 열면 2탭에 묶이는게 아니라 3탭 오른쪽에 추가가되는 문제가 있어. 탭 그룹의 구분을 항상 두꺼운 세로줄로 표시하는데, 2번탭에 자식탭이 생겼을 때에만 세로줄이 아니라 진한 밑줄이 연장되어 표시되는 형태가 되었으면 좋겠어.
+
+**응답:**
+`TabCollection.createMarkdownTab(fileURL:)`가 새 Markdown 탭을 항상 전체 배열 끝에 append하던 구조를 바꿔, 활성 그룹의 마지막 탭 바로 뒤에 삽입하도록 수정했다. 터미널 탭에서 Markdown 파일을 열어도 같은 그룹의 자식 탭으로 취급되도록 회귀 테스트를 추가했다.
+
+검증: `swift build` 성공, `swift test --filter TabCollectionTests` 11개 통과, `swift test` 74개 통과.
+
+변경 파일: `Sources/Core/Tabs/TabCollection.swift`, `Tests/MarkAgentTests/TabCollectionTests.swift`
+
+---
+
+### 대화 2: 자식 탭 접힘 표시와 활성 부모 펼침 애니메이션
+
+**사용자:**
+> 탭이 비활성일 때에는 밑줄로 연장할 필요가 없어. 비활성 상태일때에는 자식탭이 부모탭 뒤로 약간 숨겨지게 하면 좋겠어 [ 부모탭 ] ..md][ 2번 탭][ 3번 탭] 이런식으로.
+
+**응답:**
+같은 그룹의 비활성 자식 탭은 폭을 줄이고 왼쪽으로 겹치게 하여 부모 탭 뒤에 접혀 보이도록 조정했다. 부모 탭이 활성화되면 자식 탭이 spring 애니메이션으로 원래 위치까지 펼쳐지고, 비활성화되면 다시 접히면서 옆 탭 그룹을 자연스럽게 밀고 당기도록 구성했다.
+
+변경 파일: `Sources/Views/Main/TabBarView.swift`, `Sources/Views/Main/TabItemView.swift`
+
+---
+
+### 대화 3: 자식 탭 스택 그림자와 클리핑 보정
+
+**사용자:**
+> 자식탭을 겹치게 하는건 좋은데, 더 어둡게 하거나 부모탭 오른쪽에 그림자 처리를 해서 자식탭과의 구분을 해줬으면 좋겠어. 그리고, 부모탭이 활성화되면 자식탭이 애니메이션 효과로 원래 위치로 이동해서 표시되면 좋겠어. 자연스럽게 옆 탭그룹을 밀어내면서. 반대의 경우도 애니메이션 효과가 들어가야 해.
+
+**응답:**
+접힌 자식 탭을 더 어둡게 보이게 하고, 부모 또는 앞 자식 탭 오른쪽 바깥으로 그림자 gradient를 추가했다. 자식이 여러 개일 때는 `부모 > 첫 자식 > 다음 자식` 순서로 z-order를 계산해 다음 자식 탭이 바로 전 자식 탭 밑으로 가려지도록 처리했다. 그림자 방향과 접힌 자식 타이틀이 부모 위로 튀어나오던 문제를 보정하기 위해 gradient 방향/offset, 탭 클리핑, shadow-casting 탭 배경을 조정했다.
+
+검증: 변경 Swift 파일 diagnostics clean, `swift build` 성공, `swift test --filter TabCollectionTests` 11개 통과, `swift test` 74개 통과, `scripts/bundle.sh` 성공 및 앱 실행 확인.
+
+변경 파일: `Sources/Views/Main/TabBarView.swift`, `Sources/Views/Main/TabItemView.swift`
+
+---
+
+### 대화 4: v1.6.3 릴리즈 준비
+
+**사용자:**
+> /release-build 1.6.3
+
+**응답:**
+명시 버전 `1.6.3`으로 `Info.plist`의 `CFBundleVersion`과 `CFBundleShortVersionString`을 갱신하고, README 기능 소개와 `history.md`를 이번 탭 그룹 자식 탭 UX 변경에 맞게 업데이트한 뒤 릴리즈 빌드 절차를 진행한다.
+
+변경 파일: `Sources/App/Info.plist`, `README.md`, `history.md`
