@@ -29,6 +29,20 @@ final class TabCollectionTests: XCTestCase {
     }
 
     @MainActor
+    func testMarkdownTabOpenedFromTerminalStaysInActiveTerminalGroup() {
+        let tabs = TabCollection()
+        let firstTerminal = tabs.createTerminalTab(workingDirectory: URL(fileURLWithPath: "/tmp/terminal-one"))
+        let secondTerminal = tabs.createTerminalTab(workingDirectory: URL(fileURLWithPath: "/tmp/terminal-two"))
+        let thirdTerminal = tabs.createTerminalTab(workingDirectory: URL(fileURLWithPath: "/tmp/terminal-three"))
+
+        tabs.selectTab(id: secondTerminal.id)
+        let markdown = tabs.createMarkdownTab(fileURL: URL(fileURLWithPath: "/tmp/terminal-two/note.md"))
+
+        XCTAssertEqual(markdown.groupID, secondTerminal.groupState.id)
+        XCTAssertEqual(tabs.tabs.map(\.id), [firstTerminal.id, secondTerminal.id, markdown.id, thirdTerminal.id])
+    }
+
+    @MainActor
     func testGitDiffTabForActiveGroupSharesGroupState() {
         let tabs = TabCollection()
         let terminal = tabs.createTerminalTab(workingDirectory: URL(fileURLWithPath: "/tmp/terminal-one"))
