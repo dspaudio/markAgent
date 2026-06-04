@@ -378,12 +378,45 @@ private final class SidebarResizeHandleNSView: NSView {
     }
 
     override func mouseDown(with event: NSEvent) {
+        beginDrag(with: event)
+
+        guard let window else {
+            finishDrag()
+            return
+        }
+        while let nextEvent = window.nextEvent(
+            matching: [.leftMouseDragged, .leftMouseUp],
+            until: .distantFuture,
+            inMode: .eventTracking,
+            dequeue: true
+        ) {
+            switch nextEvent.type {
+            case .leftMouseDragged:
+                updateDrag(with: nextEvent)
+            case .leftMouseUp:
+                finishDrag()
+                return
+            default:
+                break
+            }
+        }
+    }
+
+    override func mouseDragged(with event: NSEvent) {
+        updateDrag(with: event)
+    }
+
+    override func mouseUp(with event: NSEvent) {
+        finishDrag()
+    }
+
+    private func beginDrag(with event: NSEvent) {
         initialMouseXInWindow = event.locationInWindow.x
         initialSidebarWidth = currentSidebarWidth
         onDragStarted?()
     }
 
-    override func mouseDragged(with event: NSEvent) {
+    private func updateDrag(with event: NSEvent) {
         guard let initialMouseXInWindow, let initialSidebarWidth else { return }
         let deltaX = event.locationInWindow.x - initialMouseXInWindow
         let proposedWidth: CGFloat
@@ -396,7 +429,7 @@ private final class SidebarResizeHandleNSView: NSView {
         onDragChanged?(proposedWidth)
     }
 
-    override func mouseUp(with event: NSEvent) {
+    private func finishDrag() {
         initialMouseXInWindow = nil
         initialSidebarWidth = nil
         onDragEnded?()

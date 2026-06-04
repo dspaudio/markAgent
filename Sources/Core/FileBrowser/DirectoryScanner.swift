@@ -4,29 +4,32 @@ import Foundation
 @Observable
 final class DirectoryScanner {
     var currentDirectory: URL
+    var includeHiddenFiles: Bool
     private(set) var entries: [FileEntry] = []
     private(set) var errorMessage: String?
     private(set) var isLoading = false
     private var scanTask: Task<Void, Never>?
     private var scanToken = 0
 
-    init(currentDirectory: URL) {
+    init(currentDirectory: URL, includeHiddenFiles: Bool = false) {
         self.currentDirectory = currentDirectory
+        self.includeHiddenFiles = includeHiddenFiles
         reload()
     }
 
     func reload() {
         let directory = currentDirectory
+        let includeHiddenFiles = includeHiddenFiles
         scanToken += 1
         let token = scanToken
         scanTask?.cancel()
         isLoading = true
         errorMessage = nil
 
-        scanTask = Task { [directory, token] in
+        scanTask = Task { [directory, includeHiddenFiles, token] in
             do {
                 let entries = try await Task.detached(priority: .userInitiated) {
-                    try Self.scan(directory: directory)
+                    try Self.scan(directory: directory, includeHidden: includeHiddenFiles)
                 }.value
                 guard !Task.isCancelled, token == self.scanToken, self.currentDirectory == directory else { return }
                 self.entries = entries
@@ -57,11 +60,17 @@ final class DirectoryScanner {
         reload()
     }
 
-    nonisolated static func scan(directory: URL) throws -> [FileEntry] {
+    func setIncludeHiddenFiles(_ includeHiddenFiles: Bool) {
+        guard self.includeHiddenFiles != includeHiddenFiles else { return }
+        self.includeHiddenFiles = includeHiddenFiles
+        reload()
+    }
+
+    nonisolated static func scan(directory: URL, includeHidden: Bool = false) throws -> [FileEntry] {
         let contents = try FileManager.default.contentsOfDirectory(
             at: directory,
             includingPropertiesForKeys: [.contentTypeKey, .fileSizeKey, .contentModificationDateKey],
-            options: [.skipsHiddenFiles]
+            options: includeHidden ? [] : [.skipsHiddenFiles]
         )
 
         return contents.map { url in

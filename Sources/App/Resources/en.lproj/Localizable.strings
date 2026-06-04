@@ -48,6 +48,8 @@
 "Grep" = "Grep";
 "검색 결과" = "Search Results";
 "검색 결과 없음" = "No search results";
+"숨김 파일 표시" = "Show hidden files";
+"숨김 파일 숨기기" = "Hide hidden files";
 
 /* RecentDocumentsSection */
 "최근 문서" = "Recent Documents";
@@ -118,6 +120,15 @@
 "Workspace" = "Workspace";
 "Show left sidebar by default" = "Show left sidebar by default";
 "One click preview" = "One click preview";
+"Search" = "Search";
+"Checking" = "Checking";
+"Not installed" = "Not installed";
+"Install ripgrep" = "Install ripgrep";
+"Homebrew를 찾을 수 없습니다." = "Homebrew was not found.";
+"ripgrep 설치에 실패했습니다." = "Failed to install ripgrep.";
+"Homebrew가 설치되어 있으면 ripgrep을 설치할 수 있습니다." = "Install Homebrew to enable ripgrep installation.";
+"ripgrep 설치 중..." = "Installing ripgrep...";
+"ripgrep 설치가 완료되었습니다." = "ripgrep has been installed.";
 "Terminal" = "Terminal";
 "Theme" = "Theme";
 "Choose from preview" = "Choose from preview";
