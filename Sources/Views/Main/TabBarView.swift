@@ -29,12 +29,22 @@ struct TabBarView: View {
 
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 0) {
-                    ForEach(tabs.tabs, id: \.id) { tab in
+                    ForEach(Array(tabs.tabs.enumerated()), id: \.element.id) { index, tab in
+                        let isActiveTab = tabs.activeTabID == tab.id
+                        let groupDepth = depthInGroup(at: index)
+                        let isParentActive = isFirstTab(in: tab.groupID, at: index) && isActiveTab
+                        let isGroupParentActive = hasActiveParentTab(in: tab.groupID)
+                        let isTuckedBehindParent = !isActiveTab && !isGroupParentActive && groupDepth > 0
+                        let castsTrailingShadow = isParentActive || (!isGroupParentActive && hasNextSiblingTab(in: tab.groupID, after: index))
+
                         TabItemView(
                             tab: tab,
-                            isActive: tabs.activeTabID == tab.id,
+                            isActive: isActiveTab,
                             groupShortcutNumber: tabs.groupShortcutNumber(for: tab.groupID),
                             showsGroupShortcut: isCommandKeyPressed,
+                            showsGroupUnderline: hasSiblingTab(in: tab.groupID, excluding: tab.id),
+                            isTuckedBehindParent: isTuckedBehindParent,
+                            castsTrailingShadow: castsTrailingShadow,
                             onSelect: {
                                 tabs.selectTab(id: tab.id)
                             },
@@ -56,9 +66,14 @@ struct TabBarView: View {
                                 tabs: tabs
                             )
                         )
+                        .padding(.leading, isTuckedBehindParent ? -28 : 0)
+                        .zIndex(isTuckedBehindParent ? -Double(groupDepth) : 1)
+                        .animation(.spring(response: 0.28, dampingFraction: 0.86), value: isTuckedBehindParent)
 
-                        Divider()
-                            .frame(height: 16)
+                        if !hasNextSiblingTab(in: tab.groupID, after: index) {
+                            Divider()
+                                .frame(height: 16)
+                        }
                     }
 
                     Button(action: onNewTab) {
@@ -117,6 +132,38 @@ struct TabBarView: View {
             }
         }
         .frame(width: 0, height: 0)
+    }
+
+    private func hasSiblingTab(in groupID: TabGroupID?, excluding tabID: UUID) -> Bool {
+        guard let groupID else { return false }
+        return tabs.tabs.contains { tab in
+            tab.id != tabID && tab.groupID == groupID
+        }
+    }
+
+    private func depthInGroup(at index: Int) -> Int {
+        guard tabs.tabs.indices.contains(index), let groupID = tabs.tabs[index].groupID else { return 0 }
+        return tabs.tabs[..<index].filter { $0.groupID == groupID }.count
+    }
+
+    private func isFirstTab(in groupID: TabGroupID?, at index: Int) -> Bool {
+        guard let groupID, tabs.tabs.indices.contains(index) else { return false }
+        return !tabs.tabs[..<index].contains { $0.groupID == groupID }
+    }
+
+    private func hasActiveParentTab(in groupID: TabGroupID?) -> Bool {
+        guard let groupID,
+              let firstGroupTab = tabs.tabs.first(where: { $0.groupID == groupID }) else {
+            return false
+        }
+        return firstGroupTab.id == tabs.activeTabID
+    }
+
+    private func hasNextSiblingTab(in groupID: TabGroupID?, after index: Int) -> Bool {
+        guard let groupID else { return false }
+        let nextIndex = tabs.tabs.index(after: index)
+        guard tabs.tabs.indices.contains(nextIndex) else { return false }
+        return tabs.tabs[nextIndex].groupID == groupID
     }
 }
 

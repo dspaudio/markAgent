@@ -112,7 +112,7 @@ final class TabCollection {
         let state = MarkdownTabState(id: id, fileURL: fileURL)
         let groupState = ensureActiveGroup(workingDirectory: fileURL?.deletingLastPathComponent())
         let tab = MarkdownTab(id: id, fileURL: fileURL, state: state, groupState: groupState, dirtyPrompter: dirtyPrompter)
-        tabs.append(tab)
+        insert(tab, in: groupState)
         activeTabID = tab.id
         lastActiveGroupID = groupState.id
         return tab
@@ -256,6 +256,15 @@ final class TabCollection {
         } else if lastActiveGroupID.map({ tabGroups[$0] == nil }) == true {
             lastActiveGroupID = tabs.compactMap(\.groupID).first
         }
+    }
+
+    private func insert(_ tab: any MarkAgentTab, in groupState: TabGroupState) {
+        guard let lastGroupIndex = tabs.lastIndex(where: { $0.groupID == groupState.id }) else {
+            tabs.append(tab)
+            return
+        }
+
+        tabs.insert(tab, at: tabs.index(after: lastGroupIndex))
     }
 
     private func removeGroupIfOrphaned(_ groupID: TabGroupID?) {
