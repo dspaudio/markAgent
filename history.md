@@ -51,6 +51,7 @@
 51. [세션 47: 마크다운 미리보기 메모리 피크 및 리소스 환수 최적화](#세션-47-마크다운-미리보기-메모리-피크-및-리소스-환수-최적화)
 52. [세션 48: 탭 그룹 자식 탭 UX 및 v1.6.3 릴리즈](#세션-48-탭-그룹-자식-탭-ux-및-v163-릴리즈)
 53. [세션 49: 사이드바 파일/내용 검색 및 v1.7.0 릴리즈](#세션-49-사이드바-파일내용-검색-및-v170-릴리즈)
+54. [세션 50: 숨김 파일 검색, ripgrep 설정 및 v1.7.1 릴리즈](#세션-50-숨김-파일-검색-ripgrep-설정-및-v171-릴리즈)
 
 ---
 
@@ -124,6 +125,7 @@
 | 64 | 마크다운 미리보기 메모리 피크 및 리소스 환수 최적화 | MarkdownRenderer에 MarkdownPreviewView 추가(디바운스 300ms 도입), 렌더러 함수에 autoreleasepool 적용, ContentView 적용 완료 |
 | 65 | 탭 그룹 자식 탭 UX 및 v1.6.3 릴리즈 | Markdown 탭을 활성 그룹 옆에 삽입하고, 비활성 자식 탭 접힘/그림자/펼침 애니메이션을 추가해 앱 번들 버전 1.6.3 갱신 |
 | 66 | 사이드바 파일/내용 검색 및 v1.7.0 릴리즈 | 왼쪽 사이드바에 파일명 fuzzy 검색과 파일 내용 검색, 키보드 후보 선택/미리보기, 상대 경로 표시를 추가하고 앱 번들 버전 1.7.0 갱신 |
+| 67 | 숨김 파일 검색, ripgrep 설정 및 v1.7.1 릴리즈 | 좌우 사이드바 즉시 드래그, 숨김 파일 표시 토글, Enter 제출형 검색, ripgrep 가속 및 Settings 설치 확인 UI를 추가하고 앱 번들 버전 1.7.1 갱신 |
 
 ---
 
@@ -1532,7 +1534,6 @@ MarkAgent 메뉴의 `Settings…` 창을 추가하고, Ghostty theme/font-size/c
 
 변경 파일: `Sources/App/Info.plist`, `README.md`, `history.md`
 
----
 
 ## 세션 49: 사이드바 파일/내용 검색 및 v1.7.0 릴리즈
 
@@ -2663,5 +2664,63 @@ AI 연계와 append-friendly 특성을 고려해 단일 JSON 배열보다 JSONL�
 
 **응답:**
 명시 버전 `1.6.3`으로 `Info.plist`의 `CFBundleVersion`과 `CFBundleShortVersionString`을 갱신하고, README 기능 소개와 `history.md`를 이번 탭 그룹 자식 탭 UX 변경에 맞게 업데이트한 뒤 릴리즈 빌드 절차를 진행한다.
+
+변경 파일: `Sources/App/Info.plist`, `README.md`, `history.md`
+
+
+## 세션 50: 숨김 파일 검색, ripgrep 설정 및 v1.7.1 릴리즈
+
+> 날짜: 2026-06-04
+> 경로: ~/workspace/markAgent
+
+왼쪽 파일 사이드바의 검색과 파일 탐색을 실제 대형 저장소에서 더 빠르고 예측 가능하게 다듬었다. 좌우 사이드바 리사이즈의 첫 드래그 추적 문제, 숨김 파일 접근, 내용 검색 성능, Settings의 `ripgrep` 설치 확인 흐름을 정리하고 명시 버전 `1.7.1` 릴리즈를 준비했다.
+
+### 대화 1: 사이드바 리사이즈와 숨김 파일 표시
+
+**사용자:**
+> left sidebar 크기 조절, right sidebar 크기 조절할 때 클릭해서 바로 드래그하면 안되고, 클릭해서 조금 있다가 드래그 하면 되는데, 이 문제를 수정해야 해. 그리고 left sidebar의 현재 파일 목록 및 검색 결과에서 .env 파일, .git 폴더는 가려져서 안의 내용을 확인할 수 없는 문제가 있어. 숨김파일을 보여주는 필터 기능이 있어야 해.
+
+**응답:**
+사이드바 리사이즈 핸들이 `mouseDown` 이후 이벤트 추적 루프를 직접 처리하도록 바꿔 클릭 직후 드래그가 즉시 반영되게 했다. 왼쪽 파일 사이드바에는 숨김 파일 표시 토글을 추가하고, 토글 상태에 따라 디렉터리 스캔과 파일명/내용 검색이 `.env`, `.git` 같은 숨김 항목을 포함하도록 연결했다.
+
+변경 파일: `Sources/Views/Main/MainContainerView.swift`, `Sources/Core/FileBrowser/DirectoryScanner.swift`, `Sources/Core/FileBrowser/SidebarFileSearch.swift`, `Sources/Views/Sidebar/FileBrowserSidebar.swift`, `Tests/MarkAgentTests/SidebarFileSearchTests.swift`
+
+---
+
+### 대화 2: 내용 검색 성능과 Enter 제출 방식
+
+**사용자:**
+> 파일의 갯수가 많을 때 파일 내용 검색시 시간이 많이 걸리는데, 해결 방법은 없을까?
+> 타이핑시 바로 검색을 시작하는데, 엔터를 치면 검색하도록 해야해
+> 내용 검색 속도에 대한 테스트 기준은 ~/workspace/laravel 에서 totalZoomSession 을 검색하기야.
+
+**응답:**
+내용 검색은 `ripgrep`이 설치되어 있으면 `rg --json` 기반 경로를 먼저 사용하고, 없거나 실패할 때만 Swift fallback 검색을 사용하도록 최적화했다. Swift fallback도 전체 파일 목록을 먼저 만들지 않고 순회 중 매칭을 찾도록 바꿨다. 검색 입력은 타이핑 즉시 실행하지 않고 Enter를 눌렀을 때만 제출된 쿼리로 검색하며, 제출된 검색어가 있을 때 모드/숨김 파일 토글 변경 시에만 재검색하도록 정리했다. `~/workspace/laravel`에서 `totalZoomSession` 검색 기준으로 Swift fallback 약 20초대, `ripgrep` 경로 약 0.3초대까지 개선되는 것을 확인했다.
+
+변경 파일: `Sources/Core/FileBrowser/SidebarFileSearch.swift`, `Sources/Views/Sidebar/FileBrowserSidebar.swift`, `Tests/MarkAgentTests/SidebarFileSearchTests.swift`
+
+---
+
+### 대화 3: Settings의 ripgrep 설치 확인
+
+**사용자:**
+> Settings 화면에서 rg가 설치되어있는지 확인하고 없으면 설치할 수 있는 버튼을 추가해줘.
+
+**응답:**
+`RipgrepTool`을 추가해 `rg` 실행 파일과 Homebrew 실행 파일을 찾고, Settings 화면의 Search 섹션에서 설치 여부와 경로를 표시하도록 구현했다. `ripgrep`이 없고 Homebrew가 있으면 설치 버튼을 활성화하며, 설치 결과나 실패 메시지를 Settings 화면에 표시한다.
+
+검증: `swift build`, `swift test --filter SidebarFileSearchTests`, `swift test --filter RipgrepToolTests`, `swift test`, 변경 Swift 파일 LSP diagnostics, 실제 앱 Settings 화면에서 `ripgrep` 경로 표시 확인.
+
+변경 파일: `Sources/Core/FileBrowser/RipgrepTool.swift`, `Sources/App/PreferencesView.swift`, `Sources/App/Resources/en.lproj/Localizable.strings`, `Sources/App/Resources/ko.lproj/Localizable.strings`, `Tests/MarkAgentTests/RipgrepToolTests.swift`
+
+---
+
+### 대화 4: v1.7.1 릴리즈 빌드
+
+**사용자:**
+> [release-build.md](.claude/commands/release-build.md) 1.7.1
+
+**응답:**
+릴리즈 명령 문서를 확인하고, 명시 버전 `1.7.1`을 사용해 `Info.plist`의 `CFBundleVersion`과 `CFBundleShortVersionString`을 갱신했다. README 기능 소개에는 이번 변경 범위인 숨김 파일 토글, Enter 제출형 검색, `ripgrep` 가속 및 Settings 설치 확인, 즉시 반응하는 사이드바 리사이즈를 반영했다. 커밋/푸시 전 필수 규칙에 따라 이번 세션 내용을 `history.md` 목차, 타임라인 요약, 세션 본문에 기록했다.
 
 변경 파일: `Sources/App/Info.plist`, `README.md`, `history.md`
