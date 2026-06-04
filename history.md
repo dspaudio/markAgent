@@ -50,6 +50,7 @@
 50. [세션 46: 메모리 피크 해결 및 중복 탭 버그 수정](#세션-46-메모리-피크-해결-및-중복-탭-버그-수정)
 51. [세션 47: 마크다운 미리보기 메모리 피크 및 리소스 환수 최적화](#세션-47-마크다운-미리보기-메모리-피크-및-리소스-환수-최적화)
 52. [세션 48: 탭 그룹 자식 탭 UX 및 v1.6.3 릴리즈](#세션-48-탭-그룹-자식-탭-ux-및-v163-릴리즈)
+53. [세션 49: 사이드바 파일/내용 검색 및 v1.7.0 릴리즈](#세션-49-사이드바-파일내용-검색-및-v170-릴리즈)
 
 ---
 
@@ -122,6 +123,7 @@
 | 63 | 메모리 피크 해결 및 중복 탭 버그 수정 | FileBrowserSidebar, MarkdownImage, MarkdownRenderer, GitDiffState, TabCollection 수정 완료 |
 | 64 | 마크다운 미리보기 메모리 피크 및 리소스 환수 최적화 | MarkdownRenderer에 MarkdownPreviewView 추가(디바운스 300ms 도입), 렌더러 함수에 autoreleasepool 적용, ContentView 적용 완료 |
 | 65 | 탭 그룹 자식 탭 UX 및 v1.6.3 릴리즈 | Markdown 탭을 활성 그룹 옆에 삽입하고, 비활성 자식 탭 접힘/그림자/펼침 애니메이션을 추가해 앱 번들 버전 1.6.3 갱신 |
+| 66 | 사이드바 파일/내용 검색 및 v1.7.0 릴리즈 | 왼쪽 사이드바에 파일명 fuzzy 검색과 파일 내용 검색, 키보드 후보 선택/미리보기, 상대 경로 표시를 추가하고 앱 번들 버전 1.7.0 갱신 |
 
 ---
 
@@ -1527,6 +1529,71 @@ MarkAgent 메뉴의 `Settings…` 창을 추가하고, Ghostty theme/font-size/c
 
 **응답:**
 명시 버전 `1.2.0`으로 앱 번들 버전을 갱신하고, README 기능 소개와 `history.md` 세션 기록을 이번 변경분에 맞게 업데이트한 뒤 릴리즈 빌드, GitHub Release, 커밋/푸시, main 대상 PR 생성 및 머지를 진행.
+
+변경 파일: `Sources/App/Info.plist`, `README.md`, `history.md`
+
+---
+
+## 세션 49: 사이드바 파일/내용 검색 및 v1.7.0 릴리즈
+
+> 날짜: 2026-06-04
+> 경로: ~/workspace/markAgent
+
+왼쪽 파일 사이드바에서 현재 작업 디렉터리 기준으로 파일명 fuzzy 검색과 파일 내용 검색을 수행하고, 검색 후보를 키보드로 선택해 사이드바 미리보기로 여는 흐름을 추가했다. 이어서 명시 버전 `1.7.0`으로 릴리즈 빌드를 준비한다.
+
+### 대화 1: 파일명 fuzzy 검색과 내용 검색 추가
+
+**사용자:**
+> left sidebar에 file search를 fuzzy로 할 수 있고, grep 모드로 파일의 내용을 검색하는 기능을 추가해줘. ulw
+> fuzzy 검색 후 후보를 표시하고 엔터를 치면 사이드바에서 미리보기가 되게 하면 돼.
+
+**응답:**
+`SidebarFileSearch`를 추가해 현재 디렉터리 아래 파일을 대상으로 파일명 fuzzy 검색과 내용 검색을 수행하도록 구현했다. `.git`, `.build`, `node_modules`, `DerivedData` 같은 내부/빌드 디렉터리는 건너뛰고, 내용 검색은 이미지/바이너리/대형 파일을 피하며 첫 매칭 라인을 결과에 표시한다. 왼쪽 사이드바에는 검색 입력창과 파일/내용 검색 모드 세그먼트를 추가하고, 검색 결과에서 Enter로 첫 후보를 미리보기로 여는 기본 흐름을 연결했다.
+
+검증: `swift test`, `swift build`, 변경 Swift 파일 LSP diagnostics, 실제 앱에서 파일명 검색과 내용 검색 미리보기 확인.
+
+변경 파일: `Sources/Core/FileBrowser/SidebarFileSearch.swift`, `Sources/Views/Sidebar/FileBrowserSidebar.swift`, `Tests/MarkAgentTests/SidebarFileSearchTests.swift`, `Sources/App/Resources/en.lproj/Localizable.strings`, `Sources/App/Resources/ko.lproj/Localizable.strings`
+
+---
+
+### 대화 2: 검색 결과 키보드 선택과 Esc 단계 동작
+
+**사용자:**
+> 유사이름이 있을 경우 화살표키로 선택하고 엔터키로 미리보기. esc로 목록으로 돌아가기가 되어야 해. 다시 esc를 누르면 검색어가 지워지고 전체 목록이 나와야해
+> Grep 에서도 동일한 동작이 되어야해
+
+**응답:**
+검색 결과 선택 상태를 추가하고, 검색 입력 필드를 `NSTextField` 기반 브리지로 바꿔 위/아래 화살표, Enter, Esc 커맨드를 직접 처리하도록 구현했다. 파일명 검색과 내용 검색 모두 같은 내비게이션 경로를 사용하며, Enter는 선택된 결과를 사이드바 미리보기로 열고, 첫 Esc는 미리보기에서 검색 결과 목록으로 돌아가며, 두 번째 Esc는 검색어를 비우고 전체 목록을 표시한다.
+
+검증: `swift test --filter SidebarFileSearchTests`, `swift test`, `swift build`, 변경 Swift 파일 LSP diagnostics, 실제 앱에서 파일명 검색과 내용 검색 각각 `Down → Return → Escape → Escape` 흐름 확인.
+
+변경 파일: `Sources/Core/FileBrowser/SidebarFileSearch.swift`, `Sources/Views/Sidebar/FileBrowserSidebar.swift`, `Tests/MarkAgentTests/SidebarFileSearchTests.swift`
+
+---
+
+### 대화 3: 내용 모드 표기와 상대 경로 표시
+
+**사용자:**
+> Grep는 영문 표기이고 한국어로는 "내용" 으로 표시되게 해줘. 그리고 검색결과 및 미리보기에서 현재 디렉토디를 기준으로 상대 경로를 표시해줘.
+> 파일명 아래에 경로 표시
+
+**응답:**
+검색 모드 라벨을 한국어에서는 `내용`, 영어에서는 `Grep`로 표시하도록 로컬라이제이션을 정리했다. 검색 결과 모델에 `relativePath`를 별도로 저장하고, 결과 행과 사이드바 미리보기 헤더에서 파일명 아래에 현재 디렉터리 기준 상대 경로를 표시하도록 변경했다. 내용 검색 결과는 상대 경로 아래에 매칭 라인도 유지한다.
+
+검증: `swift test --filter SidebarFileSearchTests`, `swift test`, `swift build`, 변경 Swift 파일 LSP diagnostics, 실제 앱에서 `내용` 라벨과 `guide.md` 아래 `docs/guide.md` 상대 경로 표시 확인.
+
+변경 파일: `Sources/Core/FileBrowser/SidebarFileSearch.swift`, `Sources/Views/Sidebar/FileBrowserSidebar.swift`, `Tests/MarkAgentTests/SidebarFileSearchTests.swift`, `Sources/App/Resources/en.lproj/Localizable.strings`, `Sources/App/Resources/ko.lproj/Localizable.strings`
+
+---
+
+### 대화 4: v1.7.0 릴리즈 빌드 준비
+
+**사용자:**
+> $release-build 1.7.0
+> MARKAGENT_NOTARY_PROFILE="markagent" 야. 잊으면 안돼
+
+**응답:**
+명시 버전 `1.7.0`으로 `Info.plist`의 `CFBundleVersion`과 `CFBundleShortVersionString`을 갱신하고, README 기능 소개와 `history.md`를 사이드바 파일/내용 검색 기능에 맞게 업데이트한 뒤 `MARKAGENT_NOTARY_PROFILE="markagent"`를 사용해 릴리즈 빌드, GitHub Release, PR 생성 및 머지를 진행한다.
 
 변경 파일: `Sources/App/Info.plist`, `README.md`, `history.md`
 

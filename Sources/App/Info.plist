@@ -4,21 +4,8 @@
 <dict>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>en</string>
-	<key>CFBundleLocalizations</key>
-	<array>
-		<string>en</string>
-		<string>ko</string>
-	</array>
-	<key>CFBundleIdentifier</key>
-	<string>com.markagent.ma</string>
-	<key>CFBundleName</key>
-	<string>MarkAgent</string>
 	<key>CFBundleDisplayName</key>
 	<string>MarkAgent</string>
-	<key>CFBundleExecutable</key>
-	<string>ma</string>
-	<key>CFBundleIconFile</key>
-	<string>AppIcon</string>
 	<key>CFBundleDocumentTypes</key>
 	<array>
 		<dict>
@@ -34,6 +21,12 @@
 			</array>
 		</dict>
 		<dict>
+			<key>CFBundleTypeExtensions</key>
+			<array>
+				<string>md</string>
+				<string>markdown</string>
+				<string>txt</string>
+			</array>
 			<key>CFBundleTypeName</key>
 			<string>Markdown Document</string>
 			<key>CFBundleTypeRole</key>
@@ -45,14 +38,25 @@
 				<string>net.daringfireball.markdown</string>
 				<string>public.plain-text</string>
 			</array>
-			<key>CFBundleTypeExtensions</key>
-			<array>
-				<string>md</string>
-				<string>markdown</string>
-				<string>txt</string>
-			</array>
 		</dict>
 	</array>
+	<key>CFBundleExecutable</key>
+	<string>ma</string>
+	<key>CFBundleIconFile</key>
+	<string>AppIcon</string>
+	<key>CFBundleIdentifier</key>
+	<string>com.markagent.ma</string>
+	<key>CFBundleLocalizations</key>
+	<array>
+		<string>en</string>
+		<string>ko</string>
+	</array>
+	<key>CFBundleName</key>
+	<string>MarkAgent</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>1.7.0</string>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>
@@ -64,12 +68,8 @@
 			</array>
 		</dict>
 	</array>
-	<key>CFBundlePackageType</key>
-	<string>APPL</string>
 	<key>CFBundleVersion</key>
-	<string>1.6.3</string>
-	<key>CFBundleShortVersionString</key>
-	<string>1.6.3</string>
+	<string>1.7.0</string>
 	<key>LSMinimumSystemVersion</key>
 	<string>14.0</string>
 	<key>NSHighResolutionCapable</key>
