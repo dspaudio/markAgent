@@ -7,6 +7,7 @@ struct ActiveTabContentView: View {
     var onDocumentChanged: () -> Void
     var onConfigurationSaved: () -> Void
     var mentionedGitFileIDs: Set<GitChangedFile.ID> = []
+    var onSearchShortcut: (SidebarSearchMode) -> Void = { _ in }
 
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.terminalAppTheme) private var terminalAppTheme
@@ -28,7 +29,11 @@ struct ActiveTabContentView: View {
     @ViewBuilder
     private func tabContent(for tab: any MarkAgentTab, isActive: Bool) -> some View {
         if let terminalTab = tab as? TerminalTab {
-            TerminalTabView(state: terminalTab.state, isActive: isActive)
+            TerminalTabView(
+                state: terminalTab.state,
+                isActive: isActive,
+                onSearchShortcut: onSearchShortcut
+            )
                 .onChange(of: terminalTab.state.title) { _, _ in
                     onDocumentChanged()
                 }

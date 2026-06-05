@@ -16,6 +16,21 @@ enum SidebarSearchMode: String, CaseIterable, Identifiable, Sendable {
     }
 }
 
+struct SidebarSearchRequest: Equatable, Sendable {
+    let id: UUID
+    let mode: SidebarSearchMode
+}
+
+@MainActor
+@Observable
+final class SidebarSearchCommandCenter {
+    private(set) var request: SidebarSearchRequest?
+
+    func focus(_ mode: SidebarSearchMode) {
+        request = SidebarSearchRequest(id: UUID(), mode: mode)
+    }
+}
+
 struct SidebarSearchResult: Identifiable, Equatable, Sendable {
     let entry: FileEntry
     let relativePath: String

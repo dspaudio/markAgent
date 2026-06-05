@@ -5,6 +5,7 @@ struct MainContainerView: View {
     var scanner: DirectoryScanner
     var recentStore: RecentDocumentStore
     var snippetStore: PromptSnippetStore
+    var searchCommandCenter: SidebarSearchCommandCenter
     var onOpenFile: () -> Void
     var onDocumentChanged: () -> Void
     var onConfigurationSaved: () -> Void = {}
@@ -48,7 +49,8 @@ struct MainContainerView: View {
                             currentFileURL: tabs.activeMarkdownTab?.fileURL,
                             onOpenMarkdown: openMarkdownFromSidebar,
                             onOpenOtherFile: openFileFromSidebar,
-                            width: clampedLeftSidebarWidth(for: geometry.size.width)
+                            width: clampedLeftSidebarWidth(for: geometry.size.width),
+                            searchCommandCenter: searchCommandCenter
                         )
 
                         sidebarResizeHandle(
@@ -71,7 +73,8 @@ struct MainContainerView: View {
                         onNewTab: { isShowingNewTabChooser = true },
                         onDocumentChanged: onDocumentChanged,
                         onConfigurationSaved: onConfigurationSaved,
-                        mentionedGitFileIDs: openMarkdownMentionedGitFileIDs
+                        mentionedGitFileIDs: openMarkdownMentionedGitFileIDs,
+                        onSearchShortcut: focusSidebarSearch
                     )
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
 
@@ -265,6 +268,11 @@ struct MainContainerView: View {
     
     private func createMarkdownTab() {
         tabs.createMarkdownTab(fileURL: nil)
+    }
+
+    private func focusSidebarSearch(_ mode: SidebarSearchMode) {
+        isLeftSidebarVisible = true
+        searchCommandCenter.focus(mode)
     }
     
     private func openMarkdownFromSidebar(_ url: URL) {

@@ -1,8 +1,21 @@
+import AppKit
 import GhosttyTerminal
 import XCTest
 @testable import ma
 
 final class TerminalTabStateTests: XCTestCase {
+    @MainActor
+    func testSearchAwareTerminalViewConsumesSearchShortcuts() throws {
+        let view = SearchAwareTerminalView()
+        var requestedModes: [SidebarSearchMode] = []
+        view.onSearchShortcut = { requestedModes.append($0) }
+
+        XCTAssertTrue(view.performKeyEquivalent(with: try keyEvent(key: "f", keyCode: 3, modifiers: [.command, .shift])))
+        XCTAssertTrue(view.performKeyEquivalent(with: try keyEvent(key: "g", keyCode: 5, modifiers: [.command, .shift])))
+        XCTAssertFalse(view.performKeyEquivalent(with: try keyEvent(key: "f", keyCode: 3, modifiers: [.command])))
+        XCTAssertEqual(requestedModes, [.files, .grep])
+    }
+
     @MainActor
     func testConfigSourceUsesContentsSoReloadSeesEditsAtSamePath() {
         let firstConfig = GhosttyConfig(
@@ -111,5 +124,20 @@ final class TerminalTabStateTests: XCTestCase {
         state.updateWorkingDirectory("file:///definitely/missing/markagent/path")
 
         XCTAssertEqual(state.workingDirectory, directory)
+    }
+
+    private func keyEvent(key: String, keyCode: UInt16, modifiers: NSEvent.ModifierFlags) throws -> NSEvent {
+        try XCTUnwrap(NSEvent.keyEvent(
+            with: .keyDown,
+            location: .zero,
+            modifierFlags: modifiers,
+            timestamp: 1,
+            windowNumber: 0,
+            context: nil,
+            characters: key.uppercased(),
+            charactersIgnoringModifiers: key,
+            isARepeat: false,
+            keyCode: keyCode
+        ))
     }
 }

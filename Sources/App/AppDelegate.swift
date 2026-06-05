@@ -7,6 +7,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     let tabs = TabCollection()
     let recentStore = RecentDocumentStore()
     let snippetStore = PromptSnippetStore()
+    let sidebarSearchCommands = SidebarSearchCommandCenter()
     let directoryScanner: DirectoryScanner
     let gitRepositoryStatus: GitRepositoryStatus
     let dirtyPrompter: AppDirtyDocumentPrompter
@@ -17,6 +18,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let windowFrameDefaultsKey = "MarkAgent.windowFrame"
     private let leftSidebarVisibleDefaultsKey = "isLeftSidebarVisible"
     private var rootHostingView: NSHostingView<AnyView>?
+    private var searchKeyMonitor: Any?
 
     override init() {
         let homeURL = URL(fileURLWithPath: NSHomeDirectory())
@@ -35,11 +37,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         tabs.createTerminalTab(workingDirectory: URL(fileURLWithPath: NSHomeDirectory()))
         openLaunchTargetIfNeeded()
         updateWindowTitle()
+        setupSearchKeyMonitor()
         NSRunningApplication.current.activate()
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         true
+    }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        if let searchKeyMonitor {
+            NSEvent.removeMonitor(searchKeyMonitor)
+        }
     }
 
     private func setupWindow() {
@@ -81,6 +90,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             scanner: directoryScanner,
             recentStore: recentStore,
             snippetStore: snippetStore,
+            searchCommandCenter: sidebarSearchCommands,
             onOpenFile: { [weak self] in
                 self?.openFile()
             },
@@ -254,6 +264,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         editMenu.addItem(NSMenuItem(title: String(localized: "Delete"), action: #selector(NSText.delete(_:)), keyEquivalent: ""))
         editMenu.addItem(.separator())
         editMenu.addItem(NSMenuItem(title: String(localized: "Select All"), action: #selector(NSText.selectAll(_:)), keyEquivalent: "a"))
+        editMenu.addItem(.separator())
+
+        let focusFileSearchItem = NSMenuItem(title: String(localized: "File Search"), action: #selector(focusFileSearch), keyEquivalent: "f")
+        focusFileSearchItem.keyEquivalentModifierMask = [.command, .shift]
+        focusFileSearchItem.target = self
+        editMenu.addItem(focusFileSearchItem)
+
+        let focusContentSearchItem = NSMenuItem(title: String(localized: "Content Search"), action: #selector(focusContentSearch), keyEquivalent: "g")
+        focusContentSearchItem.keyEquivalentModifierMask = [.command, .shift]
+        focusContentSearchItem.target = self
+        editMenu.addItem(focusContentSearchItem)
 
         let viewMenuItem = NSMenuItem()
         mainMenu.addItem(viewMenuItem)
@@ -337,6 +358,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         NSApp.mainMenu = mainMenu
         removeSystemTabBarMenuItems()
+    }
+
+    private func setupSearchKeyMonitor() {
+        searchKeyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            guard let self else { return event }
+            guard let mode = self.sidebarSearchMode(for: event) else { return event }
+            self.focusSidebarSearch(mode: mode)
+            return nil
+        }
+    }
+
+    private func sidebarSearchMode(for event: NSEvent) -> SidebarSearchMode? {
+        let modifiers = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+        guard modifiers == [.command, .shift],
+              let key = event.charactersIgnoringModifiers?.lowercased()
+        else { return nil }
+
+        switch key {
+        case "f":
+            return .files
+        case "g":
+            return .grep
+        default:
+            return nil
+        }
     }
 
     private func removeSystemTabBarMenuItems(from menu: NSMenu? = NSApp.mainMenu?.item(withTitle: String(localized: "View"))?.submenu) {
@@ -595,6 +641,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         updateViewMenuState()
     }
 
+    @objc private func focusFileSearch() {
+        focusSidebarSearch(mode: .files)
+    }
+
+    @objc private func focusContentSearch() {
+        focusSidebarSearch(mode: .grep)
+    }
+
+    private func focusSidebarSearch(mode: SidebarSearchMode) {
+        UserDefaults.standard.set(true, forKey: leftSidebarVisibleDefaultsKey)
+        sidebarSearchCommands.focus(mode)
+        window?.makeKeyAndOrderFront(nil)
+        NSRunningApplication.current.activate()
+        updateViewMenuState()
+    }
+
     @objc private func toggleAlwaysOnTop() {
         isAlwaysOnTop.toggle()
         window?.level = isAlwaysOnTop ? .floating : .normal
@@ -675,6 +737,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if event.modifierFlags.contains(.option) { modifiers.insert(.option) }
 
         guard modifiers.contains(EventModifierMask.command) else { return false }
+        if modifiers == [.command, .shift], ["f", "g"].contains(key.lowercased()) {
+            return false
+        }
         if key.lowercased() == "w", modifiers == [.command] {
             return false
         }
@@ -789,6 +854,8 @@ extension AppDelegate: NSMenuItemValidation {
              #selector(newMarkdownTab),
              #selector(openFile),
              #selector(toggleLeftSidebar),
+             #selector(focusFileSearch),
+             #selector(focusContentSearch),
              #selector(toggleAlwaysOnTop),
              #selector(showAbout),
              #selector(showPreferences),

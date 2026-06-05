@@ -53,6 +53,7 @@
 53. [세션 49: 사이드바 파일/내용 검색 및 v1.7.0 릴리즈](#세션-49-사이드바-파일내용-검색-및-v170-릴리즈)
 54. [세션 50: 숨김 파일 검색, ripgrep 설정 및 v1.7.1 릴리즈](#세션-50-숨김-파일-검색-ripgrep-설정-및-v171-릴리즈)
 55. [세션 51: 코드 하이라이팅, 사이드바 미리보기 폴리싱 및 v1.7.2 릴리즈](#세션-51-코드-하이라이팅-사이드바-미리보기-폴리싱-및-v172-릴리즈)
+56. [세션 52: 검색 단축키, 자동 검색, Raw Editor 라인 번호 및 v1.7.3 릴리즈](#세션-52-검색-단축키-자동-검색-raw-editor-라인-번호-및-v173-릴리즈)
 
 ---
 
@@ -128,6 +129,7 @@
 | 66 | 사이드바 파일/내용 검색 및 v1.7.0 릴리즈 | 왼쪽 사이드바에 파일명 fuzzy 검색과 파일 내용 검색, 키보드 후보 선택/미리보기, 상대 경로 표시를 추가하고 앱 번들 버전 1.7.0 갱신 |
 | 67 | 숨김 파일 검색, ripgrep 설정 및 v1.7.1 릴리즈 | 좌우 사이드바 즉시 드래그, 숨김 파일 표시 토글, Enter 제출형 검색, ripgrep 가속 및 Settings 설치 확인 UI를 추가하고 앱 번들 버전 1.7.1 갱신 |
 | 68 | 코드 하이라이팅, 사이드바 미리보기 폴리싱 및 v1.7.2 릴리즈 | Preview/Raw Edit/왼쪽 사이드바 텍스트 미리보기의 테마 연동 구문 하이라이팅을 확장하고 Esc 닫기, 최근 문서 접기, 얇은 border, 뒤로가기 hit area, 짧은 줄 상단 정렬을 반영해 앱 번들 버전 1.7.2 갱신 |
+| 69 | 검색 단축키, 자동 검색, Raw Editor 라인 번호 및 v1.7.3 릴리즈 | 파일 검색/내용 검색 UI와 단축키, 터미널 포커스 중 검색 호출, 입력 지연 자동 검색, 단계적 Esc 동작, Raw Editor 라인 번호 거터를 반영하고 앱 번들 버전 1.7.3 갱신 |
 
 ---
 
@@ -2770,5 +2772,66 @@ AI 연계와 append-friendly 특성을 고려해 단일 JSON 배열보다 JSONL�
 
 **응답:**
 릴리즈 명령 문서를 확인하고, 명시 버전 `1.7.1`을 사용해 `Info.plist`의 `CFBundleVersion`과 `CFBundleShortVersionString`을 갱신했다. README 기능 소개에는 이번 변경 범위인 숨김 파일 토글, Enter 제출형 검색, `ripgrep` 가속 및 Settings 설치 확인, 즉시 반응하는 사이드바 리사이즈를 반영했다. 커밋/푸시 전 필수 규칙에 따라 이번 세션 내용을 `history.md` 목차, 타임라인 요약, 세션 본문에 기록했다.
+
+변경 파일: `Sources/App/Info.plist`, `README.md`, `history.md`
+
+
+## 세션 52: 검색 단축키, 자동 검색, Raw Editor 라인 번호 및 v1.7.3 릴리즈
+
+> 날짜: 2026-06-05
+> 경로: ~/workspace/markAgent
+
+왼쪽 파일 사이드바 검색을 더 즉각적인 탐색 도구로 바꾸고, Raw Editor에는 대용량 파일에서도 안정적으로 정렬되는 라인 번호를 추가했다. 이어서 명시 버전 `1.7.3`으로 릴리즈 빌드를 준비했다.
+
+### 대화 1: 파일 검색 UI와 자동 검색 흐름
+
+**사용자:**
+> 파일 검색 모드 UI, 파일트리 UI는 참고해서 반영해줘, enter를 눌러야 검색되는건 enter를 안누르고 마지막 입력 후 0.3~ 0.5초 지연 후? 성능상 문제가 없다면 enter키 없이 검색되게 하는게 나을 것 같아. cmd+shift+f는 파일검색, cmd+shift+g 는 내용검색으로 단축키를 할당해야해. 터미널 작업중에도 단축키가 적용되어야 해.
+
+**응답:**
+왼쪽 파일 사이드바에 검색 버튼 토글 UI를 추가하고, 파일명 검색과 내용 검색을 툴바 버튼, Edit 메뉴, Cmd+Shift+F, Cmd+Shift+G로 열 수 있게 했다. 검색은 입력 후 짧은 지연 뒤 자동 실행되며, 터미널 탭이 first responder여도 검색 단축키를 앱 검색 동작으로 소비하도록 `SearchAwareTerminalView`를 추가했다.
+
+변경 파일: `Sources/App/AppDelegate.swift`, `Sources/Core/FileBrowser/SidebarFileSearch.swift`, `Sources/Views/Sidebar/FileBrowserSidebar.swift`, `Sources/Views/Sidebar/FileEntryRow.swift`, `Sources/Views/Tabs/SearchAwareTerminalView.swift`, `Sources/Views/Tabs/TerminalTabView.swift`, `Sources/Views/Main/ActiveTabContentView.swift`, `Sources/Views/Main/MainContainerView.swift`, `Sources/App/Resources/en.lproj/Localizable.strings`, `Sources/App/Resources/ko.lproj/Localizable.strings`, `Tests/MarkAgentTests/SidebarFileSearchTests.swift`, `Tests/MarkAgentTests/TerminalTabStateTests.swift`
+
+---
+
+### 대화 2: Esc 단계 동작 보정과 Edit 메뉴 항목
+
+**사용자:**
+> cmd+shift+f -> 검색어 입력 -> 화살표 선택 -> 엔터 -> 미리보기 표시 -> Esc 를 누르면 역순으로 돌아가고 검색어 지우기 이후에 Esc를 누르면 검색창이 닫혀야 하는데, 바로 검색창이 닫혀.
+> 편집 메뉴에 파일 검색,내용 검색 메뉴도 추가해야해.
+
+**응답:**
+검색 모드의 Escape 처리를 미리보기 닫기, 검색어 초기화, 검색창 닫기 순서로 단계화했다. AppDelegate의 Edit 메뉴에 File Search와 Content Search 항목을 추가하고 한국어/영어 로컬라이제이션도 함께 연결했다.
+
+검증: `swift test --filter SidebarFileSearchTests`, `swift test --filter TerminalTabStateTests/testSearchAwareTerminalViewConsumesSearchShortcuts`, 실제 QA 앱에서 단축키, 결과 선택, Enter 미리보기, 단계적 Esc 동작 확인.
+
+변경 파일: `Sources/App/AppDelegate.swift`, `Sources/Views/Sidebar/FileBrowserSidebar.swift`, `Sources/App/Resources/en.lproj/Localizable.strings`, `Sources/App/Resources/ko.lproj/Localizable.strings`, `Tests/MarkAgentTests/SidebarFileSearchTests.swift`
+
+---
+
+### 대화 3: Raw Editor 라인 번호와 1만 줄 파일 QA
+
+**사용자:**
+> raw Editor에 라인 번호를 추가해야해.
+> computer use로 qa해
+> 마지막 qa는 1만 라인 넘는 파일을 열어서 제대로 표시되는지 확인해줘
+
+**응답:**
+Raw Editor의 `NSTextView` 스크롤 clip view에 고정 오버레이 라인 번호 거터를 추가했다. 기존 `NSRulerView` 방식에서 1번 라인이 보이지 않거나 스크롤 시 번호가 툴바 위로 올라가는 문제가 있어, visible glyph range와 line fragment를 기준으로 현재 화면에 보이는 번호만 직접 그리도록 바꿨다. `/tmp/markagent-12050-lines.md` 12,050줄 파일을 release 전 QA 앱에서 열고 상단과 Cmd+Down 하단 스크롤 화면을 캡처해 1번 라인과 12,050번 라인이 모두 정렬되어 표시되는 것을 확인했다.
+
+검증: `swift build`, `swift test --filter EditorPerformanceTests`, `swift test --filter TerminalTabStateTests/testSearchAwareTerminalViewConsumesSearchShortcuts`, LSP diagnostics clean, 실제 앱 스크린샷 QA. 앱 프로세스에 `leaks --quiet`를 실행했을 때 AppIntents `com.apple.linkd.autoShortcut` 관련 14.1KB 시스템성 누수만 보고되었고 새 editor/gutter 타입 누수는 확인되지 않았다.
+
+변경 파일: `Sources/Views/EditorView.swift`
+
+---
+
+### 대화 4: v1.7.3 릴리즈 빌드
+
+**사용자:**
+> /release-build 1.7.3
+
+**응답:**
+명시 버전 `1.7.3`으로 `Info.plist`의 `CFBundleVersion`과 `CFBundleShortVersionString`을 갱신하고, README 기능 소개에 자동 지연 검색, 파일/내용 검색 단축키와 Edit 메뉴, 터미널 포커스 중 단축키 처리, Raw Editor 라인 번호 거터를 반영했다. `swift build`, `swift test` 108개, Developer ID 서명, Apple 공증, stapling, 압축 해제 후 `codesign`/`spctl` 검증을 통과했으며, `MarkAgent-v1.7.3.zip`의 SHA-256은 `db2555ce934e307aea22a488b77d4430419e7209bc36a42a606d54a958af97dd`로 기록했다.
 
 변경 파일: `Sources/App/Info.plist`, `README.md`, `history.md`

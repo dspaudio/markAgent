@@ -299,14 +299,20 @@ final class SidebarFileSearchTests: XCTestCase {
         let keys = [
             "파일 검색",
             "내용 검색",
+            "검색 표시",
+            "검색 숨기기",
             "검색 지우기",
             "검색 모드",
             "내용",
             "Grep",
+            "검색 중",
+            "%d개 결과",
             "검색 결과",
             "검색 결과 없음",
             "숨김 파일 표시",
             "숨김 파일 숨기기",
+            "File Search",
+            "Content Search",
         ]
         let root = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
@@ -319,6 +325,20 @@ final class SidebarFileSearchTests: XCTestCase {
             XCTAssertTrue(korean.contains("\"\(key)\" ="), "Missing Korean key \(key)")
             XCTAssertTrue(english.contains("\"\(key)\" ="), "Missing English key \(key)")
         }
+    }
+
+    @MainActor
+    func testSidebarSearchCommandCenterPublishesFreshRequests() {
+        let commandCenter = SidebarSearchCommandCenter()
+
+        commandCenter.focus(.files)
+        let firstRequest = commandCenter.request
+        commandCenter.focus(.grep)
+        let secondRequest = commandCenter.request
+
+        XCTAssertEqual(firstRequest?.mode, .files)
+        XCTAssertEqual(secondRequest?.mode, .grep)
+        XCTAssertNotEqual(firstRequest?.id, secondRequest?.id)
     }
 
     private func makeTemporaryDirectory() throws -> URL {
