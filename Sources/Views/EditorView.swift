@@ -18,6 +18,7 @@ struct EditorView: View {
                     text: $document.editableContent,
                     selectedRange: selectedRangeBinding,
                     cursorPosition: $cursorPosition,
+                    fileURL: document.fileURL,
                     rendersMarkdownStyle: rendersMarkdownStyle,
                     isActive: isActive
                 )
@@ -266,6 +267,7 @@ private struct MarkdownTextEditor: NSViewRepresentable {
     @Binding var text: String
     @Binding var selectedRange: NSRange
     @Binding var cursorPosition: CursorPosition
+    let fileURL: URL?
     let rendersMarkdownStyle: Bool
     let isActive: Bool
 
@@ -277,6 +279,7 @@ private struct MarkdownTextEditor: NSViewRepresentable {
             text: $text,
             selectedRange: $selectedRange,
             cursorPosition: $cursorPosition,
+            fileURL: fileURL,
             rendersMarkdownStyle: rendersMarkdownStyle
         )
     }
@@ -334,8 +337,8 @@ private struct MarkdownTextEditor: NSViewRepresentable {
     func updateNSView(_ scrollView: NSScrollView, context: Context) {
         guard let textView = scrollView.documentView as? NSTextView else { return }
         context.coordinator.appColors = appColors
+        context.coordinator.fileURL = fileURL
         scrollView.backgroundColor = appColors?.textBackground ?? .textBackgroundColor
-        textView.textColor = appColors?.textForeground ?? .textColor
         textView.backgroundColor = appColors?.textBackground ?? .textBackgroundColor
         textView.insertionPointColor = appColors?.insertionPoint ?? .controlAccentColor
 
@@ -415,6 +418,7 @@ private struct MarkdownTextEditor: NSViewRepresentable {
         @Binding var selectedRange: NSRange
         @Binding var cursorPosition: CursorPosition
         var rendersMarkdownStyle: Bool
+        var fileURL: URL?
         var appColors: TerminalAppColors?
         private var lineIndex = EditorLineIndex(text: "")
         private var lastAppliedText: String
@@ -425,11 +429,13 @@ private struct MarkdownTextEditor: NSViewRepresentable {
             text: Binding<String>,
             selectedRange: Binding<NSRange>,
             cursorPosition: Binding<CursorPosition>,
+            fileURL: URL?,
             rendersMarkdownStyle: Bool
         ) {
             _text = text
             _selectedRange = selectedRange
             _cursorPosition = cursorPosition
+            self.fileURL = fileURL
             self.rendersMarkdownStyle = rendersMarkdownStyle
             self.lastAppliedText = text.wrappedValue
             self.stylePolicy = EditorStylePolicy(mode: rendersMarkdownStyle ? .renderedMarkdown : .raw)
@@ -442,7 +448,7 @@ private struct MarkdownTextEditor: NSViewRepresentable {
             didReceiveLocalEdit = true
             lastAppliedText = textView.string
             resetTextMetrics(for: textView.string)
-            if rendersMarkdownStyle {
+            if rendersMarkdownStyle || shouldApplyRawSyntax(to: textView.string) {
                 applyMarkdownStyle(to: textView)
             }
             textView.needsDisplay = true
@@ -497,6 +503,10 @@ private struct MarkdownTextEditor: NSViewRepresentable {
             [
                 appColors?.textForeground.description ?? NSColor.textColor.description,
                 appColors?.textBackground.description ?? NSColor.textBackgroundColor.description,
+                appColors?.syntaxBlue.description ?? NSColor.systemBlue.description,
+                appColors?.syntaxGreen.description ?? NSColor.systemGreen.description,
+                appColors?.syntaxMagenta.description ?? NSColor.systemPurple.description,
+                fileURL?.path ?? "",
                 rendersMarkdownStyle ? "rendered" : "raw"
             ].joined(separator: "|")
         }
@@ -522,6 +532,8 @@ private struct MarkdownTextEditor: NSViewRepresentable {
 
             if rendersMarkdownStyle {
                 applyPreviewAttributes(to: textView, fullRange: fullRange)
+            } else {
+                applyRawCodeAttributes(to: textView, fullRange: fullRange)
             }
 
             textView.textStorage?.endEditing()
@@ -563,6 +575,132 @@ private struct MarkdownTextEditor: NSViewRepresentable {
             applyQuoteAttributes(text: nsText, textView: textView, fullRange: fullRange)
             applyThematicBreakAttributes(text: nsText, textView: textView, fullRange: fullRange)
             applyTableAttributes(text: nsText, textView: textView, fullRange: fullRange)
+        }
+
+        @MainActor
+        private func applyRawCodeAttributes(to textView: NSTextView, fullRange: NSRange) {
+            let nsText = textView.string as NSString
+            if let language = CodeHighlightLanguage(fileURL: fileURL) {
+                textView.textStorage?.addAttributes(
+                    [
+                        .font: NSFont.monospacedSystemFont(ofSize: NSFont.systemFontSize, weight: .regular),
+                        .paragraphStyle: paragraphStyle(lineSpacing: 2)
+                    ],
+                    range: fullRange
+                )
+                applyRawCodeTokenAttributes(text: nsText, language: language, range: fullRange, textView: textView)
+                return
+            }
+
+            for fence in MarkdownCodeFenceScanner.fences(in: textView.string) {
+                applyFenceSyntaxAttributes(fence: fence, textView: textView)
+                guard NSIntersectionRange(fence.codeRange, fullRange).length > 0 else { continue }
+                textView.textStorage?.addAttributes(
+                    [
+                        .font: NSFont.monospacedSystemFont(ofSize: NSFont.systemFontSize, weight: .regular),
+                        .foregroundColor: appColors?.textForeground ?? NSColor.textColor,
+                        .paragraphStyle: paragraphStyle(lineSpacing: 3)
+                    ],
+                    range: fence.codeRange
+                )
+                applyRawCodeTokenAttributes(text: nsText, language: language(for: fence), range: fence.codeRange, textView: textView)
+            }
+        }
+
+        @MainActor
+        private func applyFenceSyntaxAttributes(fence: MarkdownCodeFence, textView: NSTextView) {
+            let syntaxAttributes: [NSAttributedString.Key: Any] = [
+                .font: NSFont.monospacedSystemFont(ofSize: NSFont.systemFontSize, weight: .medium),
+                .foregroundColor: NSColor.secondaryLabelColor
+            ]
+            textView.textStorage?.addAttributes(syntaxAttributes, range: fence.openingRange)
+            if let closingRange = fence.closingRange {
+                textView.textStorage?.addAttributes(syntaxAttributes, range: closingRange)
+            }
+        }
+
+        @MainActor
+        private func applyRawCodeTokenAttributes(
+            text: NSString,
+            language: CodeHighlightLanguage?,
+            range: NSRange,
+            textView: NSTextView
+        ) {
+            let colors = syntaxColors
+            applyRawCodePattern(RawCodeSyntaxRules.pattern(for: .keyword, language: language), color: colors.keyword, textView: textView, range: range)
+            applyRawCodePattern(RawCodeSyntaxRules.pattern(for: .number, language: language), color: colors.number, textView: textView, range: range)
+            if language?.usesMarkupTags == true {
+                applyRawCodePattern(RawCodeSyntaxRules.pattern(for: .tag, language: language), color: colors.tag, textView: textView, range: range)
+            }
+            applyRawCodePattern(RawCodeSyntaxRules.pattern(for: .string, language: language), color: colors.string, textView: textView, range: range)
+            applyRawCodePattern(RawCodeSyntaxRules.pattern(for: .comment, language: language), color: colors.comment, textView: textView, range: range)
+        }
+
+        @MainActor
+        private func applyRawCodePattern(
+            _ pattern: String,
+            color: NSColor,
+            textView: NSTextView,
+            range: NSRange
+        ) {
+            guard let regex = try? NSRegularExpression(pattern: pattern) else { return }
+            regex.enumerateMatches(in: textView.string, range: range) { match, _, _ in
+                guard let match else { return }
+                textView.textStorage?.addAttributes([.foregroundColor: color], range: match.range)
+            }
+        }
+
+        private var syntaxColors: RawSyntaxColors {
+            RawSyntaxColors(
+                comment: appColors?.textForeground.withAlphaComponent(0.62) ?? NSColor.systemGray,
+                keyword: appColors?.syntaxMagenta ?? NSColor.systemPurple,
+                string: appColors?.syntaxGreen ?? NSColor.systemGreen,
+                number: appColors?.syntaxYellow ?? NSColor.systemOrange,
+                tag: appColors?.syntaxBlue ?? NSColor.systemBlue
+            )
+        }
+
+        private func language(for fence: MarkdownCodeFence) -> CodeHighlightLanguage? {
+            switch fence.language?.lowercased() {
+            case "h", "objc", "objective-c", "objectivec":
+                return .objectiveC
+            case "css":
+                return .css
+            case "env", "dotenv":
+                return .env
+            case "html", "htm":
+                return .html
+            case "js", "javascript":
+                return .javascript
+            case "json":
+                return .json
+            case "jsonc":
+                return .jsonc
+            case "jsonl":
+                return .jsonl
+            case "php":
+                return .php
+            case "py", "python":
+                return .python
+            case "swift":
+                return .swift
+            case "toml":
+                return .toml
+            case "ts", "typescript":
+                return .typescript
+            case "tsx":
+                return .tsx
+            case "xml":
+                return .xml
+            case "yaml", "yml":
+                return .yaml
+            default:
+                return nil
+            }
+        }
+
+        private func shouldApplyRawSyntax(to text: String) -> Bool {
+            CodeHighlightLanguage(fileURL: fileURL) != nil || !MarkdownCodeFenceScanner.fences(in: text).isEmpty
         }
 
         @MainActor
@@ -824,4 +962,12 @@ private struct MarkdownTextEditor: NSViewRepresentable {
             return style
         }
     }
+}
+
+private struct RawSyntaxColors {
+    let comment: NSColor
+    let keyword: NSColor
+    let string: NSColor
+    let number: NSColor
+    let tag: NSColor
 }

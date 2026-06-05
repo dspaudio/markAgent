@@ -3,30 +3,47 @@ import SwiftUI
 struct RecentDocumentsSection: View {
     var store: RecentDocumentStore
     var currentFileURL: URL?
+    @Binding var isCollapsed: Bool
     var onOpen: (URL) -> Void
     
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            HStack(spacing: 8) {
-                Text("최근 문서")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(.secondary)
-                
-                Spacer()
-                
-                if !store.documents.isEmpty {
-                    Text("\(store.documents.count)")
+            Button {
+                withAnimation(.easeInOut(duration: 0.14)) {
+                    isCollapsed.toggle()
+                }
+            } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: isCollapsed ? "chevron.up" : "chevron.down")
                         .font(.system(size: 10, weight: .semibold))
                         .foregroundStyle(.secondary)
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 2)
-                        .background(.quaternary, in: Capsule())
+                        .frame(width: 12)
+
+                    Text("최근 문서")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(.secondary)
+
+                    Spacer()
+
+                    if !store.documents.isEmpty {
+                        Text("\(store.documents.count)")
+                            .font(.system(size: 10, weight: .semibold))
+                            .foregroundStyle(.secondary)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(.quaternary, in: Capsule())
+                    }
                 }
+                .contentShape(Rectangle())
             }
+            .buttonStyle(.plain)
+            .help(isCollapsed ? String(localized: "최근 문서 펼치기") : String(localized: "최근 문서 접기"))
             .padding(.horizontal, 10)
             .padding(.vertical, 8)
-            
-            if store.documents.isEmpty {
+
+            if isCollapsed {
+                EmptyView()
+            } else if store.documents.isEmpty {
                 emptyState
             } else {
                 LazyVStack(spacing: 2) {

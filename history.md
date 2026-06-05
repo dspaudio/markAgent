@@ -52,6 +52,7 @@
 52. [세션 48: 탭 그룹 자식 탭 UX 및 v1.6.3 릴리즈](#세션-48-탭-그룹-자식-탭-ux-및-v163-릴리즈)
 53. [세션 49: 사이드바 파일/내용 검색 및 v1.7.0 릴리즈](#세션-49-사이드바-파일내용-검색-및-v170-릴리즈)
 54. [세션 50: 숨김 파일 검색, ripgrep 설정 및 v1.7.1 릴리즈](#세션-50-숨김-파일-검색-ripgrep-설정-및-v171-릴리즈)
+55. [세션 51: 코드 하이라이팅, 사이드바 미리보기 폴리싱 및 v1.7.2 릴리즈](#세션-51-코드-하이라이팅-사이드바-미리보기-폴리싱-및-v172-릴리즈)
 
 ---
 
@@ -126,6 +127,7 @@
 | 65 | 탭 그룹 자식 탭 UX 및 v1.6.3 릴리즈 | Markdown 탭을 활성 그룹 옆에 삽입하고, 비활성 자식 탭 접힘/그림자/펼침 애니메이션을 추가해 앱 번들 버전 1.6.3 갱신 |
 | 66 | 사이드바 파일/내용 검색 및 v1.7.0 릴리즈 | 왼쪽 사이드바에 파일명 fuzzy 검색과 파일 내용 검색, 키보드 후보 선택/미리보기, 상대 경로 표시를 추가하고 앱 번들 버전 1.7.0 갱신 |
 | 67 | 숨김 파일 검색, ripgrep 설정 및 v1.7.1 릴리즈 | 좌우 사이드바 즉시 드래그, 숨김 파일 표시 토글, Enter 제출형 검색, ripgrep 가속 및 Settings 설치 확인 UI를 추가하고 앱 번들 버전 1.7.1 갱신 |
+| 68 | 코드 하이라이팅, 사이드바 미리보기 폴리싱 및 v1.7.2 릴리즈 | Preview/Raw Edit/왼쪽 사이드바 텍스트 미리보기의 테마 연동 구문 하이라이팅을 확장하고 Esc 닫기, 최근 문서 접기, 얇은 border, 뒤로가기 hit area, 짧은 줄 상단 정렬을 반영해 앱 번들 버전 1.7.2 갱신 |
 
 ---
 
@@ -1531,6 +1533,52 @@ MarkAgent 메뉴의 `Settings…` 창을 추가하고, Ghostty theme/font-size/c
 
 **응답:**
 명시 버전 `1.2.0`으로 앱 번들 버전을 갱신하고, README 기능 소개와 `history.md` 세션 기록을 이번 변경분에 맞게 업데이트한 뒤 릴리즈 빌드, GitHub Release, 커밋/푸시, main 대상 PR 생성 및 머지를 진행.
+
+변경 파일: `Sources/App/Info.plist`, `README.md`, `history.md`
+
+
+## 세션 51: 코드 하이라이팅, 사이드바 미리보기 폴리싱 및 v1.7.2 릴리즈
+
+> 날짜: 2026-06-05
+> 경로: ~/workspace/markAgent
+
+Preview, Raw Edit, 왼쪽 사이드바 미리보기의 코드 하이라이팅을 활성 Ghostty/MarkAgent 테마 팔레트와 맞추고, 사이드바 미리보기 조작성을 다듬었다. 이어서 명시 버전 `1.7.2` 릴리즈를 준비했다.
+
+### 대화 1: Preview/Raw Edit 코드 하이라이팅 확장
+
+**사용자:**
+> 미리보기 및 rawEdit에서 code highlight 기능이 필요해. php, ts, tsx, js, swift, py뿐 아니라 css, html, xml, .env, yaml, toml, json, jsonc, jsonl, vue 등 프론트엔드/설정 파일도 조사해서 모두 지원해야 하고, 설정 테마의 컬러셋과 연계되어야 해. PHP/JS/TS 테스트와 메모리 누수 점검도 필수야.
+
+**응답:**
+Preview 코드 블록과 Raw Edit 토큰 색상을 활성 Ghostty/MarkAgent 테마 팔레트에서 파생하도록 연결했다. Raw Edit에는 파일 확장자와 Markdown fenced code를 인식하는 구문 스캐너를 추가해 PHP, JavaScript, TypeScript, TSX, Swift, Python, HTML, CSS, XML, Vue, YAML, TOML, JSON/JSONC/JSONL, `.env` 등 주요 코드/프론트엔드/설정 파일의 하이라이팅을 적용했다. OSS 라이브러리 사용 사실은 About과 README에 `HighlightSwift`로 표기했다.
+
+검증: `swift build`, `swift test`, PHP/JS/TS 및 언어 매핑/Markdown fence/theme CSS 테스트, 변경 Swift 파일 LSP diagnostics, QA 앱 실행 및 `leaks` 확인.
+
+변경 파일: `Sources/Core/Editor/CodeHighlightLanguage.swift`, `Sources/Core/Editor/MarkdownCodeFenceScanner.swift`, `Sources/Core/Editor/RawCodeSyntaxRules.swift`, `Sources/Core/Tabs/TerminalAppTheme.swift`, `Sources/Rendering/CodeHighlighter.swift`, `Sources/Views/EditorView.swift`, `Sources/Views/Sidebar/FileBrowserSidebar.swift`, `Sources/App/AboutView.swift`, `README.md`, `AGENTS.md`, `Tests/MarkAgentTests/CodeHighlightLanguageTests.swift`, `Tests/MarkAgentTests/MarkdownCodeFenceScannerTests.swift`, `Tests/MarkAgentTests/RawCodeSyntaxRuleTests.swift`, `Tests/MarkAgentTests/TerminalAppThemeSyntaxColorTests.swift`
+
+---
+
+### 대화 2: 사이드바 미리보기 Esc, 최근 문서 접기, border와 뒤로가기 버튼 보정
+
+**사용자:**
+> left sidebar의 미리보기에서 esc를 누르면 미리보기를 닫고 목록으로 돌아가게 해줘. left sidebar 하단의 최근문서 부분을 V ^ 등으로 가리고 볼 수 있게 해줘. left sidebar와 오른쪽 탭의 border를 절반으로 줄여줘. < 부분을 클릭하기 어렵고, 아이콘이 오른쪽으로 밀려 보여. 미리보기에서 짧은 줄 텍스트는 중앙이 아니라 상단 정렬되도록 해줘.
+
+**응답:**
+왼쪽 사이드바 미리보기가 열린 동안 Esc로 목록으로 돌아가도록 키 이벤트 모니터를 추가했다. 최근 문서 영역은 접기/펼치기 상태를 저장하고, 좌우 사이드바 border/resize handle 시각 폭을 절반 수준으로 줄였다. 미리보기 뒤로가기 버튼은 클릭 영역만 넓히고 아이콘 자체는 왼쪽에 고정되도록 보정했으며, 짧은 텍스트 미리보기는 상단 정렬로 표시되게 했다.
+
+검증: `swift build`, 변경 Swift 파일 LSP diagnostics, QA 앱 실행 및 `leaks` 확인.
+
+변경 파일: `Sources/Views/Sidebar/FileBrowserSidebar.swift`, `Sources/Views/Sidebar/RecentDocumentsSection.swift`, `Sources/Views/Main/MainContainerView.swift`, `README.md`
+
+---
+
+### 대화 3: v1.7.2 릴리즈 빌드
+
+**사용자:**
+> /release-build 1.7.2
+
+**응답:**
+명시 버전 `1.7.2`로 `Info.plist`의 `CFBundleVersion`과 `CFBundleShortVersionString`을 갱신하고, README 기능 소개와 `history.md`를 이번 코드 하이라이팅 및 사이드바 미리보기 폴리싱 변경에 맞게 업데이트했다. `swift build`, `swift test`, Developer ID 서명, Apple 공증, stapling, 압축 해제 후 `codesign`/`spctl` 검증을 통과했으며, `MarkAgent-v1.7.2.zip`의 SHA-256은 `09efc65e37911353981c8c652bb2c55d648c5a1c5936aa226f2ff5710b5c368e`로 기록했다. 릴리즈 앱 프로세스에 `leaks`를 실행해 `0 leaks for 0 total leaked bytes`도 확인했다.
 
 변경 파일: `Sources/App/Info.plist`, `README.md`, `history.md`
 

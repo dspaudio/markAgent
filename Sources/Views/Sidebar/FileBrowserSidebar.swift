@@ -10,6 +10,7 @@ struct FileBrowserSidebar: View {
     
     @AppStorage("isOneClickPreviewEnabled") private var isOneClickPreviewEnabled = true
     @AppStorage("sidebarShowsHiddenFiles") private var showsHiddenFiles = false
+    @AppStorage("isSidebarRecentDocumentsCollapsed") private var isRecentDocumentsCollapsed = false
     @State private var selectedEntryID: String?
     @State private var expandedDirectoryIDs: Set<String> = []
     @State private var expandedDirectoryEntries: [String: [FileEntry]] = [:]
@@ -81,6 +82,12 @@ struct FileBrowserSidebar: View {
         .frame(maxHeight: .infinity)
         .background(appColors?.panel ?? Color(NSColor.controlBackgroundColor))
         .foregroundStyle(appColors?.foreground ?? Color.primary)
+        .background(
+            SidebarEscapeKeyMonitor(
+                isActive: isOneClickPreviewEnabled && previewState != nil,
+                onEscape: closePreview
+            )
+        )
         .sheet(item: $previewImage) { selection in
             SidebarImageViewer(url: selection.url)
         }
@@ -172,12 +179,13 @@ struct FileBrowserSidebar: View {
                 RecentDocumentsSection(
                     store: recentStore,
                     currentFileURL: currentFileURL,
+                    isCollapsed: $isRecentDocumentsCollapsed,
                     onOpen: { url in
                         onOpenMarkdown(url)
                     }
                 )
             }
-            .frame(maxHeight: 200)
+            .frame(maxHeight: isRecentDocumentsCollapsed ? 40 : 200)
         }
     }
 
@@ -656,6 +664,13 @@ struct FileBrowserSidebar: View {
                         Label(String(localized: "미리보기 닫기"), systemImage: "chevron.left")
                             .labelStyle(.iconOnly)
                             .frame(width: 24, height: 24)
+                            .contentShape(Rectangle())
+                    }
+                    .frame(width: 24, height: 36, alignment: .leading)
+                    .background(alignment: .leading) {
+                        Color.clear
+                            .frame(width: 40, height: 36)
+                            .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
                     .help(String(localized: "미리보기 닫기"))
@@ -689,7 +704,7 @@ struct FileBrowserSidebar: View {
                     .help(String(localized: "탭에서 편집"))
                 }
                 .padding(.horizontal, 10)
-                .padding(.vertical, 8)
+                .padding(.vertical, 4)
 
                 Group {
                     switch state.content {
@@ -704,14 +719,15 @@ struct FileBrowserSidebar: View {
                                 .frame(maxWidth: .infinity, alignment: .leading)
                                 .padding(10)
                         }
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                     case .text(let source):
                         ScrollView([.vertical, .horizontal]) {
-                            Text(source)
-                                .font(.system(size: 11, design: .monospaced))
+                            SidebarSyntaxHighlightedText(source: source, fileURL: state.entry.url)
                                 .textSelection(.enabled)
-                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                                 .padding(10)
                         }
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                     case .image(let url):
                         GeometryReader { geometry in
                             ScrollView([.vertical, .horizontal]) {
@@ -851,6 +867,77 @@ private enum SidebarPreviewContent {
     case message(String)
 }
 
+private struct SidebarSyntaxHighlightedText: View {
+    let source: String
+    let fileURL: URL
+
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.terminalAppTheme) private var terminalAppTheme
+
+    var body: some View {
+        Text(attributedSource)
+            .font(.system(size: 11, design: .monospaced))
+    }
+
+    private var attributedSource: AttributedString {
+        let appColors = terminalAppTheme?.theme(for: colorScheme)?.appColors()
+        let attributed = NSMutableAttributedString(
+            string: source,
+            attributes: [
+                .font: NSFont.monospacedSystemFont(ofSize: 11, weight: .regular),
+                .foregroundColor: appColors?.textForeground ?? NSColor.textColor
+            ]
+        )
+        let fullRange = NSRange(location: 0, length: (source as NSString).length)
+        guard let language = CodeHighlightLanguage(fileURL: fileURL) else {
+            return (try? AttributedString(attributed, including: \.appKit)) ?? AttributedString(source)
+        }
+
+        let colors = SidebarSyntaxColors(appColors: appColors)
+        apply(.keyword, color: colors.keyword, language: language, range: fullRange, to: attributed)
+        apply(.number, color: colors.number, language: language, range: fullRange, to: attributed)
+        if language.usesMarkupTags {
+            apply(.tag, color: colors.tag, language: language, range: fullRange, to: attributed)
+        }
+        apply(.string, color: colors.string, language: language, range: fullRange, to: attributed)
+        apply(.comment, color: colors.comment, language: language, range: fullRange, to: attributed)
+
+        return (try? AttributedString(attributed, including: \.appKit)) ?? AttributedString(source)
+    }
+
+    private func apply(
+        _ token: RawCodeSyntaxToken,
+        color: NSColor,
+        language: CodeHighlightLanguage,
+        range: NSRange,
+        to attributed: NSMutableAttributedString
+    ) {
+        guard let regex = try? NSRegularExpression(pattern: RawCodeSyntaxRules.pattern(for: token, language: language)) else {
+            return
+        }
+        regex.enumerateMatches(in: source, range: range) { match, _, _ in
+            guard let match else { return }
+            attributed.addAttribute(.foregroundColor, value: color, range: match.range)
+        }
+    }
+}
+
+private struct SidebarSyntaxColors {
+    let comment: NSColor
+    let keyword: NSColor
+    let string: NSColor
+    let number: NSColor
+    let tag: NSColor
+
+    init(appColors: TerminalAppColors?) {
+        comment = appColors?.textForeground.withAlphaComponent(0.62) ?? NSColor.systemGray
+        keyword = appColors?.syntaxMagenta ?? NSColor.systemPurple
+        string = appColors?.syntaxGreen ?? NSColor.systemGreen
+        number = appColors?.syntaxYellow ?? NSColor.systemOrange
+        tag = appColors?.syntaxBlue ?? NSColor.systemBlue
+    }
+}
+
 func loadTextPreview(from url: URL, byteLimit: Int) throws -> String {
     let handle = try FileHandle(forReadingFrom: url)
     defer { try? handle.close() }
@@ -947,6 +1034,62 @@ struct FocusedEscapeContainer<Content: View>: NSViewRepresentable {
     func updateNSView(_ nsView: FocusedEscapeHostingView<Content>, context: Context) {
         nsView.rootView = content()
         nsView.onEscape = onEscape
+    }
+}
+
+private struct SidebarEscapeKeyMonitor: NSViewRepresentable {
+    let isActive: Bool
+    let onEscape: () -> Void
+
+    func makeNSView(context: Context) -> NSView {
+        context.coordinator.update(isActive: isActive, onEscape: onEscape)
+        return NSView(frame: .zero)
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {
+        context.coordinator.update(isActive: isActive, onEscape: onEscape)
+    }
+
+    static func dismantleNSView(_ nsView: NSView, coordinator: Coordinator) {
+        coordinator.removeMonitor()
+    }
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator()
+    }
+
+    final class Coordinator {
+        private var monitor: Any?
+        private var onEscape: (() -> Void)?
+
+        func update(isActive: Bool, onEscape: @escaping () -> Void) {
+            self.onEscape = onEscape
+            if isActive {
+                installMonitorIfNeeded()
+            } else {
+                removeMonitor()
+            }
+        }
+
+        func removeMonitor() {
+            if let monitor {
+                NSEvent.removeMonitor(monitor)
+            }
+            monitor = nil
+        }
+
+        private func installMonitorIfNeeded() {
+            guard monitor == nil else { return }
+            monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+                guard event.keyCode == 53 else { return event }
+                self?.onEscape?()
+                return nil
+            }
+        }
+
+        deinit {
+            removeMonitor()
+        }
     }
 }
 

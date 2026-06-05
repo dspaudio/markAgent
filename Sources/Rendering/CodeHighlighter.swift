@@ -10,6 +10,7 @@ struct HighlightedCodeBlock: View {
     @State private var isHoveringBadge = false
     @State private var didCopy = false
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.terminalAppTheme) private var terminalAppTheme
 
     private static let highlighter = Highlight()
 
@@ -42,7 +43,7 @@ struct HighlightedCodeBlock: View {
                 .stroke(Color.secondary.opacity(0.18))
         )
         .padding(.bottom, 8)
-        .task(id: HashableHighlightInput(code: code, language: language, scheme: colorScheme)) {
+        .task(id: HashableHighlightInput(code: code, language: language, scheme: colorScheme, colorSignature: colorSignature)) {
             await highlight()
         }
     }
@@ -87,7 +88,7 @@ struct HighlightedCodeBlock: View {
             return
         }
 
-        let colors: HighlightColors = colorScheme == .dark ? .dark(.xcode) : .light(.xcode)
+        let colors = highlightColors
         do {
             let result = try await Self.highlighter.attributedText(code, language: language, colors: colors)
             attributedCode = result
@@ -112,9 +113,34 @@ struct HighlightedCodeBlock: View {
     }
 
     private var codeBlockBackground: Color {
-        colorScheme == .dark
+        if let appColors {
+            return Color(nsColor: appColors.textBackground.blended(withFraction: 0.08, of: appColors.syntaxBlue) ?? appColors.textBackground)
+        }
+        return colorScheme == .dark
             ? Color(red: 0.12, green: 0.12, blue: 0.13)
             : Color(red: 0.94, green: 0.94, blue: 0.95)
+    }
+
+    private var appColors: TerminalAppColors? {
+        terminalAppTheme?.theme(for: colorScheme)?.appColors()
+    }
+
+    private var highlightColors: HighlightColors {
+        guard let appColors else {
+            return colorScheme == .dark ? .dark(.xcode) : .light(.xcode)
+        }
+        return .custom(css: appColors.highlightCSS, background: appColors.textBackground.hexRGB)
+    }
+
+    private var colorSignature: String {
+        guard let appColors else { return "xcode-\(colorScheme)" }
+        return [
+            appColors.textForeground.hexRGB,
+            appColors.textBackground.hexRGB,
+            appColors.syntaxGreen.hexRGB,
+            appColors.syntaxBlue.hexRGB,
+            appColors.syntaxMagenta.hexRGB
+        ].joined(separator: "|")
     }
 
     private func copyCode() {
@@ -129,4 +155,34 @@ private struct HashableHighlightInput: Hashable {
     let code: String
     let language: String?
     let scheme: ColorScheme
+    let colorSignature: String
+}
+
+extension TerminalAppColors {
+    var highlightCSS: String {
+        let foreground = textForeground.hexRGB
+        let comment = textForeground.withAlphaComponent(0.62).hexRGB
+        let string = syntaxGreen.hexRGB
+        let number = syntaxYellow.hexRGB
+        let tag = syntaxBlue.hexRGB
+        let keyword = syntaxMagenta.hexRGB
+        let red = syntaxRed.hexRGB
+        let cyan = syntaxCyan.hexRGB
+
+        return """
+        pre code.hljs{display:block;overflow-x:auto;padding:1em}code.hljs{padding:3px 5px}.hljs{color:#\(foreground)}.hljs-comment,.hljs-quote{color:#\(comment)}.hljs-addition,.hljs-string,.hljs-symbol{color:#\(string)}.hljs-attr,.hljs-attribute,.hljs-literal,.hljs-number,.hljs-variable{color:#\(number)}.hljs-keyword,.hljs-selector-tag,.hljs-template-tag,.hljs-type{color:#\(keyword)}.hljs-name,.hljs-section,.hljs-title,.hljs-title.function_{color:#\(tag)}.hljs-tag,.hljs-deletion{color:#\(red)}.hljs-built_in,.hljs-link,.hljs-meta{color:#\(cyan)}.hljs-emphasis{font-style:italic}.hljs-strong{font-weight:700}
+        """
+    }
+}
+
+extension NSColor {
+    var hexRGB: String {
+        let color = usingColorSpace(.sRGB) ?? self
+        return String(
+            format: "%02x%02x%02x",
+            Int(round(color.redComponent * 255)),
+            Int(round(color.greenComponent * 255)),
+            Int(round(color.blueComponent * 255))
+        )
+    }
 }
