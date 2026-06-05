@@ -210,12 +210,12 @@ struct MainContainerView: View {
             onDragChanged: onDragChanged,
             onDragEnded: onDragEnded
         )
-        .frame(width: 6)
+        .frame(width: 3)
         .background(sidebarResizeHandleColor(isHovering: isHovering, isDragging: isDragging))
         .overlay(
             Rectangle()
                 .fill(sidebarResizeHandleAccent)
-                .frame(width: 2)
+                .frame(width: 1)
                 .opacity((isHovering || isDragging) ? 1 : 0)
         )
     }

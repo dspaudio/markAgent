@@ -59,6 +59,7 @@ struct TerminalColorTheme: Equatable, Sendable {
         let panelColor = backgroundColor.mixed(with: foregroundColor, fraction: isDark ? 0.08 : 0.05)
         let elevatedColor = backgroundColor.mixed(with: foregroundColor, fraction: isDark ? 0.13 : 0.09)
         let borderColor = backgroundColor.mixed(with: foregroundColor, fraction: isDark ? 0.22 : 0.18)
+        let syntaxFallbackColor = backgroundColor.mixed(with: foregroundColor, fraction: isDark ? 0.72 : 0.58)
 
         return TerminalAppColors(
             background: Color(nsColor: backgroundColor),
@@ -70,8 +71,19 @@ struct TerminalColorTheme: Equatable, Sendable {
             accent: Color(nsColor: accentColor),
             textBackground: backgroundColor,
             textForeground: foregroundColor,
-            insertionPoint: accentColor
+            insertionPoint: accentColor,
+            syntaxRed: paletteColor(primary: 1, bright: 9, fallback: syntaxFallbackColor),
+            syntaxGreen: paletteColor(primary: 2, bright: 10, fallback: syntaxFallbackColor),
+            syntaxYellow: paletteColor(primary: 3, bright: 11, fallback: syntaxFallbackColor),
+            syntaxBlue: paletteColor(primary: 4, bright: 12, fallback: accentColor),
+            syntaxMagenta: paletteColor(primary: 5, bright: 13, fallback: accentColor),
+            syntaxCyan: paletteColor(primary: 6, bright: 14, fallback: accentColor)
         )
+    }
+
+    private func paletteColor(primary: Int, bright: Int, fallback: NSColor) -> NSColor {
+        guard let hex = palette[primary] ?? palette[bright] else { return fallback }
+        return NSColor(hexString: hex) ?? fallback
     }
 }
 
@@ -86,6 +98,12 @@ struct TerminalAppColors {
     let textBackground: NSColor
     let textForeground: NSColor
     let insertionPoint: NSColor
+    let syntaxRed: NSColor
+    let syntaxGreen: NSColor
+    let syntaxYellow: NSColor
+    let syntaxBlue: NSColor
+    let syntaxMagenta: NSColor
+    let syntaxCyan: NSColor
 }
 
 private struct TerminalAppThemeKey: EnvironmentKey {

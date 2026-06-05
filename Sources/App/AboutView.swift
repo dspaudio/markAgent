@@ -23,10 +23,10 @@ struct AboutView: View {
         ),
         OpenSourceLibrary(
             name: "HighlightSwift",
-            role: "Code block syntax highlighting",
+            role: "Markdown preview code block syntax highlighting",
             license: "MIT; includes highlight.js under BSD-3-Clause",
             author: "Stefan Britton; highlight.js by Ivan Sagalaev",
-            details: "Used for syntax-highlighted code blocks.",
+            details: "Used for syntax-highlighted code blocks in rendered Markdown previews.",
             url: "https://github.com/appstefan/HighlightSwift"
         ),
         OpenSourceLibrary(
