@@ -4,9 +4,17 @@ struct FileEntryRow: View {
     let entry: FileEntry
     let isSelected: Bool
     var depth = 0
+    var isExpanded = false
+    var isLoading = false
     
     var body: some View {
         HStack(spacing: 8) {
+            Image(systemName: disclosureIconName)
+                .font(.system(size: 9, weight: .semibold))
+                .foregroundStyle(.secondary)
+                .frame(width: 12)
+                .opacity(entry.isDirectory ? 1 : 0)
+
             Image(systemName: iconName)
                 .font(.system(size: 14))
                 .foregroundStyle(iconColor)
@@ -27,15 +35,41 @@ struct FileEntryRow: View {
             }
             
             Spacer(minLength: 0)
+
+            if isLoading {
+                ProgressView()
+                    .scaleEffect(0.45)
+                    .frame(width: 14, height: 14)
+            }
         }
         .padding(.horizontal, 8)
-        .padding(.leading, CGFloat(depth) * 16)
+        .padding(.leading, CGFloat(depth) * 14)
         .padding(.vertical, 5)
         .contentShape(RoundedRectangle(cornerRadius: 6))
         .background(
             RoundedRectangle(cornerRadius: 6)
                 .fill(isSelected ? Color.accentColor.opacity(0.16) : Color.clear)
         )
+        .overlay(alignment: .leading) {
+            if depth > 0 {
+                HStack(spacing: 0) {
+                    ForEach(0..<depth, id: \.self) { _ in
+                        Rectangle()
+                            .fill(Color.secondary.opacity(0.16))
+                            .frame(width: 1)
+                            .frame(maxHeight: .infinity)
+                            .padding(.leading, 14)
+                            .padding(.trailing, 13)
+                    }
+                    Spacer(minLength: 0)
+                }
+                .allowsHitTesting(false)
+            }
+        }
+    }
+
+    private var disclosureIconName: String {
+        isExpanded ? "chevron.down" : "chevron.right"
     }
     
     private var iconName: String {

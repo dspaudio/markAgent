@@ -4,9 +4,11 @@ import SwiftUI
 struct TerminalTabView: NSViewRepresentable {
     var state: TerminalTabState
     var isActive: Bool
+    var onSearchShortcut: (SidebarSearchMode) -> Void = { _ in }
 
     func makeNSView(context: Context) -> AppTerminalView {
-        let view = AppTerminalView()
+        let view = SearchAwareTerminalView()
+        view.onSearchShortcut = onSearchShortcut
         view.controller = state.terminalViewState.controller
         view.configuration = state.terminalViewState.configuration
         view.delegate = context.coordinator
@@ -25,6 +27,9 @@ struct TerminalTabView: NSViewRepresentable {
     }
 
     func updateNSView(_ nsView: AppTerminalView, context: Context) {
+        if let searchAwareView = nsView as? SearchAwareTerminalView {
+            searchAwareView.onSearchShortcut = onSearchShortcut
+        }
         if nsView.controller !== state.terminalViewState.controller {
             nsView.controller = state.terminalViewState.controller
         }

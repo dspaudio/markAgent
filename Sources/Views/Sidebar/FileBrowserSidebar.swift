@@ -7,6 +7,7 @@ struct FileBrowserSidebar: View {
     var onOpenMarkdown: (URL) -> Void
     var onOpenOtherFile: (URL) -> Void
     var width: Double = 260
+    var searchCommandCenter: SidebarSearchCommandCenter? = nil
     
     @AppStorage("isOneClickPreviewEnabled") private var isOneClickPreviewEnabled = true
     @AppStorage("sidebarShowsHiddenFiles") private var showsHiddenFiles = false
@@ -26,11 +27,16 @@ struct FileBrowserSidebar: View {
     @State private var isSearching = false
     @State private var searchError: String?
     @State private var searchTask: Task<Void, Never>? = nil
+    @State private var searchDebounceTask: Task<Void, Never>? = nil
     @State private var selectedSearchResultID: SidebarSearchResult.ID?
+    @State private var searchFocusRequestID: UUID?
+    @State private var handledSearchRequestID: UUID?
+    @State private var isSearchVisible = false
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.terminalAppTheme) private var terminalAppTheme
 
     private let textPreviewByteLimit = 256 * 1024
+    private let searchDebounceDelayNanoseconds: UInt64 = 350_000_000
     
     var body: some View {
         VStack(spacing: 0) {
@@ -41,6 +47,16 @@ struct FileBrowserSidebar: View {
                     .truncationMode(.middle)
                 
                 Spacer()
+
+                Button(action: toggleSearchVisibility) {
+                    Image(systemName: "magnifyingglass")
+                        .font(.system(size: 13, weight: .semibold))
+                        .frame(width: 22, height: 22)
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(isSearchVisible ? Color.accentColor : Color.secondary)
+                .help(isSearchVisible ? String(localized: "검색 숨기기") : String(localized: "검색 표시"))
+                .accessibilityIdentifier("sidebar-toggle-search")
 
                 Button(action: {
                     showsHiddenFiles.toggle()
@@ -67,9 +83,11 @@ struct FileBrowserSidebar: View {
             
             Divider()
 
-            searchControls
+            if isSearchVisible {
+                searchControls
 
-            Divider()
+                Divider()
+            }
             
             if isOneClickPreviewEnabled, let previewState {
                 sidebarPreview(previewState)
@@ -84,8 +102,8 @@ struct FileBrowserSidebar: View {
         .foregroundStyle(appColors?.foreground ?? Color.primary)
         .background(
             SidebarEscapeKeyMonitor(
-                isActive: isOneClickPreviewEnabled && previewState != nil,
-                onEscape: closePreview
+                isActive: isSearchVisible || (isOneClickPreviewEnabled && previewState != nil),
+                onEscape: handleSidebarEscape
             )
         )
         .sheet(item: $previewImage) { selection in
@@ -97,31 +115,30 @@ struct FileBrowserSidebar: View {
             }
         }
         .onChange(of: searchText) { _, _ in
-            if searchText.trimmingCharacters(in: .whitespacesAndNewlines) != submittedSearchText {
-                searchTask?.cancel()
-                searchResults = []
-                searchError = nil
-                isSearching = false
-                selectedSearchResultID = nil
-            }
+            scheduleSearchForCurrentInput()
         }
         .onChange(of: searchMode) { _, _ in
-            rerunSubmittedSearch()
+            scheduleSearchForCurrentInput(delayNanoseconds: 80_000_000)
         }
         .onChange(of: showsHiddenFiles) { _, isEnabled in
             expandedDirectoryEntries = [:]
             directoryErrors = [:]
             loadingDirectoryIDs = []
             scanner.setIncludeHiddenFiles(isEnabled)
-            rerunSubmittedSearch()
+            scheduleSearchForCurrentInput(delayNanoseconds: 80_000_000)
         }
         .onChange(of: scanner.currentDirectory) { _, _ in
             clearSearchForDirectoryChange()
         }
+        .onChange(of: searchCommandCenter?.request?.id) { _, _ in
+            handleExternalSearchRequest()
+        }
         .onAppear {
             scanner.setIncludeHiddenFiles(showsHiddenFiles)
+            handleExternalSearchRequest()
         }
         .onDisappear {
+            searchDebounceTask?.cancel()
             searchTask?.cancel()
             loadPreviewTask?.cancel()
         }
@@ -140,26 +157,29 @@ struct FileBrowserSidebar: View {
     }
 
     private var isSearchActive: Bool {
-        !submittedSearchText.isEmpty
+        isSearchVisible && (!submittedSearchText.isEmpty || hasSearchText)
     }
 
     private var hasSearchText: Bool {
         !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
+    private var searchSummaryText: String? {
+        guard isSearchActive else { return nil }
+        if isSearching { return String(localized: "검색 중") }
+        if let searchError { return searchError }
+        return String(format: String(localized: "%d개 결과"), searchResults.count)
+    }
+
     private var displayRows: [SidebarDisplayRow] {
         var rows: [SidebarDisplayRow] = []
 
-        if !directoryEntries.isEmpty {
-            rows.append(.header(id: "root-folders", title: String(localized: "폴더"), depth: 0))
-            for entry in directoryEntries {
+        for entry in scanner.entries {
+            if entry.isDirectory {
                 appendDirectoryRows(for: entry, depth: 0, rows: &rows)
+            } else {
+                rows.append(.entry(entry, depth: 0))
             }
-        }
-
-        if !fileEntries.isEmpty {
-            rows.append(.header(id: "root-files", title: String(localized: "파일"), depth: 0))
-            rows.append(contentsOf: fileEntries.map { .entry($0, depth: 0) })
         }
 
         return rows
@@ -192,6 +212,12 @@ struct FileBrowserSidebar: View {
     private var searchControls: some View {
         VStack(spacing: 8) {
             HStack(spacing: 6) {
+                ForEach(SidebarSearchMode.allCases) { mode in
+                    searchModeButton(mode)
+                }
+            }
+
+            HStack(spacing: 6) {
                 Image(systemName: searchMode == .grep ? "text.viewfinder" : "magnifyingglass")
                     .font(.system(size: 12))
                     .foregroundStyle(.secondary)
@@ -202,7 +228,8 @@ struct FileBrowserSidebar: View {
                     placeholder: searchMode == .grep ? String(localized: "내용 검색") : String(localized: "파일 검색"),
                     onSubmit: submitSearch,
                     onMoveSelection: moveSearchSelection,
-                    onEscape: handleSearchEscape
+                    onEscape: handleSearchEscape,
+                    focusRequestID: searchFocusRequestID
                 )
                     .frame(height: 17)
                     .accessibilityIdentifier("sidebar-search-field")
@@ -227,17 +254,50 @@ struct FileBrowserSidebar: View {
                     .fill(appColors?.elevated ?? Color(nsColor: .textBackgroundColor).opacity(0.72))
             )
 
-            Picker(String(localized: "검색 모드"), selection: $searchMode) {
-                ForEach(SidebarSearchMode.allCases) { mode in
-                    Text(mode.title).tag(mode)
+            if let searchSummaryText {
+                HStack(spacing: 6) {
+                    Circle()
+                        .fill(searchError == nil ? Color.accentColor : Color.red)
+                        .frame(width: 5, height: 5)
+                    Text(searchSummaryText)
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundStyle(searchError == nil ? Color.secondary : Color.red)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                    Spacer(minLength: 0)
                 }
+                .accessibilityIdentifier("sidebar-search-summary")
             }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            .accessibilityIdentifier("sidebar-search-mode")
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 8)
+    }
+
+    private func searchModeButton(_ mode: SidebarSearchMode) -> some View {
+        let isSelected = searchMode == mode
+        return Button {
+            isSearchVisible = true
+            searchMode = mode
+            requestSearchFocus()
+        } label: {
+            Label(mode.title, systemImage: mode == .grep ? "text.viewfinder" : "doc.viewfinder")
+                .font(.system(size: 11, weight: .semibold))
+                .labelStyle(.titleAndIcon)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 5)
+                .contentShape(RoundedRectangle(cornerRadius: 6))
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(isSelected ? Color.accentColor : Color.secondary)
+        .background(
+            RoundedRectangle(cornerRadius: 6)
+                .fill(isSelected ? Color.accentColor.opacity(0.14) : Color.clear)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 6)
+                .stroke(isSelected ? Color.accentColor.opacity(0.36) : Color.secondary.opacity(0.18), lineWidth: 1)
+        )
+        .accessibilityIdentifier("sidebar-search-mode-\(mode.rawValue)")
     }
 
     private var fileBrowserList: some View {
@@ -260,8 +320,6 @@ struct FileBrowserSidebar: View {
                 } else {
                     ForEach(displayRows) { row in
                         switch row {
-                        case let .header(id: _, title: title, depth: depth):
-                            sectionHeader(title, depth: depth)
                         case let .entry(entry, depth):
                             entryRow(entry, depth: depth)
                         case let .status(id: _, message: message, depth: depth, isError: isError):
@@ -337,19 +395,12 @@ struct FileBrowserSidebar: View {
             return
         }
 
-        let childDirectories = children.filter(\.isDirectory)
-        let childFiles = children.filter { !$0.isDirectory }
-
-        if !childDirectories.isEmpty {
-            rows.append(.header(id: "\(entry.id)-folders", title: String(localized: "폴더"), depth: depth + 1))
-            for child in childDirectories {
+        for child in children {
+            if child.isDirectory {
                 appendDirectoryRows(for: child, depth: depth + 1, rows: &rows)
+            } else {
+                rows.append(.entry(child, depth: depth + 1))
             }
-        }
-
-        if !childFiles.isEmpty {
-            rows.append(.header(id: "\(entry.id)-files", title: String(localized: "파일"), depth: depth + 1))
-            rows.append(contentsOf: childFiles.map { .entry($0, depth: depth + 1) })
         }
     }
 
@@ -387,7 +438,13 @@ struct FileBrowserSidebar: View {
     private func entryRow(_ entry: FileEntry, depth: Int) -> some View {
         let isSelected = selectedEntryID == entry.id || currentFileURL?.path == entry.url.path
 
-        FileEntryRow(entry: entry, isSelected: isSelected, depth: depth)
+        FileEntryRow(
+            entry: entry,
+            isSelected: isSelected,
+            depth: depth,
+            isExpanded: expandedDirectoryIDs.contains(entry.id),
+            isLoading: loadingDirectoryIDs.contains(entry.id)
+        )
             .onTapGesture {
                 handleSingleClick(entry)
             }
@@ -462,15 +519,39 @@ struct FileBrowserSidebar: View {
             return
         }
 
+        searchDebounceTask?.cancel()
         startSearch(query: query)
     }
 
-    private func rerunSubmittedSearch() {
-        guard !submittedSearchText.isEmpty else { return }
-        startSearch(query: submittedSearchText)
+    private func scheduleSearchForCurrentInput(delayNanoseconds: UInt64? = nil) {
+        searchDebounceTask?.cancel()
+        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !query.isEmpty else {
+            resetSearchState()
+            return
+        }
+
+        if query != submittedSearchText {
+            searchTask?.cancel()
+            searchError = nil
+            isSearching = true
+            selectedSearchResultID = nil
+        }
+
+        let delay = delayNanoseconds ?? searchDebounceDelayNanoseconds
+        searchDebounceTask = Task { [query, delay] in
+            do {
+                try await Task.sleep(nanoseconds: delay)
+                guard !Task.isCancelled else { return }
+                startSearch(query: query)
+            } catch {
+                return
+            }
+        }
     }
 
     private func startSearch(query: String) {
+        searchDebounceTask?.cancel()
         searchTask?.cancel()
 
         let root = scanner.currentDirectory
@@ -507,12 +588,38 @@ struct FileBrowserSidebar: View {
     }
 
     private func resetSearchState() {
+        searchDebounceTask?.cancel()
         searchTask?.cancel()
         submittedSearchText = ""
         searchResults = []
         searchError = nil
         isSearching = false
         selectedSearchResultID = nil
+    }
+
+    private func toggleSearchVisibility() {
+        if isSearchVisible {
+            closeSearch()
+            return
+        }
+
+        isSearchVisible = true
+        requestSearchFocus()
+    }
+
+    private func handleExternalSearchRequest() {
+        guard let request = searchCommandCenter?.request else { return }
+        guard handledSearchRequestID != request.id else { return }
+        handledSearchRequestID = request.id
+        isSearchVisible = true
+        searchMode = request.mode
+        closePreview()
+        requestSearchFocus()
+        scheduleSearchForCurrentInput(delayNanoseconds: 80_000_000)
+    }
+
+    private func requestSearchFocus() {
+        searchFocusRequestID = UUID()
     }
 
     private func previewSelectedSearchCandidate() {
@@ -542,31 +649,39 @@ struct FileBrowserSidebar: View {
     }
 
     private func handleSearchEscape() {
-        var state = SidebarSearchStateSnapshot(
-            text: searchText,
-            results: searchResults,
-            isSearching: isSearching,
-            error: searchError,
-            selectedResultID: selectedSearchResultID,
-            isPreviewingResult: previewState != nil
-        )
+        stepBackFromSearch()
+    }
 
-        let outcome = SidebarSearchStateReducer.applyEscape(to: &state)
-        searchText = state.text
-        submittedSearchText = state.text
-        searchResults = state.results
-        isSearching = state.isSearching
-        searchError = state.error
-        selectedSearchResultID = state.selectedResultID
-
-        switch outcome {
-        case .none:
-            break
-        case .closePreview:
-            closePreview()
-        case .clearSearch:
-            previewState = nil
+    private func handleSidebarEscape() {
+        if isSearchVisible {
+            stepBackFromSearch()
+            return
         }
+
+        closePreview()
+    }
+
+    private func stepBackFromSearch() {
+        if previewState != nil {
+            closePreview()
+            requestSearchFocus()
+            return
+        }
+
+        if hasSearchText || !submittedSearchText.isEmpty || !searchResults.isEmpty || searchError != nil || isSearching {
+            resetSearchState()
+            searchText = ""
+            requestSearchFocus()
+            return
+        }
+
+        closeSearch()
+    }
+
+    private func closeSearch() {
+        isSearchVisible = false
+        resetSearchState()
+        closePreview()
     }
 
     private func clearSearchForDirectoryChange() {
@@ -830,14 +945,11 @@ struct FileBrowserSidebar: View {
 }
 
 private enum SidebarDisplayRow: Identifiable {
-    case header(id: String, title: String, depth: Int)
     case entry(FileEntry, depth: Int)
     case status(id: String, message: String, depth: Int, isError: Bool)
 
     var id: String {
         switch self {
-        case let .header(id, _, _):
-            return id
         case let .entry(entry, depth):
             return "\(entry.id)-\(depth)"
         case let .status(id, _, _, _):
@@ -959,6 +1071,7 @@ private struct SidebarSearchField: NSViewRepresentable {
     var onSubmit: () -> Void
     var onMoveSelection: (Int) -> Void
     var onEscape: () -> Void
+    var focusRequestID: UUID?
 
     func makeNSView(context: Context) -> NSTextField {
         let field = NSTextField()
@@ -982,6 +1095,13 @@ private struct SidebarSearchField: NSViewRepresentable {
             nsView.stringValue = text
         }
         nsView.placeholderString = placeholder
+        if context.coordinator.handledFocusRequestID != focusRequestID {
+            context.coordinator.handledFocusRequestID = focusRequestID
+            DispatchQueue.main.async {
+                nsView.window?.makeFirstResponder(nsView)
+                nsView.currentEditor()?.selectedRange = NSRange(location: nsView.stringValue.count, length: 0)
+            }
+        }
     }
 
     func makeCoordinator() -> Coordinator {
@@ -990,6 +1110,7 @@ private struct SidebarSearchField: NSViewRepresentable {
 
     final class Coordinator: NSObject, NSTextFieldDelegate {
         var parent: SidebarSearchField
+        var handledFocusRequestID: UUID?
 
         init(parent: SidebarSearchField) {
             self.parent = parent

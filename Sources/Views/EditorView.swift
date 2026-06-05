@@ -318,7 +318,7 @@ private struct MarkdownTextEditor: NSViewRepresentable {
         textView.isAutomaticDashSubstitutionEnabled = false
         textView.isAutomaticTextReplacementEnabled = false
         textView.allowsUndo = true
-        textView.textContainerInset = NSSize(width: 20, height: 20)
+        textView.textContainerInset = textContainerInset
         textView.minSize = NSSize(width: 0, height: scrollView.contentSize.height)
         textView.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
         textView.isVerticallyResizable = true
@@ -328,6 +328,7 @@ private struct MarkdownTextEditor: NSViewRepresentable {
         configureTextContainer(for: textView, in: scrollView)
 
         scrollView.documentView = textView
+        configureLineNumberGutter(in: scrollView, textView: textView)
         context.coordinator.appColors = appColors
         context.coordinator.resetTextMetrics(for: text)
         context.coordinator.applyMarkdownStyleIfNeeded(to: textView, force: true)
@@ -339,16 +340,18 @@ private struct MarkdownTextEditor: NSViewRepresentable {
         context.coordinator.appColors = appColors
         context.coordinator.fileURL = fileURL
         scrollView.backgroundColor = appColors?.textBackground ?? .textBackgroundColor
+        configureLineNumberGutter(in: scrollView, textView: textView)
         textView.backgroundColor = appColors?.textBackground ?? .textBackgroundColor
         textView.insertionPointColor = appColors?.insertionPoint ?? .controlAccentColor
 
         if context.coordinator.needsExternalTextUpdate(textView: textView, text: text) {
             textView.string = text
             context.coordinator.resetTextMetrics(for: text)
+            scrollView.lineNumberGutterView?.updateLineNumbers(text)
         }
 
         context.coordinator.rendersMarkdownStyle = rendersMarkdownStyle
-        textView.textContainerInset = NSSize(width: 20, height: 20)
+        textView.textContainerInset = textContainerInset
         context.coordinator.applyMarkdownStyleIfNeeded(to: textView)
         textView.textContainer?.widthTracksTextView = true
         configureTextContainer(for: textView, in: scrollView)
@@ -382,11 +385,36 @@ private struct MarkdownTextEditor: NSViewRepresentable {
         textView.textStorage?.setAttributedString(NSAttributedString())
         textView.layoutManager?.textStorage = nil
         textView.textContainer?.layoutManager = nil
+        scrollView.lineNumberGutterView?.detach()
         scrollView.documentView = nil
     }
 
     private var appColors: TerminalAppColors? {
         terminalAppTheme?.colors(for: colorScheme)
+    }
+
+    private var textContainerInset: NSSize {
+        NSSize(width: rendersMarkdownStyle ? 20 : 72, height: 20)
+    }
+
+    private func configureLineNumberGutter(in scrollView: NSScrollView, textView: NSTextView) {
+        if rendersMarkdownStyle {
+            scrollView.lineNumberGutterView?.detach()
+            scrollView.lineNumberGutterView?.removeFromSuperview()
+            return
+        }
+
+        let gutter: EditorLineNumberGutterView
+        if let existing = scrollView.lineNumberGutterView {
+            gutter = existing
+        } else {
+            gutter = EditorLineNumberGutterView(frame: .zero)
+            scrollView.contentView.addSubview(gutter, positioned: .above, relativeTo: nil)
+        }
+
+        gutter.appColors = appColors
+        gutter.attach(to: scrollView, textView: textView)
+        gutter.updateLineNumbers(textView.string)
     }
 
     private func configureTextContainer(for textView: NSTextView, in scrollView: NSScrollView) {
@@ -448,6 +476,7 @@ private struct MarkdownTextEditor: NSViewRepresentable {
             didReceiveLocalEdit = true
             lastAppliedText = textView.string
             resetTextMetrics(for: textView.string)
+            textView.enclosingScrollView?.lineNumberGutterView?.updateLineNumbers(textView.string)
             if rendersMarkdownStyle || shouldApplyRawSyntax(to: textView.string) {
                 applyMarkdownStyle(to: textView)
             }
@@ -970,4 +999,188 @@ private struct RawSyntaxColors {
     let string: NSColor
     let number: NSColor
     let tag: NSColor
+}
+
+private extension NSScrollView {
+    var lineNumberGutterView: EditorLineNumberGutterView? {
+        let directGutter = subviews.compactMap { $0 as? EditorLineNumberGutterView }.first
+        return directGutter ?? contentView.subviews.compactMap { $0 as? EditorLineNumberGutterView }.first
+    }
+}
+
+private final class EditorLineNumberGutterView: NSView {
+    weak var textView: NSTextView?
+    weak var scrollView: NSScrollView?
+    var appColors: TerminalAppColors? {
+        didSet {
+            needsDisplay = true
+        }
+    }
+
+    private var lineStarts = [0]
+    private var boundsObserver: NSObjectProtocol?
+    private let horizontalPadding: CGFloat = 8
+
+    override var isFlipped: Bool {
+        true
+    }
+
+    func attach(to scrollView: NSScrollView, textView: NSTextView) {
+        self.scrollView = scrollView
+        if self.textView !== textView {
+            self.textView = textView
+            updateLineNumbers(textView.string)
+        }
+        updateFrame()
+
+        guard boundsObserver == nil else { return }
+        scrollView.contentView.postsBoundsChangedNotifications = true
+        boundsObserver = NotificationCenter.default.addObserver(
+            forName: NSView.boundsDidChangeNotification,
+            object: scrollView.contentView,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.updateFrame()
+                self?.needsDisplay = true
+            }
+        }
+    }
+
+    func detach() {
+        if let boundsObserver {
+            NotificationCenter.default.removeObserver(boundsObserver)
+        }
+        boundsObserver = nil
+        textView = nil
+        scrollView = nil
+    }
+
+    func updateFrame() {
+        guard let scrollView else { return }
+        let visibleBounds = scrollView.contentView.bounds
+        frame = NSRect(
+            x: visibleBounds.minX,
+            y: visibleBounds.minY,
+            width: 56,
+            height: visibleBounds.height
+        )
+    }
+
+    func updateLineNumbers(_ text: String) {
+        lineStarts = Self.makeLineStarts(for: text)
+        needsDisplay = true
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        super.draw(dirtyRect)
+        NSGraphicsContext.saveGraphicsState()
+        NSBezierPath(rect: bounds).addClip()
+        defer {
+            NSGraphicsContext.restoreGraphicsState()
+        }
+        drawBackground()
+        drawLineNumbers()
+    }
+
+    private var lineNumberFont: NSFont {
+        .monospacedDigitSystemFont(ofSize: NSFont.systemFontSize, weight: .regular)
+    }
+
+    private func drawBackground() {
+        let backgroundColor = appColors?.textBackground ?? NSColor.textBackgroundColor
+        backgroundColor.setFill()
+        bounds.fill()
+
+        let dividerColor = appColors?.textForeground.withAlphaComponent(0.10) ?? NSColor.separatorColor
+        dividerColor.setFill()
+        NSRect(x: bounds.maxX - 1, y: bounds.minY, width: 1, height: bounds.height).fill()
+    }
+
+    private func drawLineNumbers() {
+        guard let textView,
+              let layoutManager = textView.layoutManager,
+              let textContainer = textView.textContainer
+        else { return }
+
+        let visibleRect = textView.visibleRect
+        let origin = textView.textContainerOrigin
+        let visibleContainerRect = NSRect(
+            x: max(0, visibleRect.minX - origin.x),
+            y: max(0, visibleRect.minY - origin.y - lineNumberFont.pointSize * 2),
+            width: visibleRect.width,
+            height: visibleRect.height + lineNumberFont.pointSize * 4
+        )
+        let glyphRange = layoutManager.glyphRange(
+            forBoundingRect: visibleContainerRect,
+            in: textContainer
+        )
+
+        if textView.string.isEmpty {
+            drawLineNumber(1, y: textView.textContainerInset.height)
+            return
+        }
+        guard glyphRange.length > 0 else { return }
+
+        var drawnLineNumbers = Set<Int>()
+        layoutManager.enumerateLineFragments(forGlyphRange: glyphRange) { _, usedRect, _, lineGlyphRange, _ in
+            guard lineGlyphRange.location < layoutManager.numberOfGlyphs else { return }
+            let characterIndex = layoutManager.characterIndexForGlyph(at: lineGlyphRange.location)
+            let lineNumber = self.lineNumber(containing: characterIndex)
+            guard drawnLineNumbers.insert(lineNumber).inserted else { return }
+
+            let y = origin.y + usedRect.minY - visibleRect.minY
+            self.drawLineNumber(lineNumber, y: y)
+        }
+    }
+
+    private func drawLineNumber(_ lineNumber: Int, y: CGFloat) {
+        let text = "\(lineNumber)" as NSString
+        let attributes: [NSAttributedString.Key: Any] = [
+            .font: lineNumberFont,
+            .foregroundColor: appColors?.textForeground.withAlphaComponent(0.48) ?? NSColor.secondaryLabelColor
+        ]
+        let size = text.size(withAttributes: attributes)
+        let point = NSPoint(
+            x: bounds.maxX - horizontalPadding - size.width,
+            y: y
+        )
+        text.draw(at: point, withAttributes: attributes)
+    }
+
+    private func lineNumber(containing location: Int) -> Int {
+        var lower = 0
+        var upper = lineStarts.count - 1
+
+        while lower <= upper {
+            let middle = (lower + upper) / 2
+            if lineStarts[middle] <= location {
+                lower = middle + 1
+            } else {
+                upper = middle - 1
+            }
+        }
+
+        return max(1, upper + 1)
+    }
+
+    private static func makeLineStarts(for text: String) -> [Int] {
+        let nsText = text as NSString
+        var starts = [0]
+        var searchLocation = 0
+
+        while searchLocation < nsText.length {
+            let range = nsText.range(
+                of: "\n",
+                options: [],
+                range: NSRange(location: searchLocation, length: nsText.length - searchLocation)
+            )
+            guard range.location != NSNotFound else { break }
+            searchLocation = range.location + range.length
+            starts.append(searchLocation)
+        }
+
+        return starts
+    }
+
 }
