@@ -54,6 +54,7 @@
 54. [세션 50: 숨김 파일 검색, ripgrep 설정 및 v1.7.1 릴리즈](#세션-50-숨김-파일-검색-ripgrep-설정-및-v171-릴리즈)
 55. [세션 51: 코드 하이라이팅, 사이드바 미리보기 폴리싱 및 v1.7.2 릴리즈](#세션-51-코드-하이라이팅-사이드바-미리보기-폴리싱-및-v172-릴리즈)
 56. [세션 52: 검색 단축키, 자동 검색, Raw Editor 라인 번호 및 v1.7.3 릴리즈](#세션-52-검색-단축키-자동-검색-raw-editor-라인-번호-및-v173-릴리즈)
+57. [세션 53: 터미널 선택 영역 스니펫 저장 및 v1.7.4 릴리즈](#세션-53-터미널-선택-영역-스니펫-저장-및-v174-릴리즈)
 
 ---
 
@@ -130,6 +131,7 @@
 | 67 | 숨김 파일 검색, ripgrep 설정 및 v1.7.1 릴리즈 | 좌우 사이드바 즉시 드래그, 숨김 파일 표시 토글, Enter 제출형 검색, ripgrep 가속 및 Settings 설치 확인 UI를 추가하고 앱 번들 버전 1.7.1 갱신 |
 | 68 | 코드 하이라이팅, 사이드바 미리보기 폴리싱 및 v1.7.2 릴리즈 | Preview/Raw Edit/왼쪽 사이드바 텍스트 미리보기의 테마 연동 구문 하이라이팅을 확장하고 Esc 닫기, 최근 문서 접기, 얇은 border, 뒤로가기 hit area, 짧은 줄 상단 정렬을 반영해 앱 번들 버전 1.7.2 갱신 |
 | 69 | 검색 단축키, 자동 검색, Raw Editor 라인 번호 및 v1.7.3 릴리즈 | 파일 검색/내용 검색 UI와 단축키, 터미널 포커스 중 검색 호출, 입력 지연 자동 검색, 단계적 Esc 동작, Raw Editor 라인 번호 거터를 반영하고 앱 번들 버전 1.7.3 갱신 |
+| 70 | 터미널 선택 영역 스니펫 저장 및 v1.7.4 릴리즈 | Cmd+Shift+C로 터미널 선택 내용을 프롬프트 스니펫에 저장하고 저장 직후 스니펫 목록을 열도록 반영, libghostty-spm 선택 복사 누수 워크어라운드와 upstream PR 기록, 앱 번들 버전 1.7.4 갱신 |
 
 ---
 
@@ -1538,6 +1540,7 @@ MarkAgent 메뉴의 `Settings…` 창을 추가하고, Ghostty theme/font-size/c
 
 변경 파일: `Sources/App/Info.plist`, `README.md`, `history.md`
 
+---
 
 ## 세션 51: 코드 하이라이팅, 사이드바 미리보기 폴리싱 및 v1.7.2 릴리즈
 
@@ -2833,5 +2836,52 @@ Raw Editor의 `NSTextView` 스크롤 clip view에 고정 오버레이 라인 번
 
 **응답:**
 명시 버전 `1.7.3`으로 `Info.plist`의 `CFBundleVersion`과 `CFBundleShortVersionString`을 갱신하고, README 기능 소개에 자동 지연 검색, 파일/내용 검색 단축키와 Edit 메뉴, 터미널 포커스 중 단축키 처리, Raw Editor 라인 번호 거터를 반영했다. `swift build`, `swift test` 108개, Developer ID 서명, Apple 공증, stapling, 압축 해제 후 `codesign`/`spctl` 검증을 통과했으며, `MarkAgent-v1.7.3.zip`의 SHA-256은 `db2555ce934e307aea22a488b77d4430419e7209bc36a42a606d54a958af97dd`로 기록했다.
+
+변경 파일: `Sources/App/Info.plist`, `README.md`, `history.md`
+
+---
+
+## 세션 53: 터미널 선택 영역 스니펫 저장 및 v1.7.4 릴리즈
+
+> 날짜: 2026-06-09
+> 경로: ~/workspace/markAgent
+
+터미널에서 선택한 텍스트를 바로 프롬프트 스니펫으로 저장하고, 저장 직후 스니펫 목록을 열어 캡처 결과를 확인할 수 있도록 개선했다. 선택 복사 과정에서 확인된 `libghostty-spm` 누수 경로는 로컬 vendor 패치와 upstream PR로 분리해 대응하고, 명시 버전 `1.7.4` 릴리즈를 준비했다.
+
+### 대화 1: Cmd+Shift+C 스니펫 저장과 목록 열기
+
+**사용자:**
+> 터미널에서 텍스트를 선택하고 cmd+shift+c 를 누르면 스니펫에 저장되도록 구현해줘 ulw
+
+**응답:**
+터미널 선택 텍스트를 pasteboard를 통해 안전하게 읽는 `TerminalSelectionPasteboardReader`와 저장 흐름을 담당하는 `TerminalSnippetSelectionSaver`를 추가했다. `SearchAwareTerminalView`, `TerminalTabView`, `ActiveTabContentView`, `MainContainerView`, `AppDelegate` 경로를 연결해 터미널이 first responder일 때도 Cmd+Shift+C를 앱 스니펫 저장 동작으로 소비하도록 했다. 저장 성공 후에는 활성 탭 그룹의 우측 사이드바를 열고 스니펫 탭을 선택해 사용자가 저장 여부를 바로 확인할 수 있게 했다.
+
+검증: `swift test`, `swift build`, 실제 `.build/MarkAgent.app` 터미널에서 선택 영역 저장 및 스니펫 목록 열림 확인.
+
+변경 파일: `Sources/Core/TerminalSelectionPasteboardReader.swift`, `Sources/Core/TerminalSnippetSelectionSaver.swift`, `Sources/Core/Tabs/TerminalKeybindRouting.swift`, `Sources/Core/Tabs/TabGroupState.swift`, `Sources/Views/Tabs/SearchAwareTerminalView.swift`, `Sources/Views/Tabs/TerminalTabView.swift`, `Sources/Views/Main/ActiveTabContentView.swift`, `Sources/Views/Main/MainContainerView.swift`, `Sources/App/AppDelegate.swift`, `Tests/MarkAgentTests/TerminalSelectionPasteboardReaderTests.swift`, `Tests/MarkAgentTests/TerminalSnippetSelectionSaverTests.swift`, `Tests/MarkAgentTests/TerminalSelectionSnippetCaptureTests.swift`, `Tests/MarkAgentTests/TerminalKeybindRoutingTests.swift`, `Tests/MarkAgentTests/TabGroupStateTests.swift`
+
+---
+
+### 대화 2: libghostty-spm 선택 복사 누수 대응
+
+**사용자:**
+> 기본 누수가 있다면 그걸 고쳐야해
+
+**응답:**
+`AppTerminalView.copySelectedTextToPasteboard()`를 반복 호출하면 `libghostty-spm`의 `ghostty_surface_read_selection` 경로에서 호출마다 128바이트 누수가 증가하는 것을 확인했다. MarkAgent는 `Vendor/libghostty-spm`에 로컬 패치를 두고 `runtimeConfig.supports_selection_clipboard = true`와 `copy_to_clipboard` binding을 사용하도록 전환했다. 이 문제와 영향을 받는 `libghostty-spm` 버전/커밋, 재현 스택, 검증 결과를 영어 문서로 기록하고, 사용자 GitHub 계정 fork에서 upstream PR을 생성했다.
+
+검증: release 앱에서 Cmd+A 후 Cmd+Shift+C를 여러 차례 반복하면서 `leaks <pid>`가 계속 `0 leaks for 0 total leaked bytes`를 유지하는 것을 확인. `Lakr233/libghostty-spm` PR #23 생성.
+
+변경 파일: `Package.swift`, `Package.resolved`, `Vendor/libghostty-spm/`, `docs/ghostty-spm-selection-copy-leak.md`, `AGENTS.md`
+
+---
+
+### 대화 3: v1.7.4 릴리즈 빌드
+
+**사용자:**
+> /release-build 1.7.4
+
+**응답:**
+명시 버전 `1.7.4`로 `Info.plist`의 `CFBundleVersion`과 `CFBundleShortVersionString`을 갱신했다. README 기능 소개에는 터미널 선택 영역을 Cmd+Shift+C로 프롬프트 스니펫에 저장하고 저장 직후 스니펫 사이드바를 여는 흐름을 반영했다. 이전 릴리즈 기록에서 확인한 `MARKAGENT_NOTARY_PROFILE=markagent` 프로필로 Developer ID 서명, Apple 공증, stapling, 압축 해제 후 `codesign`/`spctl` 검증을 통과했으며, `MarkAgent-v1.7.4.zip`의 SHA-256은 `cbed034a199bd8e36a49f1522b2b57b5c2abc3f109c1b0d2bbb1f8e473a0d7c1`로 기록했다.
 
 변경 파일: `Sources/App/Info.plist`, `README.md`, `history.md`

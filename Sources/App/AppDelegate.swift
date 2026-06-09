@@ -737,13 +737,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if event.modifierFlags.contains(.option) { modifiers.insert(.option) }
 
         guard modifiers.contains(EventModifierMask.command) else { return false }
-        if modifiers == [.command, .shift], ["f", "g"].contains(key.lowercased()) {
-            return false
+        if TerminalKeybindRouting.isSnippetShortcut(key: key, modifiers: modifiers) {
+            return saveSnippetFromActiveTerminalSelection()
         }
-        if key.lowercased() == "w", modifiers == [.command] {
+        if TerminalKeybindRouting.shouldSkipConfiguredTerminalKeybind(key: key, modifiers: modifiers) {
             return false
         }
         return tabs.activeTerminalTab?.state.sendConfiguredKeybind(event, key: key, modifiers: modifiers) == true
+    }
+
+    private func saveSnippetFromActiveTerminalSelection() -> Bool {
+        guard let terminalView = tabs.activeTerminalTab?.state.terminalView else { return true }
+
+        return TerminalSnippetSelectionSaver.saveSelection(
+            to: snippetStore,
+            copySelectionToPasteboard: {
+                terminalView.performBindingAction("copy_to_clipboard")
+            },
+            onSaved: { [weak self] in
+                self?.tabs.activeTabGroup?.showSnippetsSidebar()
+                self?.updateWindowTitle()
+            }
+        )
     }
 
     private func updateViewMenuState() {

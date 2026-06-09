@@ -33,5 +33,27 @@ final class TabGroupStateTests: XCTestCase {
         XCTAssertEqual(first.timelineStore.events.count, 1)
         XCTAssertTrue(second.timelineStore.events.isEmpty)
     }
-}
 
+    @MainActor
+    func testShowSnippetsSidebarSelectsSnippetsAndShowsSidebar() {
+        let group = TabGroupState()
+        group.gitDiffState.isShowingSidebar = false
+        group.rightSidebarTab = .gitChanges
+
+        group.showSnippetsSidebar()
+
+        XCTAssertTrue(group.gitDiffState.isShowingSidebar)
+        XCTAssertEqual(group.rightSidebarTab, .snippets)
+    }
+
+    @MainActor
+    func testShowSnippetsSidebarDoesNotRequireGitRepository() {
+        let group = TabGroupState(workingDirectory: URL(fileURLWithPath: "/tmp/not-a-repository"))
+
+        group.showSnippetsSidebar()
+
+        XCTAssertTrue(group.gitDiffState.isShowingSidebar)
+        XCTAssertNil(group.gitDiffState.repositoryRoot)
+        XCTAssertEqual(group.rightSidebarTab, .snippets)
+    }
+}
