@@ -3,8 +3,13 @@ import GhosttyTerminal
 
 final class SearchAwareTerminalView: AppTerminalView {
     var onSearchShortcut: ((SidebarSearchMode) -> Void)?
+    var onSnippetShortcut: ((String) -> Void)?
+    var selectedTextProvider: (() -> String?)?
 
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        if handleSnippetShortcut(event) {
+            return true
+        }
         if handleSearchShortcut(event) {
             return true
         }
@@ -12,6 +17,9 @@ final class SearchAwareTerminalView: AppTerminalView {
     }
 
     override func keyDown(with event: NSEvent) {
+        if handleSnippetShortcut(event) {
+            return
+        }
         if handleSearchShortcut(event) {
             return
         }
@@ -22,6 +30,37 @@ final class SearchAwareTerminalView: AppTerminalView {
         guard let mode = sidebarSearchMode(for: event) else { return false }
         onSearchShortcut?(mode)
         return true
+    }
+
+    private func handleSnippetShortcut(_ event: NSEvent) -> Bool {
+        guard isSnippetShortcut(event) else { return false }
+        guard let selectedText = selectedTextForSnippet(),
+              !selectedText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        else {
+            return true
+        }
+
+        onSnippetShortcut?(selectedText)
+        return true
+    }
+
+    private func isSnippetShortcut(_ event: NSEvent) -> Bool {
+        let modifiers = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+        guard modifiers == [.command, .shift],
+              let key = event.charactersIgnoringModifiers?.lowercased()
+        else { return false }
+
+        return key == "c"
+    }
+
+    private func selectedTextForSnippet() -> String? {
+        if let selectedTextProvider {
+            return selectedTextProvider()
+        }
+
+        return TerminalSelectionPasteboardReader.readSelectedText {
+            performBindingAction("copy_to_clipboard")
+        }
     }
 
     private func sidebarSearchMode(for event: NSEvent) -> SidebarSearchMode? {

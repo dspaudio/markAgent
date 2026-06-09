@@ -74,7 +74,8 @@ struct MainContainerView: View {
                         onDocumentChanged: onDocumentChanged,
                         onConfigurationSaved: onConfigurationSaved,
                         mentionedGitFileIDs: openMarkdownMentionedGitFileIDs,
-                        onSearchShortcut: focusSidebarSearch
+                        onSearchShortcut: focusSidebarSearch,
+                        onSnippetShortcut: saveSnippetFromTerminalSelection
                     )
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
 
@@ -273,6 +274,11 @@ struct MainContainerView: View {
     private func focusSidebarSearch(_ mode: SidebarSearchMode) {
         isLeftSidebarVisible = true
         searchCommandCenter.focus(mode)
+    }
+
+    private func saveSnippetFromTerminalSelection(_ body: String) {
+        _ = snippetStore.add(body: body)
+        tabs.activeTabGroup?.showSnippetsSidebar()
     }
     
     private func openMarkdownFromSidebar(_ url: URL) {

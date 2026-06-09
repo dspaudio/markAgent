@@ -32,6 +32,11 @@ final class TabGroupState {
         timelineStore.configureRepositoryRoot(gitDiffState.repositoryRoot)
     }
 
+    func showSnippetsSidebar() {
+        gitDiffState.isShowingSidebar = true
+        rightSidebarTab = .snippets
+    }
+
     func recordTimeline(_ action: AgentTimelineAction) {
         timelineStore.record(action)
     }
