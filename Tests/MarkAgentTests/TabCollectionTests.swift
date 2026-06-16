@@ -43,6 +43,21 @@ final class TabCollectionTests: XCTestCase {
     }
 
     @MainActor
+    func testClosingActiveChildTabReturnsToParentTabInSameGroup() async {
+        let tabs = TabCollection()
+        let firstTerminal = tabs.createTerminalTab(workingDirectory: URL(fileURLWithPath: "/tmp/terminal-one"))
+        let markdown = tabs.createMarkdownTab(fileURL: URL(fileURLWithPath: "/tmp/terminal-one/note.md"))
+        let secondTerminal = tabs.createTerminalTab(workingDirectory: URL(fileURLWithPath: "/tmp/terminal-two"))
+
+        tabs.selectTab(id: markdown.id)
+        let closed = await tabs.closeActiveTab()
+
+        XCTAssertTrue(closed)
+        XCTAssertEqual(tabs.activeTabID, firstTerminal.id)
+        XCTAssertNotEqual(tabs.activeTabID, secondTerminal.id)
+    }
+
+    @MainActor
     func testGitDiffTabForActiveGroupSharesGroupState() {
         let tabs = TabCollection()
         let terminal = tabs.createTerminalTab(workingDirectory: URL(fileURLWithPath: "/tmp/terminal-one"))

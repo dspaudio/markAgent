@@ -26,6 +26,46 @@ final class GitDiffStateTests: XCTestCase {
     }
 
     @MainActor
+    func testCleanRepositoryShowsLastCommitFilesAndDiffs() async throws {
+        let repository = try makeRepository()
+        defer { try? FileManager.default.removeItem(at: repository) }
+
+        try "base\nchanged\n".write(to: repository.appendingPathComponent("notes.md"), atomically: true, encoding: .utf8)
+        _ = try runGit(["add", "notes.md"], in: repository)
+        _ = try runGit(["commit", "-m", "update notes"], in: repository)
+
+        let state = GitDiffState()
+        state.refresh(for: repository)
+        try await waitUntil { state.changedFiles.count == 1 && !state.isRefreshing }
+        state.loadAllDiffs()
+        try await waitUntil { state.fileDiffs.count == 1 && !state.isLoadingDiffs }
+
+        XCTAssertTrue(state.isShowingLastCommit)
+        XCTAssertEqual(state.lastCommitSummary?.subject, "update notes")
+        XCTAssertEqual(state.changedFiles.first?.relativePath, "notes.md")
+        XCTAssertEqual(state.fileDiffs.first?.diffResult.addedCount, 1)
+    }
+
+    @MainActor
+    func testUncommittedChangesTakePriorityOverLastCommitFallback() async throws {
+        let repository = try makeRepository()
+        defer { try? FileManager.default.removeItem(at: repository) }
+
+        try "base\nchanged\n".write(to: repository.appendingPathComponent("notes.md"), atomically: true, encoding: .utf8)
+
+        let state = GitDiffState()
+        state.refresh(for: repository)
+        try await waitUntil { state.changedFiles.count == 1 && !state.isRefreshing }
+        state.loadAllDiffs()
+        try await waitUntil { state.fileDiffs.count == 1 && !state.isLoadingDiffs }
+
+        XCTAssertFalse(state.isShowingLastCommit)
+        XCTAssertNil(state.lastCommitSummary)
+        XCTAssertEqual(state.changedFiles.first?.relativePath, "notes.md")
+        XCTAssertEqual(state.fileDiffs.first?.diffResult.addedCount, 1)
+    }
+
+    @MainActor
     func testFocusLoadsAllFileDiffsAndRecordsScrollTarget() async throws {
         let repository = try makeRepository()
         defer { try? FileManager.default.removeItem(at: repository) }

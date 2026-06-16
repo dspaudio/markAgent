@@ -15,12 +15,17 @@ struct MainContainerView: View {
     @AppStorage("isLeftSidebarVisible") private var isLeftSidebarVisible = true
     @AppStorage("leftSidebarWidth") private var leftSidebarWidth: Double = 260
     @AppStorage("rightSidebarWidth") private var rightSidebarWidth: Double = 420
+    @State private var pendingLeftSidebarWidth: Double?
+    @State private var pendingRightSidebarWidth: Double?
     @State private var isHoveringLeftSidebarResizeHandle = false
     @State private var isDraggingLeftSidebarResizeHandle = false
     @State private var isHoveringSidebarResizeHandle = false
     @State private var isDraggingSidebarResizeHandle = false
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.terminalAppTheme) private var terminalAppTheme
+
+    private let sidebarResizeHandleHitWidth: Double = 8
+    private let sidebarResizeHandleVisibleWidth: Double = 3
     
     var body: some View {
         VStack(spacing: 0) {
@@ -49,20 +54,26 @@ struct MainContainerView: View {
                             currentFileURL: tabs.activeMarkdownTab?.fileURL,
                             onOpenMarkdown: openMarkdownFromSidebar,
                             onOpenOtherFile: openFileFromSidebar,
-                            width: clampedLeftSidebarWidth(for: geometry.size.width),
+                            width: currentLeftSidebarWidth(for: geometry.size.width),
                             searchCommandCenter: searchCommandCenter
                         )
 
                         sidebarResizeHandle(
-                            currentWidth: leftSidebarWidth,
+                            currentWidth: currentLeftSidebarWidth(for: geometry.size.width),
                             isHovering: isHoveringLeftSidebarResizeHandle,
                             isDragging: isDraggingLeftSidebarResizeHandle,
                             onHoverChanged: { isHoveringLeftSidebarResizeHandle = $0 },
                             onDragStarted: { isDraggingLeftSidebarResizeHandle = true },
                             onDragChanged: { proposedWidth in
-                                leftSidebarWidth = clampedLeftSidebarWidth(for: geometry.size.width, proposedWidth: proposedWidth)
+                                pendingLeftSidebarWidth = clampedLeftSidebarWidth(for: geometry.size.width, proposedWidth: proposedWidth)
                             },
-                            onDragEnded: { isDraggingLeftSidebarResizeHandle = false },
+                            onDragEnded: {
+                                if let pendingLeftSidebarWidth {
+                                    leftSidebarWidth = pendingLeftSidebarWidth
+                                }
+                                pendingLeftSidebarWidth = nil
+                                isDraggingLeftSidebarResizeHandle = false
+                            },
                             dragDirection: .leading
                         )
                     }
@@ -83,22 +94,28 @@ struct MainContainerView: View {
                        let timelineStore = activeTimelineStore,
                        gitDiffState.isShowingSidebar {
                         sidebarResizeHandle(
-                            currentWidth: rightSidebarWidth,
+                            currentWidth: currentRightSidebarWidth(for: geometry.size.width),
                             isHovering: isHoveringSidebarResizeHandle,
                             isDragging: isDraggingSidebarResizeHandle,
                             onHoverChanged: { isHoveringSidebarResizeHandle = $0 },
                             onDragStarted: { isDraggingSidebarResizeHandle = true },
                             onDragChanged: { proposedWidth in
-                                rightSidebarWidth = clampedSidebarWidth(for: geometry.size.width, proposedWidth: proposedWidth)
+                                pendingRightSidebarWidth = clampedSidebarWidth(for: geometry.size.width, proposedWidth: proposedWidth)
                             },
-                            onDragEnded: { isDraggingSidebarResizeHandle = false },
+                            onDragEnded: {
+                                if let pendingRightSidebarWidth {
+                                    rightSidebarWidth = pendingRightSidebarWidth
+                                }
+                                pendingRightSidebarWidth = nil
+                                isDraggingSidebarResizeHandle = false
+                            },
                             dragDirection: .trailing
                         )
                         RightSidebarView(
                             gitDiffState: gitDiffState,
                             snippetStore: snippetStore,
                             timelineStore: timelineStore,
-                            width: clampedSidebarWidth(for: geometry.size.width),
+                            width: currentRightSidebarWidth(for: geometry.size.width),
                             isGitDiffTabOpen: isGitDiffTabOpen,
                             onSelectFile: openGitDiffFile,
                             mentionedFileIDs: openMarkdownMentionedGitFileIDs,
@@ -214,12 +231,12 @@ struct MainContainerView: View {
             onDragChanged: onDragChanged,
             onDragEnded: onDragEnded
         )
-        .frame(width: 3)
+        .frame(width: sidebarResizeHandleHitWidth)
         .background(sidebarResizeHandleColor(isHovering: isHovering, isDragging: isDragging))
         .overlay(
             Rectangle()
                 .fill(sidebarResizeHandleAccent)
-                .frame(width: 1)
+                .frame(width: sidebarResizeHandleVisibleWidth)
                 .opacity((isHovering || isDragging) ? 1 : 0)
         )
     }
@@ -240,12 +257,12 @@ struct MainContainerView: View {
         appColors?.accent ?? Color.accentColor
     }
 
-    private func clampedSidebarWidth(for containerWidth: Double) -> Double {
-        max(250, min(800, min(rightSidebarWidth, max(containerWidth - 120, 250))))
+    private func currentRightSidebarWidth(for containerWidth: Double) -> Double {
+        clampedSidebarWidth(for: containerWidth, proposedWidth: pendingRightSidebarWidth ?? rightSidebarWidth)
     }
 
-    private func clampedLeftSidebarWidth(for containerWidth: Double) -> Double {
-        max(220, min(520, min(leftSidebarWidth, max(containerWidth - 240, 220))))
+    private func currentLeftSidebarWidth(for containerWidth: Double) -> Double {
+        clampedLeftSidebarWidth(for: containerWidth, proposedWidth: pendingLeftSidebarWidth ?? leftSidebarWidth)
     }
 
     private func clampedSidebarWidth(for containerWidth: Double, proposedWidth: Double) -> Double {
@@ -253,7 +270,11 @@ struct MainContainerView: View {
     }
 
     private func clampedLeftSidebarWidth(for containerWidth: Double, proposedWidth: Double) -> Double {
-        return max(220, min(520, min(proposedWidth, max(containerWidth - 240, 220))))
+        return max(220, min(proposedWidth, leftSidebarMaxWidth(for: containerWidth)))
+    }
+
+    private func leftSidebarMaxWidth(for containerWidth: Double) -> Double {
+        max(220, containerWidth * 0.5)
     }
 
     private func createTerminalTab() {

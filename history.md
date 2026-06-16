@@ -55,6 +55,7 @@
 55. [세션 51: 코드 하이라이팅, 사이드바 미리보기 폴리싱 및 v1.7.2 릴리즈](#세션-51-코드-하이라이팅-사이드바-미리보기-폴리싱-및-v172-릴리즈)
 56. [세션 52: 검색 단축키, 자동 검색, Raw Editor 라인 번호 및 v1.7.3 릴리즈](#세션-52-검색-단축키-자동-검색-raw-editor-라인-번호-및-v173-릴리즈)
 57. [세션 53: 터미널 선택 영역 스니펫 저장 및 v1.7.4 릴리즈](#세션-53-터미널-선택-영역-스니펫-저장-및-v174-릴리즈)
+58. [세션 54: 사이드바 리사이즈, 탭 복귀, Git fallback 및 v1.7.5 릴리즈](#세션-54-사이드바-리사이즈-탭-복귀-git-fallback-및-v175-릴리즈)
 
 ---
 
@@ -132,6 +133,7 @@
 | 68 | 코드 하이라이팅, 사이드바 미리보기 폴리싱 및 v1.7.2 릴리즈 | Preview/Raw Edit/왼쪽 사이드바 텍스트 미리보기의 테마 연동 구문 하이라이팅을 확장하고 Esc 닫기, 최근 문서 접기, 얇은 border, 뒤로가기 hit area, 짧은 줄 상단 정렬을 반영해 앱 번들 버전 1.7.2 갱신 |
 | 69 | 검색 단축키, 자동 검색, Raw Editor 라인 번호 및 v1.7.3 릴리즈 | 파일 검색/내용 검색 UI와 단축키, 터미널 포커스 중 검색 호출, 입력 지연 자동 검색, 단계적 Esc 동작, Raw Editor 라인 번호 거터를 반영하고 앱 번들 버전 1.7.3 갱신 |
 | 70 | 터미널 선택 영역 스니펫 저장 및 v1.7.4 릴리즈 | Cmd+Shift+C로 터미널 선택 내용을 프롬프트 스니펫에 저장하고 저장 직후 스니펫 목록을 열도록 반영, libghostty-spm 선택 복사 누수 워크어라운드와 upstream PR 기록, 앱 번들 버전 1.7.4 갱신 |
+| 71 | 사이드바 리사이즈, 탭 복귀, Git fallback 및 v1.7.5 릴리즈 | 좌우 사이드바 리사이즈 안정화, child tab 닫기 후 부모 탭 복귀, 깨끗한 Git 작업 트리에서 마지막 커밋 diff 표시, 왼쪽 파일 목록 새로고침 버튼을 반영하고 앱 번들 버전 1.7.5 갱신 |
 
 ---
 
@@ -1537,6 +1539,83 @@ MarkAgent 메뉴의 `Settings…` 창을 추가하고, Ghostty theme/font-size/c
 
 **응답:**
 명시 버전 `1.2.0`으로 앱 번들 버전을 갱신하고, README 기능 소개와 `history.md` 세션 기록을 이번 변경분에 맞게 업데이트한 뒤 릴리즈 빌드, GitHub Release, 커밋/푸시, main 대상 PR 생성 및 머지를 진행.
+
+변경 파일: `Sources/App/Info.plist`, `README.md`, `history.md`
+
+
+## 세션 54: 사이드바 리사이즈, 탭 복귀, Git fallback 및 v1.7.5 릴리즈
+
+> 날짜: 2026-06-16
+> 경로: ~/workspace/markAgent
+
+사이드바 조작감과 탭 그룹 복귀 동작을 안정화하고, Git 변경 목록이 비어 있을 때 마지막 커밋을 검토할 수 있도록 개선했다. 왼쪽 파일 사이드바에는 명시적 새로고침 버튼을 추가하고, 명시 버전 `1.7.5` 릴리즈를 준비했다.
+
+### 대화 1: 좌우 사이드바 리사이즈 안정화
+
+**사용자:**
+> 왼쪽 사이드바와 오른쪽 사이드바의 크기를 조절할 때 잘 안될때가 많아. 그리고 왼쪽 사이드바를 조절할 때 윈도우의 절반까지 늘릴 수 있으면 좋을 것 같아.
+> 정확하게 잡혀도 조절이 안될때가 있어
+> 멈칫 거리는 문제가 있어.
+
+**응답:**
+리사이즈 핸들의 실제 hit area를 넓히고, 드래그 시작 폭을 현재 표시된 클램프 폭 기준으로 계산하도록 보정했다. 드래그 중에는 `@AppStorage`에 매 프레임 쓰지 않고 `@State` 임시 폭만 갱신한 뒤 마우스를 놓을 때 한 번 저장하도록 바꿔 멈칫거림을 줄였으며, 왼쪽 사이드바 최대 폭은 윈도우 폭의 50%까지 허용했다.
+
+검증: `swift build`, 앱 실행 후 `leaks <pid>` 확인.
+
+변경 파일: `Sources/Views/Main/MainContainerView.swift`
+
+---
+
+### 대화 2: child tab 닫기 후 부모 탭 복귀
+
+**사용자:**
+> 추가로, 왼쪽 사이드바에서 파일을 더블클릭해서 편집 모드로 열었을 때 child tab으로 설정되는데, 편집을 종료하고 cmd+w로 닫으면 부모 탭이 아니라 오른쪽에 있는 다른 탭으로 이동하는 문제가 있어.
+
+**응답:**
+활성 탭을 닫을 때 단순히 닫힌 배열 인덱스의 오른쪽 탭을 선택하던 정책을 수정했다. 같은 탭 그룹 안의 이전 탭을 우선 활성화하고, 없을 때만 같은 그룹의 다음 탭과 기존 인접 탭 fallback을 사용하도록 바꿔 child tab을 닫으면 부모 탭으로 복귀하게 했다.
+
+검증: `swift test --filter TabCollectionTests`, `swift test`.
+
+변경 파일: `Sources/Core/Tabs/TabCollection.swift`, `Tests/MarkAgentTests/TabCollectionTests.swift`
+
+---
+
+### 대화 3: Git 변경 목록의 마지막 커밋 fallback
+
+**사용자:**
+> 우측의 git 변경파일의 목록에서 이미 커밋해 버리면 목록이 사라지는데, 마지막 커밋 코드와 목록이 표시되었으면 좋겠어
+> 커밋이 안되었을 땐 커밋 안된 파일의 변경내역이 나와야해
+
+**응답:**
+Git 변경 목록은 미커밋 변경이 있으면 기존처럼 working tree diff를 우선 표시하고, 변경이 없을 때만 마지막 커밋의 파일 목록과 `HEAD^` 대비 `HEAD` diff를 표시하도록 구현했다. 마지막 커밋 모드에서는 우측 사이드바와 전체 Diff 탭에 커밋 해시/제목 기준 요약을 보여준다.
+
+검증: `swift test --filter GitDiffStateTests`, `swift test`.
+
+변경 파일: `Sources/Core/GitDiffState.swift`, `Sources/Views/Sidebar/GitChangesSidebar.swift`, `Sources/Views/Tabs/GitDiffTabView.swift`, `Tests/MarkAgentTests/GitDiffStateTests.swift`
+
+---
+
+### 대화 4: 왼쪽 파일 목록 새로고침 버튼
+
+**사용자:**
+> left 사이드바의 파일 목록에서 새로고침 버튼 및 동작이 필요해.
+
+**응답:**
+왼쪽 파일 사이드바 헤더에 새로고침 버튼을 추가했다. 버튼은 현재 디렉터리를 다시 스캔하면서 펼쳐진 하위 폴더 캐시, 로딩/에러 상태, 프리뷰 상태를 정리하고, 검색어가 있으면 현재 입력 기준 검색도 다시 예약한다.
+
+검증: `swift build`, `swift test`, 앱 실행 후 `leaks <pid>` 확인.
+
+변경 파일: `Sources/Views/Sidebar/FileBrowserSidebar.swift`
+
+---
+
+### 대화 5: v1.7.5 릴리즈 준비
+
+**사용자:**
+> 앱 버전을 올리고 release 해줘. noratize profile은 markagent야.dev pr을 만들고 머지,  main pr 만들고 머지해줘.
+
+**응답:**
+앱 번들 버전을 `1.7.5`로 갱신하고, README 기능 설명에 사이드바 새로고침, 리사이즈 안정화, 마지막 커밋 diff fallback을 반영했다. 커밋/푸시 전 필수 규칙에 따라 이번 세션 내용을 `history.md` 목차, 타임라인 요약, 세션 본문에 기록했다. `MARKAGENT_NOTARY_PROFILE=markagent` 프로필로 Developer ID 서명, Apple 공증, stapling, 압축 해제 후 `codesign`/`spctl` 검증을 통과했으며, `MarkAgent-v1.7.5.zip`의 SHA-256은 `b7f03a4c6703d5dee0ce6c90e62cf59f9dc7a45c73a2bde9cfb50e4567c4592b`로 기록했다.
 
 변경 파일: `Sources/App/Info.plist`, `README.md`, `history.md`
 
