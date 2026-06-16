@@ -217,11 +217,12 @@ final class TabCollection {
         guard let index = tabs.firstIndex(where: { $0.id == id }) else { return false }
         let tab = tabs[index]
         let closedGroupID = tab.groupID
+        let replacementTabID = activeTabID == id ? tabToActivateAfterClosingTab(at: index) : nil
         guard await tab.prepareForClose() else { return false }
         tabs.remove(at: index)
         removeGroupIfOrphaned(closedGroupID)
         if activeTabID == id {
-            activeTabID = tabs.indices.contains(index) ? tabs[index].id : tabs.last?.id
+            activeTabID = replacementTabID
         }
         syncLastActiveGroupFromActiveTab()
         return true
@@ -265,6 +266,29 @@ final class TabCollection {
         }
 
         tabs.insert(tab, at: tabs.index(after: lastGroupIndex))
+    }
+
+    private func tabToActivateAfterClosingTab(at closingIndex: Int) -> UUID? {
+        guard tabs.indices.contains(closingIndex) else { return nil }
+
+        if let groupID = tabs[closingIndex].groupID {
+            if let previousGroupTab = tabs[..<closingIndex].last(where: { $0.groupID == groupID }) {
+                return previousGroupTab.id
+            }
+
+            let nextIndex = tabs.index(after: closingIndex)
+            if nextIndex < tabs.endIndex,
+               let nextGroupTab = tabs[nextIndex...].first(where: { $0.groupID == groupID }) {
+                return nextGroupTab.id
+            }
+        }
+
+        let nextIndex = tabs.index(after: closingIndex)
+        if tabs.indices.contains(nextIndex) {
+            return tabs[nextIndex].id
+        }
+
+        return tabs[..<closingIndex].last?.id
     }
 
     private func removeGroupIfOrphaned(_ groupID: TabGroupID?) {

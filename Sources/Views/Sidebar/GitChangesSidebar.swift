@@ -56,6 +56,12 @@ struct GitChangesSidebar: View {
             } else {
                 ScrollView {
                     LazyVStack(spacing: 2) {
+                        if state.isShowingLastCommit {
+                            lastCommitHeader
+                                .padding(.horizontal, 2)
+                                .padding(.bottom, 4)
+                        }
+
                         ForEach(state.changedFiles) { file in
                             GitChangedFileRow(
                                 file: file,
@@ -75,6 +81,26 @@ struct GitChangesSidebar: View {
                 .opacity(state.isRefreshing ? 0.72 : 1)
             }
         }
+    }
+
+    private var lastCommitHeader: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text("마지막 커밋")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(.secondary)
+
+            if let summary = state.lastCommitSummary {
+                Text(summary.displayText)
+                    .font(.system(size: 11, design: .monospaced))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 6)
+        .background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 6))
     }
 
     private func openPreview(for file: GitChangedFile) {
