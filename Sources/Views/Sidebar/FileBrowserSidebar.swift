@@ -58,6 +58,23 @@ struct FileBrowserSidebar: View {
                 .help(isSearchVisible ? String(localized: "검색 숨기기") : String(localized: "검색 표시"))
                 .accessibilityIdentifier("sidebar-toggle-search")
 
+                Button(action: refreshFileList) {
+                    if scanner.isLoading {
+                        ProgressView()
+                            .scaleEffect(0.45)
+                            .frame(width: 22, height: 22)
+                    } else {
+                        Image(systemName: "arrow.clockwise")
+                            .font(.system(size: 12))
+                            .frame(width: 22, height: 22)
+                    }
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(Color.secondary)
+                .help(String(localized: "새로고침"))
+                .disabled(scanner.isLoading)
+                .accessibilityIdentifier("sidebar-refresh-file-list")
+
                 Button(action: {
                     showsHiddenFiles.toggle()
                 }) {
@@ -146,6 +163,19 @@ struct FileBrowserSidebar: View {
 
     private var appColors: TerminalAppColors? {
         terminalAppTheme?.colors(for: colorScheme)
+    }
+
+    private func refreshFileList() {
+        expandedDirectoryIDs = []
+        expandedDirectoryEntries = [:]
+        loadingDirectoryIDs = []
+        directoryErrors = [:]
+        closePreview()
+        scanner.reload()
+
+        if isSearchActive || hasSearchText {
+            scheduleSearchForCurrentInput(delayNanoseconds: 80_000_000)
+        }
     }
 
     private var directoryEntries: [FileEntry] {

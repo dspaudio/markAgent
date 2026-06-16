@@ -3,12 +3,28 @@ import Foundation
 struct GitChangedFile: Identifiable, Equatable {
     let rootURL: URL
     let relativePath: String
+    let oldRelativePath: String?
     let status: String
+    let diffSource: GitDiffSource
 
     var id: String { relativePath }
     var url: URL { rootURL.appendingPathComponent(relativePath) }
     var displayName: String { URL(fileURLWithPath: relativePath).lastPathComponent }
     var parentPath: String { URL(fileURLWithPath: relativePath).deletingLastPathComponent().path }
+
+    init(
+        rootURL: URL,
+        relativePath: String,
+        oldRelativePath: String? = nil,
+        status: String,
+        diffSource: GitDiffSource = .workingTree
+    ) {
+        self.rootURL = rootURL
+        self.relativePath = relativePath
+        self.oldRelativePath = oldRelativePath
+        self.status = status
+        self.diffSource = diffSource
+    }
 }
 
 struct GitFileDiff: Identifiable {
@@ -18,11 +34,27 @@ struct GitFileDiff: Identifiable {
     var id: String { file.id }
 }
 
+enum GitDiffSource: Equatable {
+    case workingTree
+    case commit(baseRevision: String, targetRevision: String)
+}
+
+struct GitCommitSummary: Equatable {
+    let shortHash: String
+    let subject: String
+
+    var displayText: String {
+        subject.isEmpty ? shortHash : "\(shortHash) \(subject)"
+    }
+}
+
 @MainActor
 @Observable
 final class GitDiffState {
     private(set) var repositoryRoot: URL?
     private(set) var changedFiles: [GitChangedFile] = []
+    private(set) var isShowingLastCommit = false
+    private(set) var lastCommitSummary: GitCommitSummary?
     var selectedFile: GitChangedFile?
     var selectedDiffResult: DiffResult?
     private(set) var fileDiffs: [GitFileDiff] = []
@@ -56,21 +88,27 @@ final class GitDiffState {
                     return (
                         repositoryRoot: Optional<URL>.none,
                         changedFiles: [GitChangedFile](),
+                        isShowingLastCommit: false,
+                        lastCommitSummary: Optional<GitCommitSummary>.none,
                         errorMessage: Optional<String>.none
                     )
                 }
 
                 do {
-                    let changedFiles = try Self.loadChangedFiles(repositoryRoot: repositoryRoot)
+                    let refreshResult = try Self.loadChangedFilesOrLastCommit(repositoryRoot: repositoryRoot)
                     return (
                         repositoryRoot: Optional(repositoryRoot),
-                        changedFiles: changedFiles,
+                        changedFiles: refreshResult.files,
+                        isShowingLastCommit: refreshResult.isShowingLastCommit,
+                        lastCommitSummary: refreshResult.lastCommitSummary,
                         errorMessage: Optional<String>.none
                     )
                 } catch {
                     return (
                         repositoryRoot: Optional(repositoryRoot),
                         changedFiles: [GitChangedFile](),
+                        isShowingLastCommit: false,
+                        lastCommitSummary: Optional<GitCommitSummary>.none,
                         errorMessage: Optional(error.localizedDescription)
                     )
                 }
@@ -79,9 +117,13 @@ final class GitDiffState {
             guard !Task.isCancelled, token == self.refreshToken else { return }
             self.repositoryRoot = result.repositoryRoot
             self.changedFiles = result.changedFiles
+            self.isShowingLastCommit = result.isShowingLastCommit
+            self.lastCommitSummary = result.lastCommitSummary
             self.errorMessage = result.errorMessage
             self.isRefreshing = false
             if result.repositoryRoot == nil {
+                self.isShowingLastCommit = false
+                self.lastCommitSummary = nil
                 self.clearAllDiffs()
                 self.clearSelection()
                 return
@@ -95,9 +137,8 @@ final class GitDiffState {
 
             if let refreshedSelection = result.changedFiles.first(where: { $0.id == selectedFile.id }) {
                 if refreshedSelection != selectedFile {
-                    self.selectedFile = refreshedSelection
-                }
-                if self.selectedDiffResult == nil {
+                    self.select(refreshedSelection)
+                } else if self.selectedDiffResult == nil {
                     self.select(refreshedSelection)
                 }
             } else {
@@ -162,27 +203,19 @@ final class GitDiffState {
         selectTask?.cancel()
 
         selectTask = Task { [file, token] in
-            do {
-                let diffResult = try await Task.detached(priority: .userInitiated) {
-                    let oldContent = try Self.gitShowHead(file: file)
-                    let newContent = (try? String(contentsOf: file.url, encoding: .utf8)) ?? ""
-                    return DiffEngine.compute(
-                        old: oldContent,
-                        new: newContent,
-                        emptyOldIsAllAdded: true
-                    )
-                }.value
-                guard !Task.isCancelled, token == self.selectToken, self.selectedFile?.id == file.id else { return }
-                self.selectedFile = file
-                self.selectedDiffResult = diffResult
-                self.isLoadingSelectedDiff = false
-                self.errorMessage = nil
-            } catch {
-                guard !Task.isCancelled, token == self.selectToken, self.selectedFile?.id == file.id else { return }
-                self.selectedDiffResult = nil
-                self.isLoadingSelectedDiff = false
-                self.errorMessage = error.localizedDescription
-            }
+            let diffResult = await Task.detached(priority: .userInitiated) {
+                let contents = Self.diffContents(for: file)
+                return DiffEngine.compute(
+                    old: contents.old,
+                    new: contents.new,
+                    emptyOldIsAllAdded: true
+                )
+            }.value
+            guard !Task.isCancelled, token == self.selectToken, self.selectedFile?.id == file.id else { return }
+            self.selectedFile = file
+            self.selectedDiffResult = diffResult
+            self.isLoadingSelectedDiff = false
+            self.errorMessage = nil
         }
     }
 
@@ -215,6 +248,20 @@ final class GitDiffState {
         }
     }
 
+    private nonisolated static func loadChangedFilesOrLastCommit(repositoryRoot: URL) throws -> (
+        files: [GitChangedFile],
+        isShowingLastCommit: Bool,
+        lastCommitSummary: GitCommitSummary?
+    ) {
+        let changedFiles = try loadChangedFiles(repositoryRoot: repositoryRoot)
+        if !changedFiles.isEmpty {
+            return (changedFiles, false, nil)
+        }
+
+        let lastCommitFiles = try loadLastCommitFiles(repositoryRoot: repositoryRoot)
+        return (lastCommitFiles.files, !lastCommitFiles.files.isEmpty, lastCommitFiles.summary)
+    }
+
     private nonisolated static func loadChangedFiles(repositoryRoot: URL) throws -> [GitChangedFile] {
         let output = try runGit(["status", "--porcelain=v1", "-uall"], repositoryRoot: repositoryRoot)
         return output
@@ -233,23 +280,92 @@ final class GitDiffState {
             .sorted { $0.relativePath.localizedStandardCompare($1.relativePath) == .orderedAscending }
     }
 
+    private nonisolated static func loadLastCommitFiles(repositoryRoot: URL) throws -> (
+        files: [GitChangedFile],
+        summary: GitCommitSummary?
+    ) {
+        guard let summary = try loadLastCommitSummary(repositoryRoot: repositoryRoot) else {
+            return ([], nil)
+        }
+
+        let output = try runGit(["diff-tree", "--root", "--no-commit-id", "--name-status", "-r", "-M", "HEAD"], repositoryRoot: repositoryRoot)
+        let files = output
+            .split(whereSeparator: \.isNewline)
+            .compactMap { line -> GitChangedFile? in
+                let parts = line.split(separator: "\t", omittingEmptySubsequences: false).map(String.init)
+                guard let rawStatus = parts.first, !rawStatus.isEmpty else { return nil }
+
+                let relativePath: String
+                let oldRelativePath: String?
+                if rawStatus.hasPrefix("R"), parts.count >= 3 {
+                    oldRelativePath = parts[1]
+                    relativePath = parts[2]
+                } else if parts.count >= 2 {
+                    oldRelativePath = nil
+                    relativePath = parts[1]
+                } else {
+                    return nil
+                }
+
+                return GitChangedFile(
+                    rootURL: repositoryRoot,
+                    relativePath: relativePath,
+                    oldRelativePath: oldRelativePath,
+                    status: rawStatus,
+                    diffSource: .commit(baseRevision: "HEAD^", targetRevision: "HEAD")
+                )
+            }
+            .sorted { $0.relativePath.localizedStandardCompare($1.relativePath) == .orderedAscending }
+
+        return (files, summary)
+    }
+
+    private nonisolated static func loadLastCommitSummary(repositoryRoot: URL) throws -> GitCommitSummary? {
+        do {
+            let output = try runGit(["log", "-1", "--format=%h%x00%s"], repositoryRoot: repositoryRoot)
+            let parts = output.trimmingCharacters(in: .newlines).split(separator: Character("\u{0}"), maxSplits: 1, omittingEmptySubsequences: false)
+            guard let shortHash = parts.first.map(String.init), !shortHash.isEmpty else { return nil }
+            let subject = parts.count > 1 ? String(parts[1]) : ""
+            return GitCommitSummary(shortHash: shortHash, subject: subject)
+        } catch {
+            return nil
+        }
+    }
+
+    private nonisolated static func gitShow(_ revision: String, path: String, repositoryRoot: URL) throws -> String {
+        try runGit(["show", "\(revision):\(path)"], repositoryRoot: repositoryRoot)
+    }
+
     private nonisolated static func gitShowHead(file: GitChangedFile) throws -> String {
         do {
-            return try runGit(["show", "HEAD:\(file.relativePath)"], repositoryRoot: file.rootURL)
+            return try gitShow("HEAD", path: file.relativePath, repositoryRoot: file.rootURL)
         } catch {
             return ""
         }
     }
 
     private nonisolated static func loadFileDiff(file: GitChangedFile) -> GitFileDiff {
-        let oldContent = (try? gitShowHead(file: file)) ?? ""
-        let newContent = (try? String(contentsOf: file.url, encoding: .utf8)) ?? ""
+        let contents = diffContents(for: file)
         let diffResult = DiffEngine.compute(
-            old: oldContent,
-            new: newContent,
+            old: contents.old,
+            new: contents.new,
             emptyOldIsAllAdded: true
         )
         return GitFileDiff(file: file, diffResult: diffResult)
+    }
+
+    private nonisolated static func diffContents(for file: GitChangedFile) -> (old: String, new: String) {
+        switch file.diffSource {
+        case .workingTree:
+            let oldContent = (try? gitShowHead(file: file)) ?? ""
+            let newContent = (try? String(contentsOf: file.url, encoding: .utf8)) ?? ""
+            return (oldContent, newContent)
+        case .commit(let baseRevision, let targetRevision):
+            let oldPath = file.oldRelativePath ?? file.relativePath
+            let oldContent = (try? gitShow(baseRevision, path: oldPath, repositoryRoot: file.rootURL)) ?? ""
+            let newContent = (try? gitShow(targetRevision, path: file.relativePath, repositoryRoot: file.rootURL)) ?? ""
+            return (oldContent, newContent)
+        }
     }
 
     private nonisolated static func runGit(_ arguments: [String], repositoryRoot: URL) throws -> String {

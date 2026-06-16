@@ -31,7 +31,7 @@ struct GitDiffTabView: View {
                 .foregroundStyle(.secondary)
 
             VStack(alignment: .leading, spacing: 2) {
-                Text("Files changed")
+                Text(state.isShowingLastCommit ? "Last commit" : "Files changed")
                     .font(.system(size: 14, weight: .bold))
 
                 Text(summaryText)
@@ -115,6 +115,9 @@ struct GitDiffTabView: View {
         let addedCount = state.fileDiffs.reduce(0) { $0 + $1.diffResult.addedCount }
         let removedCount = state.fileDiffs.reduce(0) { $0 + $1.diffResult.removedCount }
         let repositoryName = state.repositoryRoot?.lastPathComponent ?? String(localized: "Git 저장소")
+        if state.isShowingLastCommit, let summary = state.lastCommitSummary {
+            return String(format: String(localized: "%@ · %@ · %@개 파일 · +%@ -%@"), repositoryName, summary.displayText, "\(fileCount)", "\(addedCount)", "\(removedCount)")
+        }
         return String(format: String(localized: "%@ · %@개 파일 · +%@ -%@"), repositoryName, "\(fileCount)", "\(addedCount)", "\(removedCount)")
     }
 
