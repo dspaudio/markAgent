@@ -56,6 +56,7 @@
 56. [세션 52: 검색 단축키, 자동 검색, Raw Editor 라인 번호 및 v1.7.3 릴리즈](#세션-52-검색-단축키-자동-검색-raw-editor-라인-번호-및-v173-릴리즈)
 57. [세션 53: 터미널 선택 영역 스니펫 저장 및 v1.7.4 릴리즈](#세션-53-터미널-선택-영역-스니펫-저장-및-v174-릴리즈)
 58. [세션 54: 사이드바 리사이즈, 탭 복귀, Git fallback 및 v1.7.5 릴리즈](#세션-54-사이드바-리사이즈-탭-복귀-git-fallback-및-v175-릴리즈)
+59. [세션 55: 사이드바 리사이즈 핸들 재구성 및 v1.7.6 릴리즈](#세션-55-사이드바-리사이즈-핸들-재구성-및-v176-릴리즈)
 
 ---
 
@@ -134,6 +135,7 @@
 | 69 | 검색 단축키, 자동 검색, Raw Editor 라인 번호 및 v1.7.3 릴리즈 | 파일 검색/내용 검색 UI와 단축키, 터미널 포커스 중 검색 호출, 입력 지연 자동 검색, 단계적 Esc 동작, Raw Editor 라인 번호 거터를 반영하고 앱 번들 버전 1.7.3 갱신 |
 | 70 | 터미널 선택 영역 스니펫 저장 및 v1.7.4 릴리즈 | Cmd+Shift+C로 터미널 선택 내용을 프롬프트 스니펫에 저장하고 저장 직후 스니펫 목록을 열도록 반영, libghostty-spm 선택 복사 누수 워크어라운드와 upstream PR 기록, 앱 번들 버전 1.7.4 갱신 |
 | 71 | 사이드바 리사이즈, 탭 복귀, Git fallback 및 v1.7.5 릴리즈 | 좌우 사이드바 리사이즈 안정화, child tab 닫기 후 부모 탭 복귀, 깨끗한 Git 작업 트리에서 마지막 커밋 diff 표시, 왼쪽 파일 목록 새로고침 버튼을 반영하고 앱 번들 버전 1.7.5 갱신 |
+| 72 | 사이드바 리사이즈 핸들 재구성 및 v1.7.6 릴리즈 | 좌우 사이드바 리사이즈 핸들을 오버레이 기반 내부 grip으로 재구성해 터미널 콘텐츠 가림과 드래그 실패를 줄이고 앱 번들 버전 1.7.6 갱신 |
 
 ---
 
@@ -1541,7 +1543,6 @@ MarkAgent 메뉴의 `Settings…` 창을 추가하고, Ghostty theme/font-size/c
 명시 버전 `1.2.0`으로 앱 번들 버전을 갱신하고, README 기능 소개와 `history.md` 세션 기록을 이번 변경분에 맞게 업데이트한 뒤 릴리즈 빌드, GitHub Release, 커밋/푸시, main 대상 PR 생성 및 머지를 진행.
 
 변경 파일: `Sources/App/Info.plist`, `README.md`, `history.md`
-
 
 ## 세션 54: 사이드바 리사이즈, 탭 복귀, Git fallback 및 v1.7.5 릴리즈
 
@@ -2962,5 +2963,53 @@ Raw Editor의 `NSTextView` 스크롤 clip view에 고정 오버레이 라인 번
 
 **응답:**
 명시 버전 `1.7.4`로 `Info.plist`의 `CFBundleVersion`과 `CFBundleShortVersionString`을 갱신했다. README 기능 소개에는 터미널 선택 영역을 Cmd+Shift+C로 프롬프트 스니펫에 저장하고 저장 직후 스니펫 사이드바를 여는 흐름을 반영했다. 이전 릴리즈 기록에서 확인한 `MARKAGENT_NOTARY_PROFILE=markagent` 프로필로 Developer ID 서명, Apple 공증, stapling, 압축 해제 후 `codesign`/`spctl` 검증을 통과했으며, `MarkAgent-v1.7.4.zip`의 SHA-256은 `cbed034a199bd8e36a49f1522b2b57b5c2abc3f109c1b0d2bbb1f8e473a0d7c1`로 기록했다.
+
+변경 파일: `Sources/App/Info.plist`, `README.md`, `history.md`
+
+---
+
+## 세션 55: 사이드바 리사이즈 핸들 재구성 및 v1.7.6 릴리즈
+
+> 날짜: 2026-06-18
+> 경로: ~/workspace/markAgent
+
+좌우 사이드바 리사이즈가 정확히 잡혀도 움직이지 않거나 터미널 영역을 가리는 문제를 다시 조사했다. 웹의 macOS/SwiftUI split divider 구현 사례를 참고해 핸들을 레이아웃 자식이 아니라 컨테이너 오버레이로 재구성하고, 명시 버전 `1.7.6` 릴리즈를 준비했다.
+
+### 대화 1: 사이드바 리사이즈 원인 재조사와 플랜
+
+**사용자:**
+> 몇번이나 사이드바의 크기 조절에 대해서 제자리에 딱 붙어서 드래그가 안되는 경우가 있다고 리포트를 했었는데, 여전히 동일한 문제가 있어. 다른 관점에서 문제의 원인을 파악해보고 플랜을 세워서 수정해줘.
+
+**응답:**
+기존 `NSViewRepresentable` 기반 리사이즈 핸들이 `HStack`의 8pt 자식으로 배치되어 주변 터미널/스크롤뷰와 히트테스트 및 레이아웃 재배치 경쟁을 하는 것을 원인으로 보았다. 핸들을 `ZStack` 오버레이로 올리고, 전체 컨테이너 좌표계의 포인터 위치로 폭을 계산하도록 재구성했다. 중앙 콘텐츠에는 `minWidth: 0`을 명시해 사이드바 폭 변경 시 암묵적 최소 폭이 레이아웃을 막지 않게 했다.
+
+변경 파일: `Sources/Views/Main/MainContainerView.swift`
+
+---
+
+### 대화 2: 웹 조사와 QA 피드백 반영
+
+**사용자:**
+> 웹에서 비슷한 문제를 찾아보고 해결의 힌트라도 확인해봐
+> 이렇게 터미널의 일부를 잘라먹는 버그가 있어. 그리고 두깨게 8pt는 너무 두꺼워. 4pt 정도면 충분해
+> 4pt의 보더가 없어져서 붙잡아서 드래그하기가 어려운데?
+> 터미널 안쪽으로 투명한 라인이 생겨서 보이는데?
+
+**응답:**
+Apple `HSplitView`, SwiftUI 커스텀 drag separator, Ghostty macOS split divider hit area 논의를 확인하고, divider를 콘텐츠 위에 걸치는 대신 사이드바 내부에 배치하는 방식으로 보정했다. 보이는 divider는 4pt로 유지하고, 잡기 쉬운 8pt hit area는 전부 사이드바 내부로 밀어 넣어 터미널 콘텐츠와 투명 hit area가 겹치지 않게 했다.
+
+검증: `swift build`, `swift test --filter TabCollectionTests`, QA debug 번들 실행.
+
+변경 파일: `Sources/Views/Main/MainContainerView.swift`
+
+---
+
+### 대화 3: v1.7.6 릴리즈 준비
+
+**사용자:**
+> 이제 앱 버전을 하나 올리고 github에 release에 올려줘. develop PR 머지, main PR 머지도 해야해
+
+**응답:**
+앱 번들 버전을 `1.7.6`으로 갱신하고, README 기능 설명에 사이드바 내부 4pt divider와 넓은 내부 hit area를 반영했다. 커밋/푸시 전 필수 규칙에 따라 이번 세션 내용을 `history.md` 목차, 타임라인 요약, 세션 본문에 기록했다. 이후 `dev` 대상 PR과 `main` 대상 PR, GitHub Release `v1.7.6` 생성 절차를 진행한다.
 
 변경 파일: `Sources/App/Info.plist`, `README.md`, `history.md`
