@@ -25,7 +25,7 @@ struct MainContainerView: View {
     @Environment(\.terminalAppTheme) private var terminalAppTheme
 
     private let sidebarResizeHandleHitWidth: Double = 8
-    private let sidebarResizeHandleVisibleWidth: Double = 3
+    private let sidebarResizeHandleVisibleWidth: Double = 4
     
     var body: some View {
         VStack(spacing: 0) {
@@ -46,26 +46,61 @@ struct MainContainerView: View {
             )
             
             GeometryReader { geometry in
-                HStack(spacing: 0) {
-                    if isLeftSidebarVisible {
-                        FileBrowserSidebar(
-                            scanner: scanner,
-                            recentStore: recentStore,
-                            currentFileURL: tabs.activeMarkdownTab?.fileURL,
-                            onOpenMarkdown: openMarkdownFromSidebar,
-                            onOpenOtherFile: openFileFromSidebar,
-                            width: currentLeftSidebarWidth(for: geometry.size.width),
-                            searchCommandCenter: searchCommandCenter
-                        )
+                ZStack(alignment: .topLeading) {
+                    HStack(spacing: 0) {
+                        if isLeftSidebarVisible {
+                            FileBrowserSidebar(
+                                scanner: scanner,
+                                recentStore: recentStore,
+                                currentFileURL: tabs.activeMarkdownTab?.fileURL,
+                                onOpenMarkdown: openMarkdownFromSidebar,
+                                onOpenOtherFile: openFileFromSidebar,
+                                width: currentLeftSidebarWidth(for: geometry.size.width),
+                                searchCommandCenter: searchCommandCenter
+                            )
+                        }
 
+                        ActiveTabContentView(
+                            tabs: tabs,
+                            onOpenFile: onOpenFile,
+                            onNewTab: { isShowingNewTabChooser = true },
+                            onDocumentChanged: onDocumentChanged,
+                            onConfigurationSaved: onConfigurationSaved,
+                            mentionedGitFileIDs: openMarkdownMentionedGitFileIDs,
+                            onSearchShortcut: focusSidebarSearch,
+                            onSnippetShortcut: saveSnippetFromTerminalSelection
+                        )
+                        .frame(minWidth: 0, maxWidth: .infinity, maxHeight: .infinity)
+
+                        if let gitDiffState = activeGitDiffState,
+                           let timelineStore = activeTimelineStore,
+                           gitDiffState.isShowingSidebar {
+                            RightSidebarView(
+                                gitDiffState: gitDiffState,
+                                snippetStore: snippetStore,
+                                timelineStore: timelineStore,
+                                width: currentRightSidebarWidth(for: geometry.size.width),
+                                isGitDiffTabOpen: isGitDiffTabOpen,
+                                onSelectFile: openGitDiffFile,
+                                mentionedFileIDs: openMarkdownMentionedGitFileIDs,
+                                selectedTab: activeRightSidebarTab
+                            )
+                            .id(tabs.activeTabGroup?.id.rawValue)
+                        }
+                    }
+
+                    if isLeftSidebarVisible {
                         sidebarResizeHandle(
-                            currentWidth: currentLeftSidebarWidth(for: geometry.size.width),
                             isHovering: isHoveringLeftSidebarResizeHandle,
                             isDragging: isDraggingLeftSidebarResizeHandle,
+                            visibleAlignment: .trailing,
                             onHoverChanged: { isHoveringLeftSidebarResizeHandle = $0 },
-                            onDragStarted: { isDraggingLeftSidebarResizeHandle = true },
-                            onDragChanged: { proposedWidth in
-                                pendingLeftSidebarWidth = clampedLeftSidebarWidth(for: geometry.size.width, proposedWidth: proposedWidth)
+                            onDragChanged: { pointerX in
+                                isDraggingLeftSidebarResizeHandle = true
+                                pendingLeftSidebarWidth = clampedLeftSidebarWidth(
+                                    for: geometry.size.width,
+                                    proposedWidth: pointerX + sidebarResizeHandleVisibleWidth / 2
+                                )
                             },
                             onDragEnded: {
                                 if let pendingLeftSidebarWidth {
@@ -73,34 +108,27 @@ struct MainContainerView: View {
                                 }
                                 pendingLeftSidebarWidth = nil
                                 isDraggingLeftSidebarResizeHandle = false
-                            },
-                            dragDirection: .leading
+                            }
                         )
+                        .position(
+                            x: currentLeftSidebarWidth(for: geometry.size.width) - sidebarResizeHandleHitWidth / 2,
+                            y: geometry.size.height / 2
+                        )
+                        .zIndex(10)
                     }
 
-                    ActiveTabContentView(
-                        tabs: tabs,
-                        onOpenFile: onOpenFile,
-                        onNewTab: { isShowingNewTabChooser = true },
-                        onDocumentChanged: onDocumentChanged,
-                        onConfigurationSaved: onConfigurationSaved,
-                        mentionedGitFileIDs: openMarkdownMentionedGitFileIDs,
-                        onSearchShortcut: focusSidebarSearch,
-                        onSnippetShortcut: saveSnippetFromTerminalSelection
-                    )
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-
-                    if let gitDiffState = activeGitDiffState,
-                       let timelineStore = activeTimelineStore,
-                       gitDiffState.isShowingSidebar {
+                    if activeGitDiffState?.isShowingSidebar == true {
                         sidebarResizeHandle(
-                            currentWidth: currentRightSidebarWidth(for: geometry.size.width),
                             isHovering: isHoveringSidebarResizeHandle,
                             isDragging: isDraggingSidebarResizeHandle,
+                            visibleAlignment: .leading,
                             onHoverChanged: { isHoveringSidebarResizeHandle = $0 },
-                            onDragStarted: { isDraggingSidebarResizeHandle = true },
-                            onDragChanged: { proposedWidth in
-                                pendingRightSidebarWidth = clampedSidebarWidth(for: geometry.size.width, proposedWidth: proposedWidth)
+                            onDragChanged: { pointerX in
+                                isDraggingSidebarResizeHandle = true
+                                pendingRightSidebarWidth = clampedSidebarWidth(
+                                    for: geometry.size.width,
+                                    proposedWidth: geometry.size.width - pointerX + sidebarResizeHandleVisibleWidth / 2
+                                )
                             },
                             onDragEnded: {
                                 if let pendingRightSidebarWidth {
@@ -108,20 +136,13 @@ struct MainContainerView: View {
                                 }
                                 pendingRightSidebarWidth = nil
                                 isDraggingSidebarResizeHandle = false
-                            },
-                            dragDirection: .trailing
+                            }
                         )
-                        RightSidebarView(
-                            gitDiffState: gitDiffState,
-                            snippetStore: snippetStore,
-                            timelineStore: timelineStore,
-                            width: currentRightSidebarWidth(for: geometry.size.width),
-                            isGitDiffTabOpen: isGitDiffTabOpen,
-                            onSelectFile: openGitDiffFile,
-                            mentionedFileIDs: openMarkdownMentionedGitFileIDs,
-                            selectedTab: activeRightSidebarTab
+                        .position(
+                            x: geometry.size.width - currentRightSidebarWidth(for: geometry.size.width) + sidebarResizeHandleHitWidth / 2,
+                            y: geometry.size.height / 2
                         )
-                        .id(tabs.activeTabGroup?.id.rawValue)
+                        .zIndex(10)
                     }
                 }
                 .coordinateSpace(name: "main-container")
@@ -214,30 +235,40 @@ struct MainContainerView: View {
     }
 
     private func sidebarResizeHandle(
-        currentWidth: Double,
         isHovering: Bool,
         isDragging: Bool,
+        visibleAlignment: Alignment,
         onHoverChanged: @escaping (Bool) -> Void,
-        onDragStarted: @escaping () -> Void,
         onDragChanged: @escaping (Double) -> Void,
-        onDragEnded: @escaping () -> Void,
-        dragDirection: SidebarResizeHandleDirection
+        onDragEnded: @escaping () -> Void
     ) -> some View {
-        SidebarResizeHandleView(
-            currentWidth: currentWidth,
-            dragDirection: dragDirection,
-            onHoverChanged: onHoverChanged,
-            onDragStarted: onDragStarted,
-            onDragChanged: onDragChanged,
-            onDragEnded: onDragEnded
-        )
+        Rectangle()
+            .fill(Color.clear)
         .frame(width: sidebarResizeHandleHitWidth)
+        .frame(maxHeight: .infinity)
+        .contentShape(Rectangle())
         .background(sidebarResizeHandleColor(isHovering: isHovering, isDragging: isDragging))
-        .overlay(
+        .overlay(alignment: visibleAlignment) {
             Rectangle()
-                .fill(sidebarResizeHandleAccent)
+                .fill(sidebarResizeHandleVisibleColor(isHovering: isHovering, isDragging: isDragging))
                 .frame(width: sidebarResizeHandleVisibleWidth)
-                .opacity((isHovering || isDragging) ? 1 : 0)
+        }
+        .onHover { hovering in
+            onHoverChanged(hovering)
+            if hovering {
+                NSCursor.resizeLeftRight.set()
+            } else {
+                NSCursor.arrow.set()
+            }
+        }
+        .highPriorityGesture(
+            DragGesture(minimumDistance: 0, coordinateSpace: .named("main-container"))
+                .onChanged { value in
+                    onDragChanged(value.location.x)
+                }
+                .onEnded { _ in
+                    onDragEnded()
+                }
         )
     }
 
@@ -250,11 +281,19 @@ struct MainContainerView: View {
             return (appColors?.accent ?? Color.accentColor).opacity(0.10)
         }
 
-        return appColors?.border ?? Color.secondary.opacity(0.14)
+        return Color.clear
     }
 
     private var sidebarResizeHandleAccent: Color {
         appColors?.accent ?? Color.accentColor
+    }
+
+    private func sidebarResizeHandleVisibleColor(isHovering: Bool, isDragging: Bool) -> Color {
+        if isHovering || isDragging {
+            return sidebarResizeHandleAccent
+        }
+
+        return appColors?.border ?? Color.secondary.opacity(0.35)
     }
 
     private func currentRightSidebarWidth(for containerWidth: Double) -> Double {
@@ -338,140 +377,4 @@ struct MainContainerView: View {
             self.scanner.setDirectory(url)
         }
     }
-}
-
-private struct SidebarResizeHandleView: NSViewRepresentable {
-    let currentWidth: Double
-    let dragDirection: SidebarResizeHandleDirection
-    let onHoverChanged: (Bool) -> Void
-    let onDragStarted: () -> Void
-    let onDragChanged: (Double) -> Void
-    let onDragEnded: () -> Void
-
-    func makeNSView(context: Context) -> SidebarResizeHandleNSView {
-        let view = SidebarResizeHandleNSView()
-        view.currentSidebarWidth = currentWidth
-        view.dragDirection = dragDirection
-        view.onHoverChanged = onHoverChanged
-        view.onDragStarted = onDragStarted
-        view.onDragChanged = onDragChanged
-        view.onDragEnded = onDragEnded
-        return view
-    }
-
-    func updateNSView(_ nsView: SidebarResizeHandleNSView, context: Context) {
-        nsView.currentSidebarWidth = currentWidth
-        nsView.dragDirection = dragDirection
-        nsView.onHoverChanged = onHoverChanged
-        nsView.onDragStarted = onDragStarted
-        nsView.onDragChanged = onDragChanged
-        nsView.onDragEnded = onDragEnded
-    }
-}
-
-private final class SidebarResizeHandleNSView: NSView {
-    var currentSidebarWidth: Double = 420
-    var dragDirection: SidebarResizeHandleDirection = .trailing
-    var onHoverChanged: ((Bool) -> Void)?
-    var onDragStarted: (() -> Void)?
-    var onDragChanged: ((Double) -> Void)?
-    var onDragEnded: (() -> Void)?
-
-    private var trackingArea: NSTrackingArea?
-    private var initialMouseXInWindow: CGFloat?
-    private var initialSidebarWidth: CGFloat?
-
-    override func updateTrackingAreas() {
-        super.updateTrackingAreas()
-
-        if let trackingArea {
-            removeTrackingArea(trackingArea)
-        }
-
-        let newTrackingArea = NSTrackingArea(
-            rect: bounds,
-            options: [.activeAlways, .mouseEnteredAndExited, .inVisibleRect],
-            owner: self,
-            userInfo: nil
-        )
-        addTrackingArea(newTrackingArea)
-        trackingArea = newTrackingArea
-    }
-
-    override func resetCursorRects() {
-        addCursorRect(bounds, cursor: .resizeLeftRight)
-    }
-
-    override func mouseEntered(with event: NSEvent) {
-        super.mouseEntered(with: event)
-        onHoverChanged?(true)
-    }
-
-    override func mouseExited(with event: NSEvent) {
-        super.mouseExited(with: event)
-        onHoverChanged?(false)
-    }
-
-    override func mouseDown(with event: NSEvent) {
-        beginDrag(with: event)
-
-        guard let window else {
-            finishDrag()
-            return
-        }
-        while let nextEvent = window.nextEvent(
-            matching: [.leftMouseDragged, .leftMouseUp],
-            until: .distantFuture,
-            inMode: .eventTracking,
-            dequeue: true
-        ) {
-            switch nextEvent.type {
-            case .leftMouseDragged:
-                updateDrag(with: nextEvent)
-            case .leftMouseUp:
-                finishDrag()
-                return
-            default:
-                break
-            }
-        }
-    }
-
-    override func mouseDragged(with event: NSEvent) {
-        updateDrag(with: event)
-    }
-
-    override func mouseUp(with event: NSEvent) {
-        finishDrag()
-    }
-
-    private func beginDrag(with event: NSEvent) {
-        initialMouseXInWindow = event.locationInWindow.x
-        initialSidebarWidth = currentSidebarWidth
-        onDragStarted?()
-    }
-
-    private func updateDrag(with event: NSEvent) {
-        guard let initialMouseXInWindow, let initialSidebarWidth else { return }
-        let deltaX = event.locationInWindow.x - initialMouseXInWindow
-        let proposedWidth: CGFloat
-        switch dragDirection {
-        case .leading:
-            proposedWidth = initialSidebarWidth + deltaX
-        case .trailing:
-            proposedWidth = initialSidebarWidth - deltaX
-        }
-        onDragChanged?(proposedWidth)
-    }
-
-    private func finishDrag() {
-        initialMouseXInWindow = nil
-        initialSidebarWidth = nil
-        onDragEnded?()
-    }
-}
-
-private enum SidebarResizeHandleDirection {
-    case leading
-    case trailing
 }
