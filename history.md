@@ -64,6 +64,7 @@
 64. [세션 60: Remote 상태 분리 및 Git 프로세스 트리 정리](#세션-60-remote-상태-분리-및-git-프로세스-트리-정리)
 65. [세션 61: 저장소 전환 시 브랜치 상태 격리](#세션-61-저장소-전환-시-브랜치-상태-격리)
 66. [세션 62: 브랜치 비동기 상태 경쟁 최종 보강](#세션-62-브랜치-비동기-상태-경쟁-최종-보강)
+67. [세션 63: Remote 로딩 헤더 압축 수정](#세션-63-remote-로딩-헤더-압축-수정)
 
 ---
 
@@ -150,6 +151,7 @@
 | 77 | Remote 상태 분리 및 Git 프로세스 트리 정리 | Remote 전용 동기화 상태를 분리하고 Git helper 후손 종료, 출력 상한, 오류 URL 비밀값 마스킹을 보강 |
 | 78 | 저장소 전환 시 브랜치 상태 격리 | 디렉터리 전환 즉시 이전 저장소 상태를 제거하고 새 저장소 목록을 자동 로드해 stale 브랜치 checkout 경로 차단 |
 | 79 | 브랜치 비동기 상태 경쟁 최종 보강 | HEAD·checkout·Git Init의 늦은 완료를 세대별로 격리하고 URL 비밀값·프로세스 초기화·로딩 중 입력을 보강 |
+| 80 | Remote 로딩 헤더 압축 수정 | 동기화 상태가 표시될 때 `REMOTE` 제목이 `REM`으로 줄어드는 레이아웃 회귀 수정 |
 
 ---
 
@@ -3162,3 +3164,22 @@ Remote 섹션의 갱신 버튼이 로딩 중일 때 스피너와 함께 `가져�
 HEAD watcher와 브랜치 snapshot의 현재 브랜치 쓰기를 단일 세대 값으로 보호해 늦게 끝난 조회가 최신 표시를 되돌리지 못하게 했다. checkout과 Git Init에도 디렉터리·저장소·세대 소유권과 취소 전파를 적용해 저장소 전환 뒤 과거 작업이 새 작업의 진행 상태를 해제하거나 이전 디렉터리를 다시 활성화하지 못하게 했다. HTTP(S) 오류 URL은 userinfo뿐 아니라 모든 query 값을 기본 마스킹하고, `posix_spawn` 부분 초기화 실패의 정리 경로와 브랜치 로딩 중 checkout 차단을 보강했다. 역순 완료를 의도적으로 만드는 회귀 테스트를 포함한 Git 상태 집중 테스트 21개가 통과했다.
 
 변경 파일: `Sources/Core/GitRepositoryStatus.swift`, `Sources/App/TitlebarStatusView.swift`, `Tests/MarkAgentTests/GitRepositoryStatusTests.swift`, `history.md`
+
+---
+
+## 세션 63: Remote 로딩 헤더 압축 수정
+
+> 날짜: 2026-07-20
+> 경로: ~/workspace/markAgent
+
+최종 frozen-tree 시각 QA에서 Remote 동기화 중 스피너와 상태 문구가 공간을 차지하면서 섹션 제목 `REMOTE`가 `REM`으로 압축되는 실제 레이아웃 회귀를 발견했다.
+
+### 대화 1: 섹션 제목의 고정 너비 보장
+
+**사용자:**
+> 현재 브랜치 자동 반영과 Remote 새로고침 수정 작업을 진행해줘.
+
+**응답:**
+LOCAL/REMOTE 섹션 제목을 수평 압축 대상에서 제외해 Remote 개수와 `동기화 중` 상태가 함께 나타나도 제목이 온전히 표시되도록 했다. 잘못된 시점에 저장된 앱 내부 checkout 증거도 새 번들에서 실제 Git HEAD·타이틀바·선택 행이 모두 일치하는 화면으로 다시 수집하도록 최종 QA 범위를 갱신했다.
+
+변경 파일: `Sources/App/TitlebarStatusView.swift`, `history.md`

@@ -203,6 +203,7 @@ private struct GitBranchPopoverView: View {
                 .font(.system(size: 12, weight: .medium))
             Text(title)
                 .font(.system(size: 12, weight: .bold))
+                .fixedSize(horizontal: true, vertical: false)
             Spacer()
             Text("\(count)")
                 .font(.system(size: 12, weight: .bold, design: .monospaced))
