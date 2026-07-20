@@ -251,31 +251,34 @@ private struct GitBranchPopoverView: View {
             return branch.displayName == status.branchName
         }()
 
-        return HStack(spacing: 8) {
-            Image(systemName: isCurrent ? "checkmark.square.fill" : "arrow.triangle.branch")
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(isCurrent ? .green : .secondary)
-
-            Text(branch.displayName)
-                .font(.system(size: 13, weight: isCurrent ? .semibold : .regular))
-                .lineLimit(1)
-                .truncationMode(.middle)
-
-            Spacer()
-            
-            if status.isCheckingOut && status.checkoutTargetBranch == branch {
-                ProgressView()
-                    .controlSize(.mini)
-            }
-        }
-        .padding(.leading, isRemoteChild ? 46 : 28)
-        .padding(.trailing, 12)
-        .padding(.vertical, 7)
-        .background(isCurrent ? Color.green.opacity(0.18) : Color.clear)
-        .contentShape(Rectangle())
-        .onTapGesture {
+        return Button {
             status.checkout(branch)
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: isCurrent ? "checkmark.square.fill" : "arrow.triangle.branch")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(isCurrent ? .green : .secondary)
+
+                Text(branch.displayName)
+                    .font(.system(size: 13, weight: isCurrent ? .semibold : .regular))
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+
+                Spacer()
+
+                if status.isCheckingOut && status.checkoutTargetBranch == branch {
+                    ProgressView()
+                        .controlSize(.mini)
+                }
+            }
+            .padding(.leading, isRemoteChild ? 46 : 28)
+            .padding(.trailing, 12)
+            .padding(.vertical, 7)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(isCurrent ? Color.green.opacity(0.18) : Color.clear)
+            .contentShape(Rectangle())
         }
+        .buttonStyle(.plain)
         .disabled(status.isCheckingOut)
         .help(String(format: String(localized: "클릭해서 %@ 체크아웃"), branch.checkoutName))
     }

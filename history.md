@@ -58,6 +58,7 @@
 58. [세션 54: 사이드바 리사이즈, 탭 복귀, Git fallback 및 v1.7.5 릴리즈](#세션-54-사이드바-리사이즈-탭-복귀-git-fallback-및-v175-릴리즈)
 59. [세션 55: 사이드바 리사이즈 핸들 재구성 및 v1.7.6 릴리즈](#세션-55-사이드바-리사이즈-핸들-재구성-및-v176-릴리즈)
 60. [세션 56: Git 브랜치 상태 및 원격 목록 새로고침](#세션-56-git-브랜치-상태-및-원격-목록-새로고침)
+61. [세션 57: Git 브랜치 선택 접근성 회귀 보강](#세션-57-git-브랜치-선택-접근성-회귀-보강)
 
 ---
 
@@ -138,6 +139,7 @@
 | 71 | 사이드바 리사이즈, 탭 복귀, Git fallback 및 v1.7.5 릴리즈 | 좌우 사이드바 리사이즈 안정화, child tab 닫기 후 부모 탭 복귀, 깨끗한 Git 작업 트리에서 마지막 커밋 diff 표시, 왼쪽 파일 목록 새로고침 버튼을 반영하고 앱 번들 버전 1.7.5 갱신 |
 | 72 | 사이드바 리사이즈 핸들 재구성 및 v1.7.6 릴리즈 | 좌우 사이드바 리사이즈 핸들을 오버레이 기반 내부 grip으로 재구성해 터미널 콘텐츠 가림과 드래그 실패를 줄이고 앱 번들 버전 1.7.6 갱신 |
 | 73 | Git 브랜치 상태 및 원격 목록 새로고침 | 외부 checkout을 Git HEAD 감시로 즉시 반영하고 Remote 명시 refresh에서 fetch 후 목록을 갱신하도록 개선 |
+| 74 | Git 브랜치 선택 접근성 회귀 보강 | 브랜치 행을 실제 Button으로 노출해 기존 앱 내부 checkout을 접근성 입력으로도 검증 가능하게 보강 |
 
 ---
 
@@ -3034,3 +3036,22 @@ Apple `HSplitView`, SwiftUI 커스텀 drag separator, Ghostty macOS split divide
 검증: `swift test --filter GitRepositoryStatusTests` 6개 통과, 전체 `swift test` 128개 통과, `swift build` 통과, 변경 Swift 파일 LSP 오류 없음. 실제 앱 QA와 메모리 누수 점검은 다음 검증 단계에서 이어서 기록한다.
 
 변경 파일: `Sources/Core/GitRepositoryStatus.swift`, `Sources/App/TitlebarStatusView.swift`, `Sources/App/Resources/en.lproj/Localizable.strings`, `Sources/App/Resources/ko.lproj/Localizable.strings`, `Tests/MarkAgentTests/GitRepositoryStatusTests.swift`, `history.md`
+
+---
+
+## 세션 57: Git 브랜치 선택 접근성 회귀 보강
+
+> 날짜: 2026-07-20
+> 경로: ~/workspace/markAgent
+
+Git 브랜치 상태·원격 목록 갱신 작업의 실제 앱 회귀 검증 중, 기존 브랜치 행이 접근성 트리에서 버튼이 아닌 이미지와 텍스트로만 노출되어 자동화 입력으로 앱 내부 checkout을 실행할 수 없는 점을 확인했다.
+
+### 대화 1: 앱 내부 checkout 입력 경로 보강
+
+**사용자:**
+> 현재 브랜치 자동 반영과 Remote 새로고침 수정 작업을 진행해줘.
+
+**응답:**
+기존 `onTapGesture` 행을 시각적 배치와 동작은 유지하는 plain `Button`으로 교체했다. 마우스 클릭뿐 아니라 macOS 접근성 Press 동작으로도 같은 `GitRepositoryStatus.checkout(_:)` 경로가 실행되므로, 실제 번들 앱에서 기존 로컬 브랜치 checkout 회귀를 검증할 수 있다.
+
+변경 파일: `Sources/App/TitlebarStatusView.swift`, `history.md`
