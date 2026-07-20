@@ -59,6 +59,7 @@
 59. [세션 55: 사이드바 리사이즈 핸들 재구성 및 v1.7.6 릴리즈](#세션-55-사이드바-리사이즈-핸들-재구성-및-v176-릴리즈)
 60. [세션 56: Git 브랜치 상태 및 원격 목록 새로고침](#세션-56-git-브랜치-상태-및-원격-목록-새로고침)
 61. [세션 57: Git 브랜치 선택 접근성 회귀 보강](#세션-57-git-브랜치-선택-접근성-회귀-보강)
+62. [세션 58: Git 원격 갱신 경쟁 및 타임아웃 보강](#세션-58-git-원격-갱신-경쟁-및-타임아웃-보강)
 
 ---
 
@@ -140,6 +141,7 @@
 | 72 | 사이드바 리사이즈 핸들 재구성 및 v1.7.6 릴리즈 | 좌우 사이드바 리사이즈 핸들을 오버레이 기반 내부 grip으로 재구성해 터미널 콘텐츠 가림과 드래그 실패를 줄이고 앱 번들 버전 1.7.6 갱신 |
 | 73 | Git 브랜치 상태 및 원격 목록 새로고침 | 외부 checkout을 Git HEAD 감시로 즉시 반영하고 Remote 명시 refresh에서 fetch 후 목록을 갱신하도록 개선 |
 | 74 | Git 브랜치 선택 접근성 회귀 보강 | 브랜치 행을 실제 Button으로 노출해 기존 앱 내부 checkout을 접근성 입력으로도 검증 가능하게 보강 |
+| 75 | Git 원격 갱신 경쟁 및 타임아웃 보강 | 저장소 전환 중 늦은 fetch 결과를 차단하고 원격 명령 타임아웃·취소·중복 refresh 회귀 테스트를 추가 |
 
 ---
 
@@ -1624,6 +1626,8 @@ Git 변경 목록은 미커밋 변경이 있으면 기존처럼 working tree dif
 
 변경 파일: `Sources/App/Info.plist`, `README.md`, `history.md`
 
+---
+
 ## 세션 51: 코드 하이라이팅, 사이드바 미리보기 폴리싱 및 v1.7.2 릴리즈
 
 > 날짜: 2026-06-05
@@ -3055,3 +3059,22 @@ Git 브랜치 상태·원격 목록 갱신 작업의 실제 앱 회귀 검증 �
 기존 `onTapGesture` 행을 시각적 배치와 동작은 유지하는 plain `Button`으로 교체했다. 마우스 클릭뿐 아니라 macOS 접근성 Press 동작으로도 같은 `GitRepositoryStatus.checkout(_:)` 경로가 실행되므로, 실제 번들 앱에서 기존 로컬 브랜치 checkout 회귀를 검증할 수 있다.
 
 변경 파일: `Sources/App/TitlebarStatusView.swift`, `history.md`
+
+---
+
+## 세션 58: Git 원격 갱신 경쟁 및 타임아웃 보강
+
+> 날짜: 2026-07-20
+> 경로: ~/workspace/markAgent
+
+최종 독립 코드·QA 검토에서 발견한 저장소 전환 경쟁, 응답 없는 원격의 로딩 고착, 중복 Remote refresh 실행 증거 부족을 보강했다.
+
+### 대화 1: 원격 갱신 비정상 경로 회귀 수정
+
+**사용자:**
+> 현재 브랜치 자동 반영과 Remote 새로고침 수정 작업을 진행해줘.
+
+**응답:**
+브랜치 작업 세대와 저장소 루트 검증을 추가해 저장소 A의 느린 fetch가 저장소 B로 이동한 뒤 상태를 덮어쓰지 못하게 했다. 저장소 변경 시 진행 작업을 취소하고 로딩 상태를 즉시 정리하며, 하위 프로세스에도 취소를 전파한다. Git 프로세스에는 15초 상한과 TERM/KILL 정리 경로를 추가했고, 원격 refresh 중복 호출 1회 제한·저장소 전환 경쟁·프로세스 타임아웃·취소를 집중 테스트로 고정했다. 기존 히스토리에서 누락된 세션 구분선도 원문대로 복원했다.
+
+변경 파일: `Sources/Core/GitRepositoryStatus.swift`, `Sources/App/Resources/en.lproj/Localizable.strings`, `Sources/App/Resources/ko.lproj/Localizable.strings`, `Tests/MarkAgentTests/GitRepositoryStatusTests.swift`, `history.md`

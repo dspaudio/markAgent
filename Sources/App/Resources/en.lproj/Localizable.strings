@@ -211,6 +211,7 @@
 "커밋하지 않은 변경사항이 있습니다. 먼저 커밋하거나 스태시(stash)해주세요." = "You have uncommitted changes. Commit or stash them first.";
 "병합(merge) 충돌이 있습니다. 먼저 충돌을 해결해주세요." = "There are merge conflicts. Resolve them first.";
 "git 명령을 실행할 수 없습니다." = "Unable to run git command.";
+"git 명령이 시간 내에 완료되지 않았습니다." = "The git command timed out.";
 
 /* Menu Items */
 "About MarkAgent" = "About MarkAgent";

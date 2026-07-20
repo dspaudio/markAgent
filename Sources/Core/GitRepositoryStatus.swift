@@ -1,7 +1,8 @@
+import Darwin
 import Foundation
 
-struct GitBranch: Identifiable, Equatable {
-    enum Kind: Equatable {
+struct GitBranch: Identifiable, Equatable, Sendable {
+    enum Kind: Equatable, Sendable {
         case local
         case remote(String)
     }
@@ -30,7 +31,7 @@ struct GitBranch: Identifiable, Equatable {
     }
 }
 
-struct GitRemoteBranchGroup: Identifiable, Equatable {
+struct GitRemoteBranchGroup: Identifiable, Equatable, Sendable {
     let remoteName: String
     let branches: [GitBranch]
 
@@ -40,6 +41,14 @@ struct GitRemoteBranchGroup: Identifiable, Equatable {
 @MainActor
 @Observable
 final class GitRepositoryStatus {
+    typealias BranchSnapshot = (
+        branchName: String?,
+        local: [GitBranch],
+        remoteGroups: [GitRemoteBranchGroup]
+    )
+    typealias BranchSnapshotLoader = @Sendable (URL) throws -> BranchSnapshot
+    typealias RemoteFetcher = @Sendable (URL, TimeInterval) throws -> Void
+
     private(set) var currentDirectory: URL
     private(set) var repositoryRoot: URL?
     private(set) var branchName: String?
@@ -57,10 +66,22 @@ final class GitRepositoryStatus {
     private var headWatcher: FileWatcher?
     private var watchedHeadURL: URL?
     private var refreshToken = 0
+    private var branchGeneration = 0
     private var headWatcherToken = 0
+    private let gitCommandTimeout: TimeInterval
+    private let branchSnapshotLoader: BranchSnapshotLoader
+    private let remoteFetcher: RemoteFetcher
 
-    init(currentDirectory: URL) {
+    init(
+        currentDirectory: URL,
+        gitCommandTimeout: TimeInterval = 15,
+        branchSnapshotLoader: @escaping BranchSnapshotLoader = GitRepositoryStatus.loadBranchSnapshot,
+        remoteFetcher: @escaping RemoteFetcher = GitRepositoryStatus.fetchRemotes
+    ) {
         self.currentDirectory = currentDirectory
+        self.gitCommandTimeout = gitCommandTimeout
+        self.branchSnapshotLoader = branchSnapshotLoader
+        self.remoteFetcher = remoteFetcher
     }
 
     var isInGitRepository: Bool {
@@ -70,6 +91,10 @@ final class GitRepositoryStatus {
     func refresh(for directory: URL) {
         currentDirectory = directory
         refreshToken += 1
+        branchGeneration += 1
+        branchTask?.cancel()
+        branchTask = nil
+        isLoadingBranches = false
         let token = refreshToken
         refreshTask?.cancel()
 
@@ -127,24 +152,30 @@ final class GitRepositoryStatus {
 
     func loadBranches() {
         guard let repositoryRoot, !isLoadingBranches else { return }
+        branchGeneration += 1
+        let generation = branchGeneration
+        let loader = branchSnapshotLoader
         isLoadingBranches = true
         checkoutErrorMessage = nil
         branchTask?.cancel()
 
-        branchTask = Task { [repositoryRoot] in
-            let result: Result<(branchName: String?, local: [GitBranch], remoteGroups: [GitRemoteBranchGroup]), Error> = await Task.detached(priority: .utility) {
+        branchTask = Task { [repositoryRoot, generation, loader] in
+            let operation = Task.detached(priority: .utility) {
                 Result {
-                    let branches = try Self.loadBranches(repositoryRoot: repositoryRoot)
-                    return (
-                        branchName: Self.loadBranchName(repositoryRoot: repositoryRoot),
-                        local: branches.local,
-                        remoteGroups: branches.remoteGroups
-                    )
+                    try loader(repositoryRoot)
                 }
-            }.value
+            }
+            let result: Result<BranchSnapshot, Error> = await withTaskCancellationHandler {
+                await operation.value
+            } onCancel: {
+                operation.cancel()
+            }
 
-            guard !Task.isCancelled else { return }
+            guard !Task.isCancelled,
+                  generation == self.branchGeneration,
+                  repositoryRoot == self.repositoryRoot else { return }
             self.isLoadingBranches = false
+            self.branchTask = nil
 
             switch result {
             case .success(let branches):
@@ -159,24 +190,33 @@ final class GitRepositoryStatus {
 
     func refreshBranchesFromRemotes() {
         guard let repositoryRoot, !isLoadingBranches, !isCheckingOut else { return }
+        branchGeneration += 1
+        let generation = branchGeneration
+        let loader = branchSnapshotLoader
+        let fetcher = remoteFetcher
+        let timeout = gitCommandTimeout
         isLoadingBranches = true
         checkoutErrorMessage = nil
 
-        branchTask = Task { [repositoryRoot] in
-            let result: Result<(branchName: String?, local: [GitBranch], remoteGroups: [GitRemoteBranchGroup]), Error> = await Task.detached(priority: .userInitiated) {
+        branchTask = Task { [repositoryRoot, generation, loader, fetcher, timeout] in
+            let operation = Task.detached(priority: .userInitiated) {
                 Result {
-                    _ = try Self.runGitStrict(["fetch", "--all", "--prune"], repositoryRoot: repositoryRoot)
-                    let branches = try Self.loadBranches(repositoryRoot: repositoryRoot)
-                    return (
-                        branchName: Self.loadBranchName(repositoryRoot: repositoryRoot),
-                        local: branches.local,
-                        remoteGroups: branches.remoteGroups
-                    )
+                    try fetcher(repositoryRoot, timeout)
+                    try Task.checkCancellation()
+                    return try loader(repositoryRoot)
                 }
-            }.value
+            }
+            let result: Result<BranchSnapshot, Error> = await withTaskCancellationHandler {
+                await operation.value
+            } onCancel: {
+                operation.cancel()
+            }
 
-            guard !Task.isCancelled else { return }
+            guard !Task.isCancelled,
+                  generation == self.branchGeneration,
+                  repositoryRoot == self.repositoryRoot else { return }
             self.isLoadingBranches = false
+            self.branchTask = nil
 
             switch result {
             case .success(let branches):
@@ -362,6 +402,23 @@ final class GitRepositoryStatus {
         return (localBranches, remoteGroups)
     }
 
+    private nonisolated static func loadBranchSnapshot(repositoryRoot: URL) throws -> BranchSnapshot {
+        let branches = try loadBranches(repositoryRoot: repositoryRoot)
+        return (
+            branchName: loadBranchName(repositoryRoot: repositoryRoot),
+            local: branches.local,
+            remoteGroups: branches.remoteGroups
+        )
+    }
+
+    private nonisolated static func fetchRemotes(repositoryRoot: URL, timeout: TimeInterval) throws {
+        _ = try runGitStrict(
+            ["fetch", "--all", "--prune"],
+            repositoryRoot: repositoryRoot,
+            timeout: timeout
+        )
+    }
+
     private nonisolated static func checkout(_ branch: GitBranch, repositoryRoot: URL) throws {
         switch branch.kind {
         case .local:
@@ -400,13 +457,33 @@ final class GitRepositoryStatus {
         (try? runGitStrict(arguments, repositoryRoot: repositoryRoot)) ?? ""
     }
 
-    private nonisolated static func runGitStrict(_ arguments: [String], repositoryRoot: URL) throws -> String {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/git")
-        process.arguments = arguments
-        process.currentDirectoryURL = repositoryRoot
+    private nonisolated static func runGitStrict(
+        _ arguments: [String],
+        repositoryRoot: URL,
+        timeout: TimeInterval = 15
+    ) throws -> String {
         var environment = ProcessInfo.processInfo.environment
         environment["GIT_TERMINAL_PROMPT"] = "0"
+        return try runProcess(
+            executableURL: URL(fileURLWithPath: "/usr/bin/git"),
+            arguments: arguments,
+            currentDirectoryURL: repositoryRoot,
+            environment: environment,
+            timeout: timeout
+        )
+    }
+
+    nonisolated static func runProcess(
+        executableURL: URL,
+        arguments: [String],
+        currentDirectoryURL: URL,
+        environment: [String: String] = ProcessInfo.processInfo.environment,
+        timeout: TimeInterval
+    ) throws -> String {
+        let process = Process()
+        process.executableURL = executableURL
+        process.arguments = arguments
+        process.currentDirectoryURL = currentDirectoryURL
         process.environment = environment
 
         let captureDirectory = FileManager.default.temporaryDirectory
@@ -430,9 +507,31 @@ final class GitRepositoryStatus {
         process.standardError = errorHandle
 
         try process.run()
-        process.waitUntilExit()
+        let deadline = Date().addingTimeInterval(max(timeout, 0))
+        while process.isRunning, !Task.isCancelled, Date() < deadline {
+            Thread.sleep(forTimeInterval: 0.01)
+        }
+
+        if process.isRunning {
+            process.terminate()
+            let terminationDeadline = Date().addingTimeInterval(0.2)
+            while process.isRunning, Date() < terminationDeadline {
+                Thread.sleep(forTimeInterval: 0.01)
+            }
+            if process.isRunning {
+                kill(process.processIdentifier, SIGKILL)
+            }
+            process.waitUntilExit()
+        }
         try outputHandle.close()
         try errorHandle.close()
+
+        if Task.isCancelled {
+            throw CancellationError()
+        }
+        if Date() >= deadline {
+            throw GitRepositoryStatusError.commandTimedOut
+        }
 
         let output = String(data: try Data(contentsOf: outputURL), encoding: .utf8)?
             .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
@@ -448,11 +547,14 @@ final class GitRepositoryStatus {
 
 enum GitRepositoryStatusError: LocalizedError {
     case commandFailed(String)
+    case commandTimedOut
 
     var errorDescription: String? {
         switch self {
         case .commandFailed(let message):
             return message.isEmpty ? String(localized: "git 명령을 실행할 수 없습니다.") : message
+        case .commandTimedOut:
+            return String(localized: "git 명령이 시간 내에 완료되지 않았습니다.")
         }
     }
 }

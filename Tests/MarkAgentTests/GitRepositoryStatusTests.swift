@@ -153,6 +153,118 @@ final class GitRepositoryStatusTests: XCTestCase {
         )
     }
 
+    @MainActor
+    func testRemoteRefreshRejectsDuplicateRequestWhileLoading() async throws {
+        let repository = try makeRepository()
+        defer { try? FileManager.default.removeItem(at: repository.root) }
+        let fetcher = BlockingRemoteFetcher()
+        let status = GitRepositoryStatus(
+            currentDirectory: repository.root,
+            remoteFetcher: { _, _ in try fetcher.fetch() }
+        )
+
+        status.refresh(for: repository.root)
+        let foundRepository = await waitUntil { status.repositoryRoot == repository.root }
+        XCTAssertTrue(foundRepository)
+
+        status.refreshBranchesFromRemotes()
+        let startedRefresh = await waitUntil { fetcher.callCount == 1 }
+        XCTAssertTrue(startedRefresh)
+        XCTAssertTrue(status.isLoadingBranches)
+
+        status.refreshBranchesFromRemotes()
+        XCTAssertEqual(fetcher.callCount, 1, "로딩 중에는 중복 Remote refresh를 시작하지 않아야 합니다.")
+
+        fetcher.finish()
+        let finishedRefresh = await waitUntil { !status.isLoadingBranches }
+        XCTAssertTrue(finishedRefresh)
+        XCTAssertEqual(fetcher.callCount, 1)
+    }
+
+    @MainActor
+    func testRepositoryChangeIgnoresInFlightRemoteRefreshResult() async throws {
+        let repositoryA = try makeRepository()
+        let repositoryB = try makeRepository()
+        defer {
+            try? FileManager.default.removeItem(at: repositoryA.root)
+            try? FileManager.default.removeItem(at: repositoryB.root)
+        }
+        _ = try runGit(["branch", "repo-b-only"], in: repositoryB.root)
+
+        let fetcher = BlockingRemoteFetcher()
+        let status = GitRepositoryStatus(
+            currentDirectory: repositoryA.root,
+            remoteFetcher: { _, _ in try fetcher.fetch() }
+        )
+        status.refresh(for: repositoryA.root)
+        let foundRepositoryA = await waitUntil { status.repositoryRoot == repositoryA.root }
+        XCTAssertTrue(foundRepositoryA)
+
+        status.refreshBranchesFromRemotes()
+        let startedRefresh = await waitUntil { fetcher.callCount == 1 }
+        XCTAssertTrue(startedRefresh)
+        XCTAssertTrue(status.isLoadingBranches)
+
+        status.refresh(for: repositoryB.root)
+        let foundRepositoryB = await waitUntil { status.repositoryRoot == repositoryB.root }
+        XCTAssertTrue(foundRepositoryB)
+        XCTAssertFalse(status.isLoadingBranches)
+        status.loadBranches()
+        let loadedRepositoryBBranches = await waitUntil {
+            !status.isLoadingBranches && status.localBranches.contains(where: { $0.name == "repo-b-only" })
+        }
+        XCTAssertTrue(loadedRepositoryBBranches)
+
+        fetcher.finish()
+        try? await Task.sleep(for: .milliseconds(150))
+
+        XCTAssertEqual(status.repositoryRoot, repositoryB.root)
+        XCTAssertTrue(status.localBranches.contains(where: { $0.name == "repo-b-only" }))
+        XCTAssertFalse(status.isLoadingBranches)
+    }
+
+    func testRunProcessTimesOutAndTerminatesHungCommand() throws {
+        let start = ContinuousClock.now
+
+        XCTAssertThrowsError(
+            try GitRepositoryStatus.runProcess(
+                executableURL: URL(fileURLWithPath: "/bin/sleep"),
+                arguments: ["5"],
+                currentDirectoryURL: FileManager.default.temporaryDirectory,
+                timeout: 0.1
+            )
+        ) { error in
+            guard case GitRepositoryStatusError.commandTimedOut = error else {
+                return XCTFail("예상하지 못한 오류: \(error)")
+            }
+        }
+
+        XCTAssertLessThan(start.duration(to: .now), .seconds(2))
+    }
+
+    func testRunProcessCancellationTerminatesHungCommand() async {
+        let task = Task.detached {
+            try GitRepositoryStatus.runProcess(
+                executableURL: URL(fileURLWithPath: "/bin/sleep"),
+                arguments: ["5"],
+                currentDirectoryURL: FileManager.default.temporaryDirectory,
+                timeout: 5
+            )
+        }
+        try? await Task.sleep(for: .milliseconds(100))
+        let start = ContinuousClock.now
+        task.cancel()
+
+        do {
+            _ = try await task.value
+            XCTFail("취소된 프로세스가 성공하면 안 됩니다.")
+        } catch is CancellationError {
+            XCTAssertLessThan(start.duration(to: .now), .seconds(2))
+        } catch {
+            XCTFail("예상하지 못한 오류: \(error)")
+        }
+    }
+
     private func makeRepository() throws -> (root: URL, defaultBranch: String) {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("GitRepositoryStatusTests-\(UUID().uuidString)")
@@ -236,5 +348,25 @@ final class GitRepositoryStatusTests: XCTestCase {
         }
 
         return condition()
+    }
+}
+
+private final class BlockingRemoteFetcher: @unchecked Sendable {
+    private let lock = NSLock()
+    private let release = DispatchSemaphore(value: 0)
+    private var calls = 0
+
+    var callCount: Int {
+        lock.withLock { calls }
+    }
+
+    func fetch() throws {
+        lock.withLock { calls += 1 }
+        release.wait()
+        try Task.checkCancellation()
+    }
+
+    func finish() {
+        release.signal()
     }
 }
