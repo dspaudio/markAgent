@@ -90,7 +90,9 @@ final class GitRepositoryStatus {
     }
 
     func refresh(for directory: URL) {
-        currentDirectory = directory
+        let standardizedDirectory = directory.standardizedFileURL
+        let directoryChanged = standardizedDirectory != currentDirectory.standardizedFileURL
+        currentDirectory = standardizedDirectory
         refreshToken += 1
         branchGeneration += 1
         branchTask?.cancel()
@@ -100,7 +102,19 @@ final class GitRepositoryStatus {
         let token = refreshToken
         refreshTask?.cancel()
 
-        refreshTask = Task { [directory, token] in
+        if directoryChanged {
+            checkoutTask?.cancel()
+            checkoutTask = nil
+            isCheckingOut = false
+            checkoutTargetBranch = nil
+            repositoryRoot = nil
+            branchName = nil
+            localBranches = []
+            remoteBranchGroups = []
+            checkoutErrorMessage = nil
+        }
+
+        refreshTask = Task { [directory = standardizedDirectory, token] in
             let result = await Task.detached(priority: .utility) {
                 let repositoryRoot = Self.findRepositoryRoot(from: directory)
                 guard let repositoryRoot else {
@@ -122,6 +136,8 @@ final class GitRepositoryStatus {
                 self.localBranches = []
                 self.remoteBranchGroups = []
                 self.checkoutErrorMessage = nil
+            } else {
+                self.loadBranches()
             }
         }
     }

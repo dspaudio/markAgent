@@ -62,6 +62,7 @@
 62. [세션 58: Git 원격 갱신 경쟁 및 타임아웃 보강](#세션-58-git-원격-갱신-경쟁-및-타임아웃-보강)
 63. [세션 59: Remote 갱신 진행 상태 시각 보강](#세션-59-remote-갱신-진행-상태-시각-보강)
 64. [세션 60: Remote 상태 분리 및 Git 프로세스 트리 정리](#세션-60-remote-상태-분리-및-git-프로세스-트리-정리)
+65. [세션 61: 저장소 전환 시 브랜치 상태 격리](#세션-61-저장소-전환-시-브랜치-상태-격리)
 
 ---
 
@@ -146,6 +147,7 @@
 | 75 | Git 원격 갱신 경쟁 및 타임아웃 보강 | 저장소 전환 중 늦은 fetch 결과를 차단하고 원격 명령 타임아웃·취소·중복 refresh 회귀 테스트를 추가 |
 | 76 | Remote 갱신 진행 상태 시각 보강 | 작은 스피너만 표시하던 Remote refresh 로딩 상태에 명시적인 가져오기 문구와 동적 접근성 라벨을 추가 |
 | 77 | Remote 상태 분리 및 Git 프로세스 트리 정리 | Remote 전용 동기화 상태를 분리하고 Git helper 후손 종료, 출력 상한, 오류 URL 비밀값 마스킹을 보강 |
+| 78 | 저장소 전환 시 브랜치 상태 격리 | 디렉터리 전환 즉시 이전 저장소 상태를 제거하고 새 저장소 목록을 자동 로드해 stale 브랜치 checkout 경로 차단 |
 
 ---
 
@@ -3044,6 +3046,25 @@ Apple `HSplitView`, SwiftUI 커스텀 drag separator, Ghostty macOS split divide
 검증: `swift test --filter GitRepositoryStatusTests` 6개 통과, 전체 `swift test` 128개 통과, `swift build` 통과, 변경 Swift 파일 LSP 오류 없음. 실제 앱 QA와 메모리 누수 점검은 다음 검증 단계에서 이어서 기록한다.
 
 변경 파일: `Sources/Core/GitRepositoryStatus.swift`, `Sources/App/TitlebarStatusView.swift`, `Sources/App/Resources/en.lproj/Localizable.strings`, `Sources/App/Resources/ko.lproj/Localizable.strings`, `Tests/MarkAgentTests/GitRepositoryStatusTests.swift`, `history.md`
+
+---
+
+## 세션 61: 저장소 전환 시 브랜치 상태 격리
+
+> 날짜: 2026-07-20
+> 경로: ~/workspace/markAgent
+
+최종 독립 검토에서 저장소 A의 팝오버가 열린 채 저장소 B로 이동하면 비동기 root 탐색 동안 A의 브랜치 행이 잠시 남을 수 있는 경계를 확인했다.
+
+### 대화 1: 이전 저장소 상태 즉시 무효화
+
+**사용자:**
+> 현재 브랜치 자동 반영과 Remote 새로고침 수정 작업을 진행해줘.
+
+**응답:**
+작업 디렉터리가 바뀌는 순간 진행 중인 브랜치·checkout 작업과 이전 `repositoryRoot`, 현재 브랜치, 로컬·원격 목록, 오류 상태를 함께 무효화해 stale 행을 클릭할 수 없게 했다. 새 저장소 root가 확정되면 브랜치 snapshot을 자동으로 로드하므로 이미 열린 팝오버도 새 저장소 상태로 복구된다. 저장소 A 전용 브랜치를 먼저 로드한 뒤 B로 전환해 즉시 빈 상태와 이후 B 전용 목록을 검증하는 회귀 테스트를 추가했고, Git 상태 집중 테스트 16개 통과를 확인했다.
+
+변경 파일: `Sources/Core/GitRepositoryStatus.swift`, `Tests/MarkAgentTests/GitRepositoryStatusTests.swift`, `history.md`
 
 ---
 

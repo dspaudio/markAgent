@@ -111,12 +111,14 @@ final class GitRepositoryStatusTests: XCTestCase {
 
         let status = GitRepositoryStatus(currentDirectory: repository.root)
         status.refresh(for: repository.root)
-        let foundRepository = await waitUntil { status.repositoryRoot == repository.root }
+        let foundRepository = await waitUntil {
+            status.repositoryRoot == repository.root && !status.isLoadingBranches
+        }
         XCTAssertTrue(foundRepository)
 
-        status.loadBranches()
         let loadedInitialRemoteBranch = await waitUntil {
-            self.hasRemoteBranch(repository.defaultBranch, remote: "origin", in: status.remoteBranchGroups)
+            !status.isLoadingBranches
+                && self.hasRemoteBranch(repository.defaultBranch, remote: "origin", in: status.remoteBranchGroups)
         }
         XCTAssertTrue(loadedInitialRemoteBranch)
 
@@ -164,7 +166,9 @@ final class GitRepositoryStatusTests: XCTestCase {
         )
 
         status.refresh(for: repository.root)
-        let foundRepository = await waitUntil { status.repositoryRoot == repository.root }
+        let foundRepository = await waitUntil {
+            status.repositoryRoot == repository.root && !status.isLoadingBranches
+        }
         XCTAssertTrue(foundRepository)
 
         status.refreshBranchesFromRemotes()
@@ -199,7 +203,9 @@ final class GitRepositoryStatusTests: XCTestCase {
             remoteFetcher: { _, _ in try fetcher.fetch() }
         )
         status.refresh(for: repositoryA.root)
-        let foundRepositoryA = await waitUntil { status.repositoryRoot == repositoryA.root }
+        let foundRepositoryA = await waitUntil {
+            status.repositoryRoot == repositoryA.root && !status.isLoadingBranches
+        }
         XCTAssertTrue(foundRepositoryA)
 
         status.refreshBranchesFromRemotes()
@@ -209,15 +215,13 @@ final class GitRepositoryStatusTests: XCTestCase {
         XCTAssertTrue(status.isRefreshingRemotes)
 
         status.refresh(for: repositoryB.root)
-        let foundRepositoryB = await waitUntil { status.repositoryRoot == repositoryB.root }
-        XCTAssertTrue(foundRepositoryB)
-        XCTAssertFalse(status.isLoadingBranches)
-        XCTAssertFalse(status.isRefreshingRemotes)
-        status.loadBranches()
-        let loadedRepositoryBBranches = await waitUntil {
-            !status.isLoadingBranches && status.localBranches.contains(where: { $0.name == "repo-b-only" })
+        let foundRepositoryB = await waitUntil {
+            status.repositoryRoot == repositoryB.root
+                && !status.isLoadingBranches
+                && status.localBranches.contains(where: { $0.name == "repo-b-only" })
         }
-        XCTAssertTrue(loadedRepositoryBBranches)
+        XCTAssertTrue(foundRepositoryB)
+        XCTAssertFalse(status.isRefreshingRemotes)
 
         fetcher.finish()
         try? await Task.sleep(for: .milliseconds(150))
@@ -226,6 +230,40 @@ final class GitRepositoryStatusTests: XCTestCase {
         XCTAssertTrue(status.localBranches.contains(where: { $0.name == "repo-b-only" }))
         XCTAssertFalse(status.isLoadingBranches)
         XCTAssertFalse(status.isRefreshingRemotes)
+    }
+
+    @MainActor
+    func testRepositoryChangeImmediatelyClearsOldBranchesAndLoadsNewRepository() async throws {
+        let repositoryA = try makeRepository()
+        let repositoryB = try makeRepository()
+        defer {
+            try? FileManager.default.removeItem(at: repositoryA.root)
+            try? FileManager.default.removeItem(at: repositoryB.root)
+        }
+        _ = try runGit(["branch", "repo-a-only"], in: repositoryA.root)
+        _ = try runGit(["branch", "repo-b-only"], in: repositoryB.root)
+        let status = GitRepositoryStatus(currentDirectory: repositoryA.root)
+
+        status.refresh(for: repositoryA.root)
+        let loadedRepositoryA = await waitUntil {
+            status.repositoryRoot == repositoryA.root
+                && status.localBranches.contains(where: { $0.name == "repo-a-only" })
+        }
+        XCTAssertTrue(loadedRepositoryA)
+
+        status.refresh(for: repositoryB.root)
+
+        XCTAssertNil(status.repositoryRoot)
+        XCTAssertNil(status.branchName)
+        XCTAssertTrue(status.localBranches.isEmpty)
+        XCTAssertTrue(status.remoteBranchGroups.isEmpty)
+
+        let loadedRepositoryB = await waitUntil {
+            status.repositoryRoot == repositoryB.root
+                && status.localBranches.contains(where: { $0.name == "repo-b-only" })
+                && !status.localBranches.contains(where: { $0.name == "repo-a-only" })
+        }
+        XCTAssertTrue(loadedRepositoryB)
     }
 
     @MainActor
@@ -239,7 +277,9 @@ final class GitRepositoryStatusTests: XCTestCase {
         )
 
         status.refresh(for: repository.root)
-        let foundRepository = await waitUntil { status.repositoryRoot == repository.root }
+        let foundRepository = await waitUntil {
+            status.repositoryRoot == repository.root && !status.isLoadingBranches
+        }
         XCTAssertTrue(foundRepository)
 
         status.refreshBranchesFromRemotes()
@@ -250,8 +290,9 @@ final class GitRepositoryStatusTests: XCTestCase {
 
         status.refresh(for: repository.root)
 
-        XCTAssertFalse(status.isLoadingBranches)
         XCTAssertFalse(status.isRefreshingRemotes)
+        let reloadedBranches = await waitUntil { !status.isLoadingBranches }
+        XCTAssertTrue(reloadedBranches)
         fetcher.finish()
     }
 
