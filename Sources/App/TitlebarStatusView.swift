@@ -132,7 +132,7 @@ private struct GitBranchPopoverView: View {
 
     @ViewBuilder
     private var content: some View {
-        if status.isLoadingBranches {
+        if status.isLoadingBranches && status.localBranches.isEmpty && status.remoteBranchGroups.isEmpty {
             ProgressView()
                 .controlSize(.small)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -157,7 +157,8 @@ private struct GitBranchPopoverView: View {
                     branchSection(
                         title: "REMOTE",
                         systemImage: "icloud",
-                        count: status.remoteBranchGroups.reduce(0) { $0 + $1.branches.count }
+                        count: status.remoteBranchGroups.reduce(0) { $0 + $1.branches.count },
+                        showsRemoteRefresh: true
                     )
 
                     ForEach(status.remoteBranchGroups) { group in
@@ -187,20 +188,53 @@ private struct GitBranchPopoverView: View {
                 }
                 .padding(.vertical, 8)
             }
-            .disabled(status.isCheckingOut)
+            .disabled(status.isCheckingOut || status.isLoadingBranches)
         }
     }
 
-    private func branchSection(title: String, systemImage: String, count: Int) -> some View {
+    private func branchSection(
+        title: String,
+        systemImage: String,
+        count: Int,
+        showsRemoteRefresh: Bool = false
+    ) -> some View {
         HStack(spacing: 8) {
             Image(systemName: systemImage)
                 .font(.system(size: 12, weight: .medium))
             Text(title)
                 .font(.system(size: 12, weight: .bold))
+                .fixedSize(horizontal: true, vertical: false)
             Spacer()
             Text("\(count)")
                 .font(.system(size: 12, weight: .bold, design: .monospaced))
                 .foregroundStyle(.blue)
+
+            if showsRemoteRefresh {
+                if status.isRefreshingRemotes {
+                    HStack(spacing: 4) {
+                        ProgressView()
+                            .controlSize(.mini)
+                        Text("동기화 중")
+                            .font(.system(size: 10, weight: .semibold))
+                            .fixedSize(horizontal: true, vertical: false)
+                    }
+                    .foregroundStyle(.primary)
+                    .accessibilityElement(children: .combine)
+                    .accessibilityLabel(String(localized: "원격 브랜치 가져오는 중"))
+                } else {
+                    Button {
+                        status.refreshBranchesFromRemotes()
+                    } label: {
+                        Image(systemName: "arrow.triangle.2.circlepath")
+                            .font(.system(size: 11, weight: .medium))
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(status.isLoadingBranches || status.isCheckingOut)
+                    .help(String(localized: "원격 브랜치 새로고침"))
+                    .accessibilityLabel(String(localized: "원격 브랜치 새로고침"))
+                    .accessibilityIdentifier("git-refresh-remote-branches")
+                }
+            }
         }
         .foregroundStyle(.secondary)
         .padding(.horizontal, 12)
@@ -227,32 +261,35 @@ private struct GitBranchPopoverView: View {
             return branch.displayName == status.branchName
         }()
 
-        return HStack(spacing: 8) {
-            Image(systemName: isCurrent ? "checkmark.square.fill" : "arrow.triangle.branch")
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(isCurrent ? .green : .secondary)
-
-            Text(branch.displayName)
-                .font(.system(size: 13, weight: isCurrent ? .semibold : .regular))
-                .lineLimit(1)
-                .truncationMode(.middle)
-
-            Spacer()
-            
-            if status.isCheckingOut && status.checkoutTargetBranch == branch {
-                ProgressView()
-                    .controlSize(.mini)
-            }
-        }
-        .padding(.leading, isRemoteChild ? 46 : 28)
-        .padding(.trailing, 12)
-        .padding(.vertical, 7)
-        .background(isCurrent ? Color.green.opacity(0.18) : Color.clear)
-        .contentShape(Rectangle())
-        .onTapGesture {
+        return Button {
             status.checkout(branch)
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: isCurrent ? "checkmark.square.fill" : "arrow.triangle.branch")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(isCurrent ? .green : .secondary)
+
+                Text(branch.displayName)
+                    .font(.system(size: 13, weight: isCurrent ? .semibold : .regular))
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+
+                Spacer()
+
+                if status.isCheckingOut && status.checkoutTargetBranch == branch {
+                    ProgressView()
+                        .controlSize(.mini)
+                }
+            }
+            .padding(.leading, isRemoteChild ? 46 : 28)
+            .padding(.trailing, 12)
+            .padding(.vertical, 7)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(isCurrent ? Color.green.opacity(0.18) : Color.clear)
+            .contentShape(Rectangle())
         }
-        .disabled(status.isCheckingOut)
+        .buttonStyle(.plain)
+        .disabled(status.isCheckingOut || status.isLoadingBranches)
         .help(String(format: String(localized: "클릭해서 %@ 체크아웃"), branch.checkoutName))
     }
 }

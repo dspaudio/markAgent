@@ -57,6 +57,15 @@
 57. [세션 53: 터미널 선택 영역 스니펫 저장 및 v1.7.4 릴리즈](#세션-53-터미널-선택-영역-스니펫-저장-및-v174-릴리즈)
 58. [세션 54: 사이드바 리사이즈, 탭 복귀, Git fallback 및 v1.7.5 릴리즈](#세션-54-사이드바-리사이즈-탭-복귀-git-fallback-및-v175-릴리즈)
 59. [세션 55: 사이드바 리사이즈 핸들 재구성 및 v1.7.6 릴리즈](#세션-55-사이드바-리사이즈-핸들-재구성-및-v176-릴리즈)
+60. [세션 56: Git 브랜치 상태 및 원격 목록 새로고침](#세션-56-git-브랜치-상태-및-원격-목록-새로고침)
+61. [세션 57: Git 브랜치 선택 접근성 회귀 보강](#세션-57-git-브랜치-선택-접근성-회귀-보강)
+62. [세션 58: Git 원격 갱신 경쟁 및 타임아웃 보강](#세션-58-git-원격-갱신-경쟁-및-타임아웃-보강)
+63. [세션 59: Remote 갱신 진행 상태 시각 보강](#세션-59-remote-갱신-진행-상태-시각-보강)
+64. [세션 60: Remote 상태 분리 및 Git 프로세스 트리 정리](#세션-60-remote-상태-분리-및-git-프로세스-트리-정리)
+65. [세션 61: 저장소 전환 시 브랜치 상태 격리](#세션-61-저장소-전환-시-브랜치-상태-격리)
+66. [세션 62: 브랜치 비동기 상태 경쟁 최종 보강](#세션-62-브랜치-비동기-상태-경쟁-최종-보강)
+67. [세션 63: Remote 로딩 헤더 압축 수정](#세션-63-remote-로딩-헤더-압축-수정)
+68. [세션 64: Git 브랜치 동기화 및 v1.7.7 릴리즈](#세션-64-git-브랜치-동기화-및-v177-릴리즈)
 
 ---
 
@@ -136,6 +145,15 @@
 | 70 | 터미널 선택 영역 스니펫 저장 및 v1.7.4 릴리즈 | Cmd+Shift+C로 터미널 선택 내용을 프롬프트 스니펫에 저장하고 저장 직후 스니펫 목록을 열도록 반영, libghostty-spm 선택 복사 누수 워크어라운드와 upstream PR 기록, 앱 번들 버전 1.7.4 갱신 |
 | 71 | 사이드바 리사이즈, 탭 복귀, Git fallback 및 v1.7.5 릴리즈 | 좌우 사이드바 리사이즈 안정화, child tab 닫기 후 부모 탭 복귀, 깨끗한 Git 작업 트리에서 마지막 커밋 diff 표시, 왼쪽 파일 목록 새로고침 버튼을 반영하고 앱 번들 버전 1.7.5 갱신 |
 | 72 | 사이드바 리사이즈 핸들 재구성 및 v1.7.6 릴리즈 | 좌우 사이드바 리사이즈 핸들을 오버레이 기반 내부 grip으로 재구성해 터미널 콘텐츠 가림과 드래그 실패를 줄이고 앱 번들 버전 1.7.6 갱신 |
+| 73 | Git 브랜치 상태 및 원격 목록 새로고침 | 외부 checkout을 Git HEAD 감시로 즉시 반영하고 Remote 명시 refresh에서 fetch 후 목록을 갱신하도록 개선 |
+| 74 | Git 브랜치 선택 접근성 회귀 보강 | 브랜치 행을 실제 Button으로 노출해 기존 앱 내부 checkout을 접근성 입력으로도 검증 가능하게 보강 |
+| 75 | Git 원격 갱신 경쟁 및 타임아웃 보강 | 저장소 전환 중 늦은 fetch 결과를 차단하고 원격 명령 타임아웃·취소·중복 refresh 회귀 테스트를 추가 |
+| 76 | Remote 갱신 진행 상태 시각 보강 | 작은 스피너만 표시하던 Remote refresh 로딩 상태에 명시적인 가져오기 문구와 동적 접근성 라벨을 추가 |
+| 77 | Remote 상태 분리 및 Git 프로세스 트리 정리 | Remote 전용 동기화 상태를 분리하고 Git helper 후손 종료, 출력 상한, 오류 URL 비밀값 마스킹을 보강 |
+| 78 | 저장소 전환 시 브랜치 상태 격리 | 디렉터리 전환 즉시 이전 저장소 상태를 제거하고 새 저장소 목록을 자동 로드해 stale 브랜치 checkout 경로 차단 |
+| 79 | 브랜치 비동기 상태 경쟁 최종 보강 | HEAD·checkout·Git Init의 늦은 완료를 세대별로 격리하고 URL 비밀값·프로세스 초기화·로딩 중 입력을 보강 |
+| 80 | Remote 로딩 헤더 압축 수정 | 동기화 상태가 표시될 때 `REMOTE` 제목이 `REM`으로 줄어드는 레이아웃 회귀 수정 |
+| 81 | Git 브랜치 동기화 및 v1.7.7 릴리즈 | 외부 checkout 즉시 반영과 Remote 새로고침을 문서화하고 앱 번들 버전 1.7.7 갱신 |
 
 ---
 
@@ -3013,3 +3031,176 @@ Apple `HSplitView`, SwiftUI 커스텀 drag separator, Ghostty macOS split divide
 앱 번들 버전을 `1.7.6`으로 갱신하고, README 기능 설명에 사이드바 내부 4pt divider와 넓은 내부 hit area를 반영했다. 커밋/푸시 전 필수 규칙에 따라 이번 세션 내용을 `history.md` 목차, 타임라인 요약, 세션 본문에 기록했다. 이후 `dev` 대상 PR과 `main` 대상 PR, GitHub Release `v1.7.6` 생성 절차를 진행한다.
 
 변경 파일: `Sources/App/Info.plist`, `README.md`, `history.md`
+
+---
+
+## 세션 56: Git 브랜치 상태 및 원격 목록 새로고침
+
+> 날짜: 2026-07-20
+> 경로: ~/workspace/markAgent
+
+터미널에서 같은 작업 디렉터리의 브랜치를 바꿔도 타이틀바 표시가 갱신되지 않고, 원격에 새로 생긴 브랜치가 팝오버 목록에 나타나지 않는 문제를 수정했다. 저장소의 실제 개발 브랜치인 `dev`를 `origin/dev`와 fast-forward 동기화한 뒤 작업했다.
+
+### 대화 1: 현재 브랜치 자동 반영과 Remote 새로고침
+
+**사용자:**
+> 오른쪽 상단 현재 브랜치 표시가 터미널의 checkout을 즉시 반영하고, Remote 쪽에 새 원격 브랜치를 가져오는 refresh 버튼을 추가해줘. develop 브랜치로 체크아웃하고 최신화한 뒤 수정해줘.
+
+**응답:**
+저장소에 `develop` 브랜치가 없고 실제 통합 브랜치가 `dev`인 점을 확인해 `origin/dev`와 동기화했다. 기존에는 앱 시작·디렉터리 변경·앱 내부 checkout 때만 Git 상태를 읽었기 때문에, 실제 git directory의 `HEAD`를 기존 `FileWatcher`로 감시해 외부 checkout을 즉시 반영하도록 변경했다. 팝오버의 일반 새로고침은 현재 브랜치와 로컬 캐시 목록을 함께 갱신하고, REMOTE 섹션에는 `git fetch --all --prune` 후 목록을 원자적으로 교체하는 전용 버튼·진행 표시·접근성 식별자를 추가했다. fetch 실패 시 마지막 성공 목록은 보존하고 기존 인라인 오류 영역에 원인을 표시한다.
+
+검증: `swift test --filter GitRepositoryStatusTests` 6개 통과, 전체 `swift test` 128개 통과, `swift build` 통과, 변경 Swift 파일 LSP 오류 없음. 실제 앱 QA와 메모리 누수 점검은 다음 검증 단계에서 이어서 기록한다.
+
+변경 파일: `Sources/Core/GitRepositoryStatus.swift`, `Sources/App/TitlebarStatusView.swift`, `Sources/App/Resources/en.lproj/Localizable.strings`, `Sources/App/Resources/ko.lproj/Localizable.strings`, `Tests/MarkAgentTests/GitRepositoryStatusTests.swift`, `history.md`
+
+---
+
+## 세션 57: Git 브랜치 선택 접근성 회귀 보강
+
+> 날짜: 2026-07-20
+> 경로: ~/workspace/markAgent
+
+Git 브랜치 상태·원격 목록 갱신 작업의 실제 앱 회귀 검증 중, 기존 브랜치 행이 접근성 트리에서 버튼이 아닌 이미지와 텍스트로만 노출되어 자동화 입력으로 앱 내부 checkout을 실행할 수 없는 점을 확인했다.
+
+### 대화 1: 앱 내부 checkout 입력 경로 보강
+
+**사용자:**
+> 현재 브랜치 자동 반영과 Remote 새로고침 수정 작업을 진행해줘.
+
+**응답:**
+기존 `onTapGesture` 행을 시각적 배치와 동작은 유지하는 plain `Button`으로 교체했다. 마우스 클릭뿐 아니라 macOS 접근성 Press 동작으로도 같은 `GitRepositoryStatus.checkout(_:)` 경로가 실행되므로, 실제 번들 앱에서 기존 로컬 브랜치 checkout 회귀를 검증할 수 있다.
+
+변경 파일: `Sources/App/TitlebarStatusView.swift`, `history.md`
+
+---
+
+## 세션 64: Git 브랜치 동기화 및 v1.7.7 릴리즈
+
+> 날짜: 2026-07-20
+> 경로: ~/workspace/markAgent
+
+외부 터미널 checkout의 현재 브랜치 즉시 반영과 Remote 브랜치 명시 새로고침 개선을 정식 릴리즈로 배포한다. 앱 버전과 사용자 문서를 갱신하고, `dev`와 `main` PR 병합 후 Developer ID 서명·Apple 공증을 거친 자산을 GitHub Release에 게시하는 흐름을 진행한다.
+
+### 대화 1: v1.7.7 공증 릴리즈 및 GitHub 배포
+
+**사용자:**
+> 버전을 올리고, 릴리즈 해줘. 공증도 해야해. pr->머지, main에 반영까지 해야해. 깃헙 릴리즈에도 올려야해.
+
+**응답:**
+앱 번들 버전을 `1.7.7`로 갱신하고, README의 한·영 기능 설명에 외부 checkout 자동 반영과 Remote fetch/prune 새로고침 동작을 추가했다. 기능 구현의 전체 테스트와 실제 앱 QA 증거를 릴리즈 기준으로 사용하며, 릴리즈 브랜치를 `dev`에 병합한 뒤 `dev`를 `main`에 병합하고 공증된 ZIP만 GitHub Release 자산으로 게시한다.
+
+변경 파일: `Sources/App/Info.plist`, `README.md`, `history.md`
+
+---
+
+## 세션 58: Git 원격 갱신 경쟁 및 타임아웃 보강
+
+> 날짜: 2026-07-20
+> 경로: ~/workspace/markAgent
+
+최종 독립 코드·QA 검토에서 발견한 저장소 전환 경쟁, 응답 없는 원격의 로딩 고착, 중복 Remote refresh 실행 증거 부족을 보강했다.
+
+### 대화 1: 원격 갱신 비정상 경로 회귀 수정
+
+**사용자:**
+> 현재 브랜치 자동 반영과 Remote 새로고침 수정 작업을 진행해줘.
+
+**응답:**
+브랜치 작업 세대와 저장소 루트 검증을 추가해 저장소 A의 느린 fetch가 저장소 B로 이동한 뒤 상태를 덮어쓰지 못하게 했다. 저장소 변경 시 진행 작업을 취소하고 로딩 상태를 즉시 정리하며, 하위 프로세스에도 취소를 전파한다. Git 프로세스에는 15초 상한과 TERM/KILL 정리 경로를 추가했고, 원격 refresh 중복 호출 1회 제한·저장소 전환 경쟁·프로세스 타임아웃·취소를 집중 테스트로 고정했다. 기존 히스토리에서 누락된 세션 구분선도 원문대로 복원했다.
+
+변경 파일: `Sources/Core/GitRepositoryStatus.swift`, `Sources/App/Resources/en.lproj/Localizable.strings`, `Sources/App/Resources/ko.lproj/Localizable.strings`, `Tests/MarkAgentTests/GitRepositoryStatusTests.swift`, `history.md`
+
+---
+
+## 세션 59: Remote 갱신 진행 상태 시각 보강
+
+> 날짜: 2026-07-20
+> 경로: ~/workspace/markAgent
+
+최신 실제 앱 스크린샷의 독립 시각 검토에서 Remote refresh 중복 실행은 차단되지만, 작은 스피너만으로는 진행 상태를 분명히 인지하기 어렵다는 피드백을 반영했다.
+
+### 대화 1: Remote 로딩 상태 명시
+
+**사용자:**
+> 현재 브랜치 자동 반영과 Remote 새로고침 수정 작업을 진행해줘.
+
+**응답:**
+Remote 섹션의 갱신 버튼이 로딩 중일 때 스피너와 함께 `가져오는 중...` 문구를 표시하고, 접근성 라벨도 `원격 브랜치 가져오는 중`으로 전환하도록 변경했다. 영어·한국어 로컬라이제이션을 함께 추가했으며 전체 테스트 132개 통과를 확인했다.
+
+변경 파일: `Sources/App/TitlebarStatusView.swift`, `Sources/App/Resources/en.lproj/Localizable.strings`, `Sources/App/Resources/ko.lproj/Localizable.strings`, `history.md`
+
+---
+
+## 세션 60: Remote 상태 분리 및 Git 프로세스 트리 정리
+
+> 날짜: 2026-07-20
+> 경로: ~/workspace/markAgent
+
+최종 시각·보안 검토에서 Remote 로딩 문구의 잘림과 낮은 대비, 응답 없는 Git 전송 helper 후손이 직계 프로세스 종료 뒤 남을 수 있는 경로를 확인해 보강했다.
+
+### 대화 1: 동기화 상태와 프로세스 수명 보강
+
+**사용자:**
+> 현재 브랜치 자동 반영과 Remote 새로고침 수정 작업을 진행해줘.
+
+**응답:**
+일반 브랜치 목록 로딩과 Remote fetch 상태를 분리하고, Remote 동기화 중에는 비활성 버튼 대신 짧은 `동기화 중` 문구와 스피너를 독립 상태 요소로 표시해 잘림과 disabled 대비 저하를 제거했다. Git 실행을 `posix_spawn` 전용 프로세스 그룹으로 전환해 timeout·취소 시 SSH나 credential helper 같은 후손까지 TERM/KILL로 정리한다. stdout/stderr는 각각 256KiB tail로 제한하고, 사용자에게 표시하는 오류 URL의 userinfo와 민감 query 값을 마스킹했다. TERM/HUP를 무시하는 후손의 timeout·취소 제거, 출력 상한·비밀값 마스킹, cwd·환경·stdout 계약, Remote 상태 정리를 집중 테스트로 고정했다.
+
+변경 파일: `Sources/Core/GitRepositoryStatus.swift`, `Sources/App/TitlebarStatusView.swift`, `Sources/App/Resources/en.lproj/Localizable.strings`, `Sources/App/Resources/ko.lproj/Localizable.strings`, `Tests/MarkAgentTests/GitRepositoryStatusTests.swift`, `history.md`
+
+---
+
+## 세션 61: 저장소 전환 시 브랜치 상태 격리
+
+> 날짜: 2026-07-20
+> 경로: ~/workspace/markAgent
+
+최종 독립 검토에서 저장소 A의 팝오버가 열린 채 저장소 B로 이동하면 비동기 root 탐색 동안 A의 브랜치 행이 잠시 남을 수 있는 경계를 확인했다.
+
+### 대화 1: 이전 저장소 상태 즉시 무효화
+
+**사용자:**
+> 현재 브랜치 자동 반영과 Remote 새로고침 수정 작업을 진행해줘.
+
+**응답:**
+작업 디렉터리가 바뀌는 순간 진행 중인 브랜치·checkout 작업과 이전 `repositoryRoot`, 현재 브랜치, 로컬·원격 목록, 오류 상태를 함께 무효화해 stale 행을 클릭할 수 없게 했다. 새 저장소 root가 확정되면 브랜치 snapshot을 자동으로 로드하므로 이미 열린 팝오버도 새 저장소 상태로 복구된다. 저장소 A 전용 브랜치를 먼저 로드한 뒤 B로 전환해 즉시 빈 상태와 이후 B 전용 목록을 검증하는 회귀 테스트를 추가했고, Git 상태 집중 테스트 16개 통과를 확인했다.
+
+변경 파일: `Sources/Core/GitRepositoryStatus.swift`, `Tests/MarkAgentTests/GitRepositoryStatusTests.swift`, `history.md`
+
+---
+
+## 세션 62: 브랜치 비동기 상태 경쟁 최종 보강
+
+> 날짜: 2026-07-20
+> 경로: ~/workspace/markAgent
+
+고정 트리의 독립 코드 리뷰에서 실제 앱 QA의 정상 타이밍으로는 드러나지 않은 동일 저장소 HEAD 조회 역전, 저장소 전환 중 checkout·Git Init 완료 역전, URL query 자격 증명 노출 가능성을 발견해 최종 보강했다.
+
+### 대화 1: 비동기 작업 소유권과 오류 비밀값 보강
+
+**사용자:**
+> 현재 브랜치 자동 반영과 Remote 새로고침 수정 작업을 진행해줘.
+
+**응답:**
+HEAD watcher와 브랜치 snapshot의 현재 브랜치 쓰기를 단일 세대 값으로 보호해 늦게 끝난 조회가 최신 표시를 되돌리지 못하게 했다. checkout과 Git Init에도 디렉터리·저장소·세대 소유권과 취소 전파를 적용해 저장소 전환 뒤 과거 작업이 새 작업의 진행 상태를 해제하거나 이전 디렉터리를 다시 활성화하지 못하게 했다. HTTP(S) 오류 URL은 userinfo뿐 아니라 모든 query 값을 기본 마스킹하고, `posix_spawn` 부분 초기화 실패의 정리 경로와 브랜치 로딩 중 checkout 차단을 보강했다. 역순 완료를 의도적으로 만드는 회귀 테스트를 포함한 Git 상태 집중 테스트 21개가 통과했다.
+
+변경 파일: `Sources/Core/GitRepositoryStatus.swift`, `Sources/App/TitlebarStatusView.swift`, `Tests/MarkAgentTests/GitRepositoryStatusTests.swift`, `history.md`
+
+---
+
+## 세션 63: Remote 로딩 헤더 압축 수정
+
+> 날짜: 2026-07-20
+> 경로: ~/workspace/markAgent
+
+최종 frozen-tree 시각 QA에서 Remote 동기화 중 스피너와 상태 문구가 공간을 차지하면서 섹션 제목 `REMOTE`가 `REM`으로 압축되는 실제 레이아웃 회귀를 발견했다.
+
+### 대화 1: 섹션 제목의 고정 너비 보장
+
+**사용자:**
+> 현재 브랜치 자동 반영과 Remote 새로고침 수정 작업을 진행해줘.
+
+**응답:**
+LOCAL/REMOTE 섹션 제목을 수평 압축 대상에서 제외해 Remote 개수와 `동기화 중` 상태가 함께 나타나도 제목이 온전히 표시되도록 했다. 잘못된 시점에 저장된 앱 내부 checkout 증거도 새 번들에서 실제 Git HEAD·타이틀바·선택 행이 모두 일치하는 화면으로 다시 수집하도록 최종 QA 범위를 갱신했다.
+
+변경 파일: `Sources/App/TitlebarStatusView.swift`, `history.md`
