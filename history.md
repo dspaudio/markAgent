@@ -60,6 +60,7 @@
 60. [세션 56: Git 브랜치 상태 및 원격 목록 새로고침](#세션-56-git-브랜치-상태-및-원격-목록-새로고침)
 61. [세션 57: Git 브랜치 선택 접근성 회귀 보강](#세션-57-git-브랜치-선택-접근성-회귀-보강)
 62. [세션 58: Git 원격 갱신 경쟁 및 타임아웃 보강](#세션-58-git-원격-갱신-경쟁-및-타임아웃-보강)
+63. [세션 59: Remote 갱신 진행 상태 시각 보강](#세션-59-remote-갱신-진행-상태-시각-보강)
 
 ---
 
@@ -142,6 +143,7 @@
 | 73 | Git 브랜치 상태 및 원격 목록 새로고침 | 외부 checkout을 Git HEAD 감시로 즉시 반영하고 Remote 명시 refresh에서 fetch 후 목록을 갱신하도록 개선 |
 | 74 | Git 브랜치 선택 접근성 회귀 보강 | 브랜치 행을 실제 Button으로 노출해 기존 앱 내부 checkout을 접근성 입력으로도 검증 가능하게 보강 |
 | 75 | Git 원격 갱신 경쟁 및 타임아웃 보강 | 저장소 전환 중 늦은 fetch 결과를 차단하고 원격 명령 타임아웃·취소·중복 refresh 회귀 테스트를 추가 |
+| 76 | Remote 갱신 진행 상태 시각 보강 | 작은 스피너만 표시하던 Remote refresh 로딩 상태에 명시적인 가져오기 문구와 동적 접근성 라벨을 추가 |
 
 ---
 
@@ -3078,3 +3080,22 @@ Git 브랜치 상태·원격 목록 갱신 작업의 실제 앱 회귀 검증 �
 브랜치 작업 세대와 저장소 루트 검증을 추가해 저장소 A의 느린 fetch가 저장소 B로 이동한 뒤 상태를 덮어쓰지 못하게 했다. 저장소 변경 시 진행 작업을 취소하고 로딩 상태를 즉시 정리하며, 하위 프로세스에도 취소를 전파한다. Git 프로세스에는 15초 상한과 TERM/KILL 정리 경로를 추가했고, 원격 refresh 중복 호출 1회 제한·저장소 전환 경쟁·프로세스 타임아웃·취소를 집중 테스트로 고정했다. 기존 히스토리에서 누락된 세션 구분선도 원문대로 복원했다.
 
 변경 파일: `Sources/Core/GitRepositoryStatus.swift`, `Sources/App/Resources/en.lproj/Localizable.strings`, `Sources/App/Resources/ko.lproj/Localizable.strings`, `Tests/MarkAgentTests/GitRepositoryStatusTests.swift`, `history.md`
+
+---
+
+## 세션 59: Remote 갱신 진행 상태 시각 보강
+
+> 날짜: 2026-07-20
+> 경로: ~/workspace/markAgent
+
+최신 실제 앱 스크린샷의 독립 시각 검토에서 Remote refresh 중복 실행은 차단되지만, 작은 스피너만으로는 진행 상태를 분명히 인지하기 어렵다는 피드백을 반영했다.
+
+### 대화 1: Remote 로딩 상태 명시
+
+**사용자:**
+> 현재 브랜치 자동 반영과 Remote 새로고침 수정 작업을 진행해줘.
+
+**응답:**
+Remote 섹션의 갱신 버튼이 로딩 중일 때 스피너와 함께 `가져오는 중...` 문구를 표시하고, 접근성 라벨도 `원격 브랜치 가져오는 중`으로 전환하도록 변경했다. 영어·한국어 로컬라이제이션을 함께 추가했으며 전체 테스트 132개 통과를 확인했다.
+
+변경 파일: `Sources/App/TitlebarStatusView.swift`, `Sources/App/Resources/en.lproj/Localizable.strings`, `Sources/App/Resources/ko.lproj/Localizable.strings`, `history.md`

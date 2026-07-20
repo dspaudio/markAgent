@@ -213,8 +213,12 @@ private struct GitBranchPopoverView: View {
                     status.refreshBranchesFromRemotes()
                 } label: {
                     if status.isLoadingBranches {
-                        ProgressView()
-                            .controlSize(.mini)
+                        HStack(spacing: 4) {
+                            ProgressView()
+                                .controlSize(.mini)
+                            Text("가져오는 중...")
+                                .font(.system(size: 10, weight: .medium))
+                        }
                     } else {
                         Image(systemName: "arrow.triangle.2.circlepath")
                             .font(.system(size: 11, weight: .medium))
@@ -223,6 +227,9 @@ private struct GitBranchPopoverView: View {
                 .buttonStyle(.plain)
                 .disabled(status.isLoadingBranches || status.isCheckingOut)
                 .help(String(localized: "원격 브랜치 새로고침"))
+                .accessibilityLabel(
+                    String(localized: status.isLoadingBranches ? "원격 브랜치 가져오는 중" : "원격 브랜치 새로고침")
+                )
                 .accessibilityIdentifier("git-refresh-remote-branches")
             }
         }
