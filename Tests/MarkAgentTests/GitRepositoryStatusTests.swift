@@ -53,6 +53,106 @@ final class GitRepositoryStatusTests: XCTestCase {
         XCTAssertFalse(status.isCheckingOut)
     }
 
+    @MainActor
+    func testExplicitRefreshUpdatesBranchAfterExternalCheckout() async throws {
+        let repository = try makeRepository()
+        defer { try? FileManager.default.removeItem(at: repository.root) }
+
+        let status = GitRepositoryStatus(currentDirectory: repository.root)
+        status.refresh(for: repository.root)
+        let loadedInitialBranch = await waitUntil { status.branchName == repository.defaultBranch }
+        XCTAssertTrue(loadedInitialBranch)
+
+        _ = try runGit(["checkout", "-b", "external-feature"], in: repository.root)
+
+        status.refresh(for: repository.root)
+
+        let loadedExternalBranch = await waitUntil { status.branchName == "external-feature" }
+        XCTAssertTrue(loadedExternalBranch)
+    }
+
+    @MainActor
+    func testExternalCheckoutAutomaticallyRefreshesCurrentBranch() async throws {
+        let repository = try makeRepository()
+        defer { try? FileManager.default.removeItem(at: repository.root) }
+
+        let status = GitRepositoryStatus(currentDirectory: repository.root)
+        status.refresh(for: repository.root)
+        let loadedInitialBranch = await waitUntil { status.branchName == repository.defaultBranch }
+        XCTAssertTrue(loadedInitialBranch)
+
+        _ = try runGit(["checkout", "-b", "externally-checked-out"], in: repository.root)
+
+        let observedExternalCheckout = await waitUntil(timeout: .seconds(1)) {
+            status.branchName == "externally-checked-out"
+        }
+        XCTAssertTrue(
+            observedExternalCheckout,
+            "외부 git checkout 후 refresh() 호출 없이 현재 브랜치가 갱신되어야 합니다. 실제 값: \(status.branchName ?? "nil")"
+        )
+    }
+
+    @MainActor
+    func testRefreshBranchesFromRemotesFetchesNewBranchAndPreservesBranchesOnFailure() async throws {
+        let repository = try makeRepository()
+        let remote = FileManager.default.temporaryDirectory
+            .appendingPathComponent("GitRepositoryStatusTests-\(UUID().uuidString).git")
+        let producer = FileManager.default.temporaryDirectory
+            .appendingPathComponent("GitRepositoryStatusTests-Producer-\(UUID().uuidString)")
+        defer {
+            try? FileManager.default.removeItem(at: repository.root)
+            try? FileManager.default.removeItem(at: remote)
+            try? FileManager.default.removeItem(at: producer)
+        }
+
+        _ = try runGit(["init", "--bare", remote.path], in: FileManager.default.temporaryDirectory)
+        _ = try runGit(["remote", "add", "origin", remote.path], in: repository.root)
+        _ = try runGit(["push", "-u", "origin", repository.defaultBranch], in: repository.root)
+
+        let status = GitRepositoryStatus(currentDirectory: repository.root)
+        status.refresh(for: repository.root)
+        let foundRepository = await waitUntil { status.repositoryRoot == repository.root }
+        XCTAssertTrue(foundRepository)
+
+        status.loadBranches()
+        let loadedInitialRemoteBranch = await waitUntil {
+            self.hasRemoteBranch(repository.defaultBranch, remote: "origin", in: status.remoteBranchGroups)
+        }
+        XCTAssertTrue(loadedInitialRemoteBranch)
+
+        _ = try runGit(["clone", remote.path, producer.path], in: FileManager.default.temporaryDirectory)
+        _ = try runGit(
+            ["checkout", "-b", "remote-feature", "origin/\(repository.defaultBranch)"],
+            in: producer
+        )
+        let producerFile = producer.appendingPathComponent("remote-feature.txt")
+        try "created after initial branch load\n".write(to: producerFile, atomically: true, encoding: .utf8)
+        _ = try runGit(["add", "remote-feature.txt"], in: producer)
+        _ = try runGit(["commit", "-m", "add remote feature"], in: producer)
+        _ = try runGit(["push", "-u", "origin", "remote-feature"], in: producer)
+
+        status.refreshBranchesFromRemotes()
+        let fetchedNewRemoteBranch = await waitUntil(timeout: .seconds(5)) {
+            self.hasRemoteBranch("remote-feature", remote: "origin", in: status.remoteBranchGroups)
+        }
+        XCTAssertTrue(fetchedNewRemoteBranch, "최초 로드 이후 생성된 원격 브랜치를 fetch해야 합니다.")
+
+        let branchesBeforeFailedFetch = status.remoteBranchGroups
+        let unavailableRemote = remote.deletingLastPathComponent()
+            .appendingPathComponent("missing-\(UUID().uuidString).git")
+        _ = try runGit(["remote", "set-url", "origin", unavailableRemote.path], in: repository.root)
+
+        status.refreshBranchesFromRemotes()
+        XCTAssertTrue(status.isLoadingBranches)
+        let failedFetchFinished = await waitUntil(timeout: .seconds(5)) { !status.isLoadingBranches }
+        XCTAssertTrue(failedFetchFinished, "실패한 원격 fetch 작업이 bounded wait 안에 종료되어야 합니다.")
+        XCTAssertEqual(
+            status.remoteBranchGroups,
+            branchesBeforeFailedFetch,
+            "원격 fetch가 실패해도 마지막으로 성공한 브랜치 목록을 보존해야 합니다."
+        )
+    }
+
     private func makeRepository() throws -> (root: URL, defaultBranch: String) {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("GitRepositoryStatusTests-\(UUID().uuidString)")
@@ -105,8 +205,36 @@ final class GitRepositoryStatusTests: XCTestCase {
         return output
     }
 
+    private func hasRemoteBranch(
+        _ branchName: String,
+        remote remoteName: String,
+        in groups: [GitRemoteBranchGroup]
+    ) -> Bool {
+        groups.first(where: { $0.remoteName == remoteName })?
+            .branches
+            .contains(where: { $0.name == branchName }) == true
+    }
+
     @MainActor
     private func waitForGitStatusUpdate() async throws {
         try await Task.sleep(for: .milliseconds(250))
+    }
+
+    @MainActor
+    private func waitUntil(
+        timeout: Duration = .seconds(2),
+        condition: @MainActor () -> Bool
+    ) async -> Bool {
+        let clock = ContinuousClock()
+        let deadline = clock.now.advanced(by: timeout)
+
+        while clock.now < deadline {
+            if condition() {
+                return true
+            }
+            try? await Task.sleep(for: .milliseconds(25))
+        }
+
+        return condition()
     }
 }

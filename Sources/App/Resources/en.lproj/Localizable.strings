@@ -108,6 +108,7 @@
 "%@에 .git 디렉토리를 생성합니다." = "Creates a .git directory in %@.";
 "브랜치" = "Branches";
 "브랜치 목록 새로고침" = "Refresh branch list";
+"원격 브랜치 새로고침" = "Fetch and refresh remote branches";
 "체크아웃 진행 중..." = "Checking out...";
 "클릭해서 %@ 체크아웃" = "Click to checkout %@";
 "%@에서 git init" = "git init in %@";

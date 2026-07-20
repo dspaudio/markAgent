@@ -57,6 +57,7 @@
 57. [세션 53: 터미널 선택 영역 스니펫 저장 및 v1.7.4 릴리즈](#세션-53-터미널-선택-영역-스니펫-저장-및-v174-릴리즈)
 58. [세션 54: 사이드바 리사이즈, 탭 복귀, Git fallback 및 v1.7.5 릴리즈](#세션-54-사이드바-리사이즈-탭-복귀-git-fallback-및-v175-릴리즈)
 59. [세션 55: 사이드바 리사이즈 핸들 재구성 및 v1.7.6 릴리즈](#세션-55-사이드바-리사이즈-핸들-재구성-및-v176-릴리즈)
+60. [세션 56: Git 브랜치 상태 및 원격 목록 새로고침](#세션-56-git-브랜치-상태-및-원격-목록-새로고침)
 
 ---
 
@@ -136,6 +137,7 @@
 | 70 | 터미널 선택 영역 스니펫 저장 및 v1.7.4 릴리즈 | Cmd+Shift+C로 터미널 선택 내용을 프롬프트 스니펫에 저장하고 저장 직후 스니펫 목록을 열도록 반영, libghostty-spm 선택 복사 누수 워크어라운드와 upstream PR 기록, 앱 번들 버전 1.7.4 갱신 |
 | 71 | 사이드바 리사이즈, 탭 복귀, Git fallback 및 v1.7.5 릴리즈 | 좌우 사이드바 리사이즈 안정화, child tab 닫기 후 부모 탭 복귀, 깨끗한 Git 작업 트리에서 마지막 커밋 diff 표시, 왼쪽 파일 목록 새로고침 버튼을 반영하고 앱 번들 버전 1.7.5 갱신 |
 | 72 | 사이드바 리사이즈 핸들 재구성 및 v1.7.6 릴리즈 | 좌우 사이드바 리사이즈 핸들을 오버레이 기반 내부 grip으로 재구성해 터미널 콘텐츠 가림과 드래그 실패를 줄이고 앱 번들 버전 1.7.6 갱신 |
+| 73 | Git 브랜치 상태 및 원격 목록 새로고침 | 외부 checkout을 Git HEAD 감시로 즉시 반영하고 Remote 명시 refresh에서 fetch 후 목록을 갱신하도록 개선 |
 
 ---
 
@@ -1620,8 +1622,6 @@ Git 변경 목록은 미커밋 변경이 있으면 기존처럼 working tree dif
 
 변경 파일: `Sources/App/Info.plist`, `README.md`, `history.md`
 
----
-
 ## 세션 51: 코드 하이라이팅, 사이드바 미리보기 폴리싱 및 v1.7.2 릴리즈
 
 > 날짜: 2026-06-05
@@ -3013,3 +3013,24 @@ Apple `HSplitView`, SwiftUI 커스텀 drag separator, Ghostty macOS split divide
 앱 번들 버전을 `1.7.6`으로 갱신하고, README 기능 설명에 사이드바 내부 4pt divider와 넓은 내부 hit area를 반영했다. 커밋/푸시 전 필수 규칙에 따라 이번 세션 내용을 `history.md` 목차, 타임라인 요약, 세션 본문에 기록했다. 이후 `dev` 대상 PR과 `main` 대상 PR, GitHub Release `v1.7.6` 생성 절차를 진행한다.
 
 변경 파일: `Sources/App/Info.plist`, `README.md`, `history.md`
+
+---
+
+## 세션 56: Git 브랜치 상태 및 원격 목록 새로고침
+
+> 날짜: 2026-07-20
+> 경로: ~/workspace/markAgent
+
+터미널에서 같은 작업 디렉터리의 브랜치를 바꿔도 타이틀바 표시가 갱신되지 않고, 원격에 새로 생긴 브랜치가 팝오버 목록에 나타나지 않는 문제를 수정했다. 저장소의 실제 개발 브랜치인 `dev`를 `origin/dev`와 fast-forward 동기화한 뒤 작업했다.
+
+### 대화 1: 현재 브랜치 자동 반영과 Remote 새로고침
+
+**사용자:**
+> 오른쪽 상단 현재 브랜치 표시가 터미널의 checkout을 즉시 반영하고, Remote 쪽에 새 원격 브랜치를 가져오는 refresh 버튼을 추가해줘. develop 브랜치로 체크아웃하고 최신화한 뒤 수정해줘.
+
+**응답:**
+저장소에 `develop` 브랜치가 없고 실제 통합 브랜치가 `dev`인 점을 확인해 `origin/dev`와 동기화했다. 기존에는 앱 시작·디렉터리 변경·앱 내부 checkout 때만 Git 상태를 읽었기 때문에, 실제 git directory의 `HEAD`를 기존 `FileWatcher`로 감시해 외부 checkout을 즉시 반영하도록 변경했다. 팝오버의 일반 새로고침은 현재 브랜치와 로컬 캐시 목록을 함께 갱신하고, REMOTE 섹션에는 `git fetch --all --prune` 후 목록을 원자적으로 교체하는 전용 버튼·진행 표시·접근성 식별자를 추가했다. fetch 실패 시 마지막 성공 목록은 보존하고 기존 인라인 오류 영역에 원인을 표시한다.
+
+검증: `swift test --filter GitRepositoryStatusTests` 6개 통과, 전체 `swift test` 128개 통과, `swift build` 통과, 변경 Swift 파일 LSP 오류 없음. 실제 앱 QA와 메모리 누수 점검은 다음 검증 단계에서 이어서 기록한다.
+
+변경 파일: `Sources/Core/GitRepositoryStatus.swift`, `Sources/App/TitlebarStatusView.swift`, `Sources/App/Resources/en.lproj/Localizable.strings`, `Sources/App/Resources/ko.lproj/Localizable.strings`, `Tests/MarkAgentTests/GitRepositoryStatusTests.swift`, `history.md`

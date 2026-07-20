@@ -54,7 +54,10 @@ final class GitRepositoryStatus {
     private var branchTask: Task<Void, Never>?
     private var checkoutTask: Task<Void, Never>?
     private var initTask: Task<Void, Never>?
+    private var headWatcher: FileWatcher?
+    private var watchedHeadURL: URL?
     private var refreshToken = 0
+    private var headWatcherToken = 0
 
     init(currentDirectory: URL) {
         self.currentDirectory = currentDirectory
@@ -83,6 +86,8 @@ final class GitRepositoryStatus {
                 )
             }.value
 
+            guard !Task.isCancelled, token == self.refreshToken else { return }
+            await self.updateHeadWatcher(repositoryRoot: result.repositoryRoot)
             guard !Task.isCancelled, token == self.refreshToken else { return }
             self.repositoryRoot = result.repositoryRoot
             self.branchName = result.branchName
@@ -121,15 +126,20 @@ final class GitRepositoryStatus {
     }
 
     func loadBranches() {
-        guard let repositoryRoot else { return }
+        guard let repositoryRoot, !isLoadingBranches else { return }
         isLoadingBranches = true
         checkoutErrorMessage = nil
         branchTask?.cancel()
 
         branchTask = Task { [repositoryRoot] in
-            let result: Result<(local: [GitBranch], remoteGroups: [GitRemoteBranchGroup]), Error> = await Task.detached(priority: .utility) {
+            let result: Result<(branchName: String?, local: [GitBranch], remoteGroups: [GitRemoteBranchGroup]), Error> = await Task.detached(priority: .utility) {
                 Result {
-                    try Self.loadBranches(repositoryRoot: repositoryRoot)
+                    let branches = try Self.loadBranches(repositoryRoot: repositoryRoot)
+                    return (
+                        branchName: Self.loadBranchName(repositoryRoot: repositoryRoot),
+                        local: branches.local,
+                        remoteGroups: branches.remoteGroups
+                    )
                 }
             }.value
 
@@ -138,11 +148,42 @@ final class GitRepositoryStatus {
 
             switch result {
             case .success(let branches):
+                self.branchName = branches.branchName
                 self.localBranches = branches.local
                 self.remoteBranchGroups = branches.remoteGroups
             case .failure(let error):
-                self.localBranches = []
-                self.remoteBranchGroups = []
+                self.checkoutErrorMessage = error.localizedDescription
+            }
+        }
+    }
+
+    func refreshBranchesFromRemotes() {
+        guard let repositoryRoot, !isLoadingBranches, !isCheckingOut else { return }
+        isLoadingBranches = true
+        checkoutErrorMessage = nil
+
+        branchTask = Task { [repositoryRoot] in
+            let result: Result<(branchName: String?, local: [GitBranch], remoteGroups: [GitRemoteBranchGroup]), Error> = await Task.detached(priority: .userInitiated) {
+                Result {
+                    _ = try Self.runGitStrict(["fetch", "--all", "--prune"], repositoryRoot: repositoryRoot)
+                    let branches = try Self.loadBranches(repositoryRoot: repositoryRoot)
+                    return (
+                        branchName: Self.loadBranchName(repositoryRoot: repositoryRoot),
+                        local: branches.local,
+                        remoteGroups: branches.remoteGroups
+                    )
+                }
+            }.value
+
+            guard !Task.isCancelled else { return }
+            self.isLoadingBranches = false
+
+            switch result {
+            case .success(let branches):
+                self.branchName = branches.branchName
+                self.localBranches = branches.local
+                self.remoteBranchGroups = branches.remoteGroups
+            case .failure(let error):
                 self.checkoutErrorMessage = error.localizedDescription
             }
         }
@@ -204,7 +245,7 @@ final class GitRepositoryStatus {
         while true {
             let gitURL = current.appendingPathComponent(".git")
             if FileManager.default.fileExists(atPath: gitURL.path) {
-                return current
+                return URL(fileURLWithPath: current.path, isDirectory: false)
             }
 
             let parent = current.deletingLastPathComponent()
@@ -223,6 +264,55 @@ final class GitRepositoryStatus {
 
         let shortHash = try? runGit(["rev-parse", "--short", "HEAD"], repositoryRoot: repositoryRoot)
         return shortHash.flatMap { $0.isEmpty ? nil : "HEAD@\($0)" }
+    }
+
+    private func updateHeadWatcher(repositoryRoot: URL?) async {
+        let headURL = repositoryRoot.flatMap(Self.resolveHeadURL(repositoryRoot:))
+        guard headURL != watchedHeadURL else { return }
+
+        headWatcherToken += 1
+        let token = headWatcherToken
+        let previousWatcher = headWatcher
+        watchedHeadURL = headURL
+        let watcher = headURL.map { _ in
+            FileWatcher { [weak self] in
+                self?.refreshCurrentBranch()
+            }
+        }
+        headWatcher = watcher
+
+        await previousWatcher?.stopWatching()
+        guard token == headWatcherToken, let watcher, let headURL else { return }
+        await watcher.startWatching(url: headURL)
+        if token != headWatcherToken {
+            await watcher.stopWatching()
+        }
+    }
+
+    private func refreshCurrentBranch() {
+        guard let repositoryRoot else { return }
+        let expectedRoot = repositoryRoot
+
+        Task {
+            let branchName = await Task.detached(priority: .utility) {
+                Self.loadBranchName(repositoryRoot: expectedRoot)
+            }.value
+            guard self.repositoryRoot == expectedRoot else { return }
+            self.branchName = branchName
+        }
+    }
+
+    private nonisolated static func resolveHeadURL(repositoryRoot: URL) -> URL? {
+        guard let gitDirectory = try? runGitStrict(
+            ["rev-parse", "--absolute-git-dir"],
+            repositoryRoot: repositoryRoot
+        ), !gitDirectory.isEmpty else {
+            return nil
+        }
+
+        return URL(fileURLWithPath: gitDirectory, isDirectory: true)
+            .appendingPathComponent("HEAD", isDirectory: false)
+            .standardizedFileURL
     }
 
     private nonisolated static func initializeRepository(at directory: URL) throws {
@@ -315,19 +405,39 @@ final class GitRepositoryStatus {
         process.executableURL = URL(fileURLWithPath: "/usr/bin/git")
         process.arguments = arguments
         process.currentDirectoryURL = repositoryRoot
+        var environment = ProcessInfo.processInfo.environment
+        environment["GIT_TERMINAL_PROMPT"] = "0"
+        process.environment = environment
 
-        let outputPipe = Pipe()
-        let errorPipe = Pipe()
-        process.standardOutput = outputPipe
-        process.standardError = errorPipe
+        let captureDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("MarkAgent-git-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: captureDirectory, withIntermediateDirectories: false)
+        defer { try? FileManager.default.removeItem(at: captureDirectory) }
+
+        let outputURL = captureDirectory.appendingPathComponent("stdout")
+        let errorURL = captureDirectory.appendingPathComponent("stderr")
+        guard FileManager.default.createFile(atPath: outputURL.path, contents: nil),
+              FileManager.default.createFile(atPath: errorURL.path, contents: nil),
+              let outputHandle = FileHandle(forWritingAtPath: outputURL.path),
+              let errorHandle = FileHandle(forWritingAtPath: errorURL.path) else {
+            throw GitRepositoryStatusError.commandFailed(String(localized: "git 명령을 실행할 수 없습니다."))
+        }
+        defer {
+            try? outputHandle.close()
+            try? errorHandle.close()
+        }
+        process.standardOutput = outputHandle
+        process.standardError = errorHandle
 
         try process.run()
         process.waitUntilExit()
+        try outputHandle.close()
+        try errorHandle.close()
 
-        let output = String(data: outputPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8)?
+        let output = String(data: try Data(contentsOf: outputURL), encoding: .utf8)?
             .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         guard process.terminationStatus == 0 else {
-            let error = String(data: errorPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8)?
+            let error = String(data: try Data(contentsOf: errorURL), encoding: .utf8)?
                 .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
             throw GitRepositoryStatusError.commandFailed(error.isEmpty ? output : error)
         }

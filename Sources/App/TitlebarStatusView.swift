@@ -132,7 +132,7 @@ private struct GitBranchPopoverView: View {
 
     @ViewBuilder
     private var content: some View {
-        if status.isLoadingBranches {
+        if status.isLoadingBranches && status.localBranches.isEmpty && status.remoteBranchGroups.isEmpty {
             ProgressView()
                 .controlSize(.small)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -157,7 +157,8 @@ private struct GitBranchPopoverView: View {
                     branchSection(
                         title: "REMOTE",
                         systemImage: "icloud",
-                        count: status.remoteBranchGroups.reduce(0) { $0 + $1.branches.count }
+                        count: status.remoteBranchGroups.reduce(0) { $0 + $1.branches.count },
+                        showsRemoteRefresh: true
                     )
 
                     ForEach(status.remoteBranchGroups) { group in
@@ -191,7 +192,12 @@ private struct GitBranchPopoverView: View {
         }
     }
 
-    private func branchSection(title: String, systemImage: String, count: Int) -> some View {
+    private func branchSection(
+        title: String,
+        systemImage: String,
+        count: Int,
+        showsRemoteRefresh: Bool = false
+    ) -> some View {
         HStack(spacing: 8) {
             Image(systemName: systemImage)
                 .font(.system(size: 12, weight: .medium))
@@ -201,6 +207,24 @@ private struct GitBranchPopoverView: View {
             Text("\(count)")
                 .font(.system(size: 12, weight: .bold, design: .monospaced))
                 .foregroundStyle(.blue)
+
+            if showsRemoteRefresh {
+                Button {
+                    status.refreshBranchesFromRemotes()
+                } label: {
+                    if status.isLoadingBranches {
+                        ProgressView()
+                            .controlSize(.mini)
+                    } else {
+                        Image(systemName: "arrow.triangle.2.circlepath")
+                            .font(.system(size: 11, weight: .medium))
+                    }
+                }
+                .buttonStyle(.plain)
+                .disabled(status.isLoadingBranches || status.isCheckingOut)
+                .help(String(localized: "원격 브랜치 새로고침"))
+                .accessibilityIdentifier("git-refresh-remote-branches")
+            }
         }
         .foregroundStyle(.secondary)
         .padding(.horizontal, 12)
