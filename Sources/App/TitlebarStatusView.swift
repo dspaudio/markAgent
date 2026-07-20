@@ -188,7 +188,7 @@ private struct GitBranchPopoverView: View {
                 }
                 .padding(.vertical, 8)
             }
-            .disabled(status.isCheckingOut)
+            .disabled(status.isCheckingOut || status.isLoadingBranches)
         }
     }
 
@@ -288,7 +288,7 @@ private struct GitBranchPopoverView: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .disabled(status.isCheckingOut)
+        .disabled(status.isCheckingOut || status.isLoadingBranches)
         .help(String(format: String(localized: "클릭해서 %@ 체크아웃"), branch.checkoutName))
     }
 }

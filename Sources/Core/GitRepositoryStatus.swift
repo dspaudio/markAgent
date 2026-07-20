@@ -48,6 +48,9 @@ final class GitRepositoryStatus {
     )
     typealias BranchSnapshotLoader = @Sendable (URL) throws -> BranchSnapshot
     typealias RemoteFetcher = @Sendable (URL, TimeInterval) throws -> Void
+    typealias BranchNameLoader = @Sendable (URL) -> String?
+    typealias RepositoryInitializer = @Sendable (URL) throws -> Void
+    typealias BranchCheckout = @Sendable (GitBranch, URL) throws -> Void
 
     private(set) var currentDirectory: URL
     private(set) var repositoryRoot: URL?
@@ -68,21 +71,33 @@ final class GitRepositoryStatus {
     private var watchedHeadURL: URL?
     private var refreshToken = 0
     private var branchGeneration = 0
+    private var branchNameGeneration = 0
+    private var checkoutGeneration = 0
+    private var initGeneration = 0
     private var headWatcherToken = 0
     private let gitCommandTimeout: TimeInterval
     private let branchSnapshotLoader: BranchSnapshotLoader
     private let remoteFetcher: RemoteFetcher
+    private let branchNameLoader: BranchNameLoader
+    private let repositoryInitializer: RepositoryInitializer
+    private let branchCheckout: BranchCheckout
 
     init(
         currentDirectory: URL,
         gitCommandTimeout: TimeInterval = 15,
         branchSnapshotLoader: @escaping BranchSnapshotLoader = GitRepositoryStatus.loadBranchSnapshot,
-        remoteFetcher: @escaping RemoteFetcher = GitRepositoryStatus.fetchRemotes
+        remoteFetcher: @escaping RemoteFetcher = GitRepositoryStatus.fetchRemotes,
+        branchNameLoader: @escaping BranchNameLoader = GitRepositoryStatus.loadBranchName,
+        repositoryInitializer: @escaping RepositoryInitializer = GitRepositoryStatus.initializeRepository,
+        branchCheckout: @escaping BranchCheckout = GitRepositoryStatus.checkout
     ) {
         self.currentDirectory = currentDirectory
         self.gitCommandTimeout = gitCommandTimeout
         self.branchSnapshotLoader = branchSnapshotLoader
         self.remoteFetcher = remoteFetcher
+        self.branchNameLoader = branchNameLoader
+        self.repositoryInitializer = repositoryInitializer
+        self.branchCheckout = branchCheckout
     }
 
     var isInGitRepository: Bool {
@@ -95,6 +110,8 @@ final class GitRepositoryStatus {
         currentDirectory = standardizedDirectory
         refreshToken += 1
         branchGeneration += 1
+        branchNameGeneration += 1
+        let nameGeneration = branchNameGeneration
         branchTask?.cancel()
         branchTask = nil
         isLoadingBranches = false
@@ -103,10 +120,15 @@ final class GitRepositoryStatus {
         refreshTask?.cancel()
 
         if directoryChanged {
+            checkoutGeneration += 1
             checkoutTask?.cancel()
             checkoutTask = nil
             isCheckingOut = false
             checkoutTargetBranch = nil
+            initGeneration += 1
+            initTask?.cancel()
+            initTask = nil
+            isInitializingRepository = false
             repositoryRoot = nil
             branchName = nil
             localBranches = []
@@ -114,7 +136,8 @@ final class GitRepositoryStatus {
             checkoutErrorMessage = nil
         }
 
-        refreshTask = Task { [directory = standardizedDirectory, token] in
+        let branchNameLoader = branchNameLoader
+        refreshTask = Task { [directory = standardizedDirectory, token, nameGeneration, branchNameLoader] in
             let result = await Task.detached(priority: .utility) {
                 let repositoryRoot = Self.findRepositoryRoot(from: directory)
                 guard let repositoryRoot else {
@@ -123,7 +146,7 @@ final class GitRepositoryStatus {
 
                 return (
                     repositoryRoot: Optional(repositoryRoot),
-                    branchName: Self.loadBranchName(repositoryRoot: repositoryRoot)
+                    branchName: branchNameLoader(repositoryRoot)
                 )
             }.value
 
@@ -131,7 +154,9 @@ final class GitRepositoryStatus {
             await self.updateHeadWatcher(repositoryRoot: result.repositoryRoot)
             guard !Task.isCancelled, token == self.refreshToken else { return }
             self.repositoryRoot = result.repositoryRoot
-            self.branchName = result.branchName
+            if nameGeneration == self.branchNameGeneration {
+                self.branchName = result.branchName
+            }
             if result.repositoryRoot == nil {
                 self.localBranches = []
                 self.remoteBranchGroups = []
@@ -145,19 +170,30 @@ final class GitRepositoryStatus {
     func initializeRepository() {
         guard !isInGitRepository else { return }
         let directory = currentDirectory
+        initGeneration += 1
+        let generation = initGeneration
+        let initializer = repositoryInitializer
         isInitializingRepository = true
         checkoutErrorMessage = nil
         initTask?.cancel()
 
-        initTask = Task { [directory] in
-            let result: Result<Void, Error> = await Task.detached(priority: .userInitiated) {
+        initTask = Task { [directory, generation, initializer] in
+            let operation = Task.detached(priority: .userInitiated) {
                 Result {
-                    try Self.initializeRepository(at: directory)
+                    try initializer(directory)
                 }
-            }.value
+            }
+            let result: Result<Void, Error> = await withTaskCancellationHandler {
+                await operation.value
+            } onCancel: {
+                operation.cancel()
+            }
 
-            guard !Task.isCancelled else { return }
+            guard !Task.isCancelled,
+                  generation == self.initGeneration,
+                  directory.standardizedFileURL == self.currentDirectory.standardizedFileURL else { return }
             self.isInitializingRepository = false
+            self.initTask = nil
 
             switch result {
             case .success:
@@ -172,13 +208,15 @@ final class GitRepositoryStatus {
         guard let repositoryRoot, !isLoadingBranches else { return }
         branchGeneration += 1
         let generation = branchGeneration
+        branchNameGeneration += 1
+        let nameGeneration = branchNameGeneration
         let loader = branchSnapshotLoader
         isLoadingBranches = true
         isRefreshingRemotes = false
         checkoutErrorMessage = nil
         branchTask?.cancel()
 
-        branchTask = Task { [repositoryRoot, generation, loader] in
+        branchTask = Task { [repositoryRoot, generation, nameGeneration, loader] in
             let operation = Task.detached(priority: .utility) {
                 Result {
                     try loader(repositoryRoot)
@@ -199,7 +237,9 @@ final class GitRepositoryStatus {
 
             switch result {
             case .success(let branches):
-                self.branchName = branches.branchName
+                if nameGeneration == self.branchNameGeneration {
+                    self.branchName = branches.branchName
+                }
                 self.localBranches = branches.local
                 self.remoteBranchGroups = branches.remoteGroups
             case .failure(let error):
@@ -212,6 +252,8 @@ final class GitRepositoryStatus {
         guard let repositoryRoot, !isLoadingBranches, !isCheckingOut else { return }
         branchGeneration += 1
         let generation = branchGeneration
+        branchNameGeneration += 1
+        let nameGeneration = branchNameGeneration
         let loader = branchSnapshotLoader
         let fetcher = remoteFetcher
         let timeout = gitCommandTimeout
@@ -219,7 +261,7 @@ final class GitRepositoryStatus {
         isRefreshingRemotes = true
         checkoutErrorMessage = nil
 
-        branchTask = Task { [repositoryRoot, generation, loader, fetcher, timeout] in
+        branchTask = Task { [repositoryRoot, generation, nameGeneration, loader, fetcher, timeout] in
             let operation = Task.detached(priority: .userInitiated) {
                 Result {
                     try fetcher(repositoryRoot, timeout)
@@ -242,7 +284,9 @@ final class GitRepositoryStatus {
 
             switch result {
             case .success(let branches):
-                self.branchName = branches.branchName
+                if nameGeneration == self.branchNameGeneration {
+                    self.branchName = branches.branchName
+                }
                 self.localBranches = branches.local
                 self.remoteBranchGroups = branches.remoteGroups
             case .failure(let error):
@@ -262,36 +306,44 @@ final class GitRepositoryStatus {
             return
         }
 
-        guard !isCheckingOut else {
+        guard !isCheckingOut, !isLoadingBranches else {
             checkoutErrorMessage = String(localized: "다른 체크아웃 작업이 진행 중입니다.")
             return
         }
 
+        checkoutGeneration += 1
+        let generation = checkoutGeneration
+        let directory = currentDirectory
+        let checkout = branchCheckout
         isCheckingOut = true
         checkoutTargetBranch = branch
         checkoutErrorMessage = nil
         checkoutTask?.cancel()
 
-        checkoutTask = Task { [repositoryRoot, branch] in
-            let result: Result<Void, Error> = await Task.detached(priority: .userInitiated) {
+        checkoutTask = Task { [repositoryRoot, directory, branch, generation, checkout] in
+            let operation = Task.detached(priority: .userInitiated) {
                 Result {
-                    try Self.checkout(branch, repositoryRoot: repositoryRoot)
+                    try checkout(branch, repositoryRoot)
                 }
-            }.value
-
-            guard !Task.isCancelled else {
-                self.isCheckingOut = false
-                self.checkoutTargetBranch = nil
-                return
             }
+            let result: Result<Void, Error> = await withTaskCancellationHandler {
+                await operation.value
+            } onCancel: {
+                operation.cancel()
+            }
+
+            guard !Task.isCancelled,
+                  generation == self.checkoutGeneration,
+                  repositoryRoot == self.repositoryRoot,
+                  directory.standardizedFileURL == self.currentDirectory.standardizedFileURL else { return }
 
             self.isCheckingOut = false
             self.checkoutTargetBranch = nil
+            self.checkoutTask = nil
 
             switch result {
             case .success:
-                self.refresh(for: self.currentDirectory)
-                self.loadBranches()
+                self.refresh(for: directory)
             case .failure(let error):
                 if let gitError = error as? GitRepositoryStatusError, case .commandFailed(let msg) = gitError {
                     self.checkoutErrorMessage = Self.parseCheckoutError(msg)
@@ -351,15 +403,19 @@ final class GitRepositoryStatus {
         }
     }
 
-    private func refreshCurrentBranch() {
+    func refreshCurrentBranch() {
         guard let repositoryRoot else { return }
         let expectedRoot = repositoryRoot
+        branchNameGeneration += 1
+        let generation = branchNameGeneration
+        let loader = branchNameLoader
 
         Task {
             let branchName = await Task.detached(priority: .utility) {
-                Self.loadBranchName(repositoryRoot: expectedRoot)
+                loader(expectedRoot)
             }.value
-            guard self.repositoryRoot == expectedRoot else { return }
+            guard generation == self.branchNameGeneration,
+                  self.repositoryRoot == expectedRoot else { return }
             self.branchName = branchName
         }
     }
@@ -610,15 +666,16 @@ final class GitRepositoryStatus {
         standardError: [Int32]
     ) throws -> pid_t {
         var fileActions: posix_spawn_file_actions_t?
-        var attributes: posix_spawnattr_t?
-        guard posix_spawn_file_actions_init(&fileActions) == 0,
-              posix_spawnattr_init(&attributes) == 0 else {
+        guard posix_spawn_file_actions_init(&fileActions) == 0 else {
             throw GitRepositoryStatusError.commandFailed(String(localized: "git 명령을 실행할 수 없습니다."))
         }
-        defer {
-            posix_spawn_file_actions_destroy(&fileActions)
-            posix_spawnattr_destroy(&attributes)
+        defer { posix_spawn_file_actions_destroy(&fileActions) }
+
+        var attributes: posix_spawnattr_t?
+        guard posix_spawnattr_init(&attributes) == 0 else {
+            throw GitRepositoryStatusError.commandFailed(String(localized: "git 명령을 실행할 수 없습니다."))
         }
+        defer { posix_spawnattr_destroy(&attributes) }
 
         guard posix_spawn_file_actions_addchdir_np(&fileActions, currentDirectoryURL.path) == 0,
               posix_spawn_file_actions_adddup2(&fileActions, standardOutput[1], STDOUT_FILENO) == 0,
@@ -691,13 +748,8 @@ final class GitRepositoryStatus {
                   var components = URLComponents(string: String(result[matchRange])) else { return }
             if components.user != nil { components.user = "REDACTED" }
             if components.password != nil { components.password = "REDACTED" }
-            let sensitiveNames: Set<String> = [
-                "access_token", "auth", "key", "password", "secret", "signature", "token",
-            ]
             components.queryItems = components.queryItems?.map { item in
-                sensitiveNames.contains(item.name.lowercased())
-                    ? URLQueryItem(name: item.name, value: "REDACTED")
-                    : item
+                URLQueryItem(name: item.name, value: item.value == nil ? nil : "REDACTED")
             }
             if let redacted = components.string {
                 result.replaceSubrange(matchRange, with: redacted)

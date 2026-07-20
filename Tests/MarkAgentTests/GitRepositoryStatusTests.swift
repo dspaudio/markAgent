@@ -93,6 +93,64 @@ final class GitRepositoryStatusTests: XCTestCase {
     }
 
     @MainActor
+    func testLateBranchSnapshotDoesNotOverwriteNewerHeadRefresh() async throws {
+        let repository = try makeRepository()
+        defer { try? FileManager.default.removeItem(at: repository.root) }
+        let snapshotLoader = BlockingBranchSnapshotLoader(branchName: "stale-branch")
+        let branchNameLoader = SequencedBranchNameLoader(values: ["initial-branch", "newest-branch"])
+        let status = GitRepositoryStatus(
+            currentDirectory: repository.root,
+            branchSnapshotLoader: { _ in try snapshotLoader.load() },
+            branchNameLoader: { _ in branchNameLoader.load() }
+        )
+
+        status.refresh(for: repository.root)
+        let initialLoadFinished = await waitUntil {
+            snapshotLoader.callCount == 1 && !status.isLoadingBranches
+        }
+        XCTAssertTrue(initialLoadFinished)
+
+        status.loadBranches()
+        let staleLoadStarted = await waitUntil { snapshotLoader.callCount == 2 }
+        XCTAssertTrue(staleLoadStarted)
+
+        status.refreshCurrentBranch()
+        let newestHeadLoaded = await waitUntil { status.branchName == "newest-branch" }
+        XCTAssertTrue(newestHeadLoaded)
+
+        snapshotLoader.finishBlockedLoad()
+        let staleLoadFinished = await waitUntil { !status.isLoadingBranches }
+        XCTAssertTrue(staleLoadFinished)
+        XCTAssertEqual(status.branchName, "newest-branch")
+    }
+
+    @MainActor
+    func testOutOfOrderHeadRefreshKeepsNewestBranchName() async throws {
+        let repository = try makeRepository()
+        defer { try? FileManager.default.removeItem(at: repository.root) }
+        let branchNameLoader = BlockingBranchNameLoader()
+        let status = GitRepositoryStatus(
+            currentDirectory: repository.root,
+            branchNameLoader: { _ in branchNameLoader.load() }
+        )
+
+        status.refresh(for: repository.root)
+        let repositoryLoaded = await waitUntil { status.repositoryRoot == repository.root }
+        XCTAssertTrue(repositoryLoaded)
+
+        status.refreshCurrentBranch()
+        let staleRefreshStarted = await waitUntil { branchNameLoader.callCount == 2 }
+        XCTAssertTrue(staleRefreshStarted)
+        status.refreshCurrentBranch()
+        let newestRefreshFinished = await waitUntil { status.branchName == "newest-branch" }
+        XCTAssertTrue(newestRefreshFinished)
+
+        branchNameLoader.finishStaleLoad()
+        try? await Task.sleep(for: .milliseconds(100))
+        XCTAssertEqual(status.branchName, "newest-branch")
+    }
+
+    @MainActor
     func testRefreshBranchesFromRemotesFetchesNewBranchAndPreservesBranchesOnFailure() async throws {
         let repository = try makeRepository()
         let remote = FileManager.default.temporaryDirectory
@@ -267,6 +325,116 @@ final class GitRepositoryStatusTests: XCTestCase {
     }
 
     @MainActor
+    func testLateCheckoutCompletionDoesNotClearNewRepositoryCheckoutState() async throws {
+        let repositoryA = try makeRepository()
+        let repositoryB = try makeRepository()
+        defer {
+            try? FileManager.default.removeItem(at: repositoryA.root)
+            try? FileManager.default.removeItem(at: repositoryB.root)
+        }
+        let checkout = BlockingCheckoutOperation(firstRoot: repositoryA.root, secondRoot: repositoryB.root)
+        let status = GitRepositoryStatus(
+            currentDirectory: repositoryA.root,
+            branchCheckout: { branch, root in try checkout.run(branch: branch, root: root) }
+        )
+
+        status.refresh(for: repositoryA.root)
+        let repositoryALoaded = await waitUntil {
+            status.repositoryRoot == repositoryA.root && !status.isLoadingBranches
+        }
+        XCTAssertTrue(repositoryALoaded)
+        let branchA = GitBranch(kind: .local, name: "repo-a-target")
+        status.checkout(branchA)
+        let firstCheckoutStarted = await waitUntil { checkout.firstCallStarted }
+        XCTAssertTrue(firstCheckoutStarted)
+
+        status.refresh(for: repositoryB.root)
+        let repositoryBLoaded = await waitUntil {
+            status.repositoryRoot == repositoryB.root && !status.isLoadingBranches
+        }
+        XCTAssertTrue(repositoryBLoaded)
+        let branchB = GitBranch(kind: .local, name: "repo-b-target")
+        status.checkout(branchB)
+        let secondCheckoutStarted = await waitUntil { checkout.secondCallStarted }
+        XCTAssertTrue(secondCheckoutStarted)
+
+        checkout.finishFirst()
+        try? await Task.sleep(for: .milliseconds(100))
+        XCTAssertTrue(status.isCheckingOut)
+        XCTAssertEqual(status.checkoutTargetBranch, branchB)
+        XCTAssertEqual(status.currentDirectory.path, repositoryB.root.path)
+
+        checkout.finishSecond()
+        let secondCheckoutFinished = await waitUntil { !status.isCheckingOut }
+        XCTAssertTrue(secondCheckoutFinished)
+    }
+
+    @MainActor
+    func testLateRepositoryInitCompletionDoesNotReactivateOldDirectory() async throws {
+        let directoryA = try makeTemporaryDirectory()
+        let directoryB = try makeTemporaryDirectory()
+        defer {
+            try? FileManager.default.removeItem(at: directoryA)
+            try? FileManager.default.removeItem(at: directoryB)
+        }
+        let initializer = BlockingRepositoryInitializer(firstDirectory: directoryA, secondDirectory: directoryB)
+        let status = GitRepositoryStatus(
+            currentDirectory: directoryA,
+            repositoryInitializer: { directory in try initializer.run(directory: directory) }
+        )
+
+        status.initializeRepository()
+        let firstInitStarted = await waitUntil { initializer.firstCallStarted }
+        XCTAssertTrue(firstInitStarted)
+
+        status.refresh(for: directoryB)
+        XCTAssertFalse(status.isInitializingRepository)
+        status.initializeRepository()
+        let secondInitStarted = await waitUntil { initializer.secondCallStarted }
+        XCTAssertTrue(secondInitStarted)
+
+        initializer.finishFirst()
+        try? await Task.sleep(for: .milliseconds(100))
+        XCTAssertEqual(status.currentDirectory.path, directoryB.path)
+        XCTAssertTrue(status.isInitializingRepository)
+
+        initializer.finishSecond()
+        let secondInitFinished = await waitUntil { !status.isInitializingRepository }
+        XCTAssertTrue(secondInitFinished)
+        XCTAssertEqual(status.currentDirectory.path, directoryB.path)
+    }
+
+    @MainActor
+    func testCheckoutIsRejectedWhileBranchesAreLoading() async throws {
+        let repository = try makeRepository()
+        defer { try? FileManager.default.removeItem(at: repository.root) }
+        let fetcher = BlockingRemoteFetcher()
+        let checkout = CheckoutCallRecorder()
+        let status = GitRepositoryStatus(
+            currentDirectory: repository.root,
+            remoteFetcher: { _, _ in try fetcher.fetch() },
+            branchCheckout: { branch, root in checkout.record(branch: branch, root: root) }
+        )
+
+        status.refresh(for: repository.root)
+        let repositoryLoaded = await waitUntil {
+            status.repositoryRoot == repository.root && !status.isLoadingBranches
+        }
+        XCTAssertTrue(repositoryLoaded)
+        status.refreshBranchesFromRemotes()
+        let refreshStarted = await waitUntil { status.isLoadingBranches && fetcher.callCount == 1 }
+        XCTAssertTrue(refreshStarted)
+
+        status.checkout(GitBranch(kind: .local, name: "loading-target"))
+        XCTAssertEqual(checkout.callCount, 0)
+        XCTAssertFalse(status.isCheckingOut)
+
+        fetcher.finish()
+        let refreshFinished = await waitUntil { !status.isLoadingBranches }
+        XCTAssertTrue(refreshFinished)
+    }
+
+    @MainActor
     func testRepositoryRefreshCancelsRemoteRefreshAndClearsDedicatedState() async throws {
         let repository = try makeRepository()
         defer { try? FileManager.default.removeItem(at: repository.root) }
@@ -399,7 +567,7 @@ final class GitRepositoryStatusTests: XCTestCase {
     }
 
     func testRunProcessBoundsCapturedStderrAndRedactsSensitiveURLParts() throws {
-        let sensitiveURL = "https://alice:password@example.com/repo.git?access_token=secret-token&ref=main"
+        let sensitiveURL = "https://alice:password@example.com/repo.git?api_key=api%2Dsecret&client_secret=client-secret&refresh_token=refresh-secret&oauth_token=oauth-secret&private_token=private-secret&X-Amz-Credential=aws-credential&X-Amz-Signature=aws-signature&ref=main"
 
         XCTAssertThrowsError(
             try GitRepositoryStatus.runProcess(
@@ -418,7 +586,12 @@ final class GitRepositoryStatusTests: XCTestCase {
             XCTAssertLessThanOrEqual(message.utf8.count, 262_500)
             XCTAssertFalse(message.contains("alice"))
             XCTAssertFalse(message.contains("password"))
-            XCTAssertFalse(message.contains("secret-token"))
+            for secret in [
+                "api%2Dsecret", "api-secret", "client-secret", "refresh-secret", "oauth-secret",
+                "private-secret", "aws-credential", "aws-signature", "ref=main",
+            ] {
+                XCTAssertFalse(message.contains(secret), "URL query 값이 노출되었습니다: \(secret)")
+            }
             XCTAssertTrue(message.contains("REDACTED"))
         }
     }
@@ -459,6 +632,13 @@ final class GitRepositoryStatusTests: XCTestCase {
 
         let branchName = try runGit(["symbolic-ref", "--short", "HEAD"], in: root)
         return (root, branchName)
+    }
+
+    private func makeTemporaryDirectory() throws -> URL {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("GitRepositoryStatusTests-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        return directory
     }
 
     private func runGit(_ arguments: [String], in directory: URL) throws -> String {
@@ -583,5 +763,161 @@ private final class BlockingRemoteFetcher: @unchecked Sendable {
 
     func finish() {
         release.signal()
+    }
+}
+
+private final class BlockingBranchSnapshotLoader: @unchecked Sendable {
+    private let lock = NSLock()
+    private let release = DispatchSemaphore(value: 0)
+    private let branchName: String
+    private var calls = 0
+
+    init(branchName: String) {
+        self.branchName = branchName
+    }
+
+    var callCount: Int {
+        lock.withLock { calls }
+    }
+
+    func load() throws -> GitRepositoryStatus.BranchSnapshot {
+        let call = lock.withLock {
+            calls += 1
+            return calls
+        }
+        if call > 1 {
+            release.wait()
+            try Task.checkCancellation()
+        }
+        return (branchName: branchName, local: [], remoteGroups: [])
+    }
+
+    func finishBlockedLoad() {
+        release.signal()
+    }
+}
+
+private final class SequencedBranchNameLoader: @unchecked Sendable {
+    private let lock = NSLock()
+    private let values: [String]
+    private var index = 0
+
+    init(values: [String]) {
+        self.values = values
+    }
+
+    func load() -> String? {
+        lock.withLock {
+            let value = values[min(index, values.count - 1)]
+            index += 1
+            return value
+        }
+    }
+}
+
+private final class BlockingBranchNameLoader: @unchecked Sendable {
+    private let lock = NSLock()
+    private let staleRelease = DispatchSemaphore(value: 0)
+    private var calls = 0
+
+    var callCount: Int { lock.withLock { calls } }
+
+    func load() -> String? {
+        let call = lock.withLock {
+            calls += 1
+            return calls
+        }
+        switch call {
+        case 1:
+            return "initial-branch"
+        case 2:
+            staleRelease.wait()
+            return "stale-branch"
+        default:
+            return "newest-branch"
+        }
+    }
+
+    func finishStaleLoad() {
+        staleRelease.signal()
+    }
+}
+
+private final class BlockingCheckoutOperation: @unchecked Sendable {
+    private let lock = NSLock()
+    private let firstRelease = DispatchSemaphore(value: 0)
+    private let secondRelease = DispatchSemaphore(value: 0)
+    private let firstRootPath: String
+    private let secondRootPath: String
+    private var firstStarted = false
+    private var secondStarted = false
+
+    init(firstRoot: URL, secondRoot: URL) {
+        self.firstRootPath = firstRoot.standardizedFileURL.path
+        self.secondRootPath = secondRoot.standardizedFileURL.path
+    }
+
+    var firstCallStarted: Bool { lock.withLock { firstStarted } }
+    var secondCallStarted: Bool { lock.withLock { secondStarted } }
+
+    func run(branch _: GitBranch, root: URL) throws {
+        switch root.standardizedFileURL.path {
+        case firstRootPath:
+            lock.withLock { firstStarted = true }
+            firstRelease.wait()
+        case secondRootPath:
+            lock.withLock { secondStarted = true }
+            secondRelease.wait()
+        default:
+            XCTFail("예상하지 못한 checkout root: \(root.path)")
+        }
+    }
+
+    func finishFirst() { firstRelease.signal() }
+    func finishSecond() { secondRelease.signal() }
+}
+
+private final class BlockingRepositoryInitializer: @unchecked Sendable {
+    private let lock = NSLock()
+    private let firstRelease = DispatchSemaphore(value: 0)
+    private let secondRelease = DispatchSemaphore(value: 0)
+    private let firstDirectoryPath: String
+    private let secondDirectoryPath: String
+    private var firstStarted = false
+    private var secondStarted = false
+
+    init(firstDirectory: URL, secondDirectory: URL) {
+        self.firstDirectoryPath = firstDirectory.standardizedFileURL.path
+        self.secondDirectoryPath = secondDirectory.standardizedFileURL.path
+    }
+
+    var firstCallStarted: Bool { lock.withLock { firstStarted } }
+    var secondCallStarted: Bool { lock.withLock { secondStarted } }
+
+    func run(directory: URL) throws {
+        switch directory.standardizedFileURL.path {
+        case firstDirectoryPath:
+            lock.withLock { firstStarted = true }
+            firstRelease.wait()
+        case secondDirectoryPath:
+            lock.withLock { secondStarted = true }
+            secondRelease.wait()
+        default:
+            XCTFail("예상하지 못한 init directory: \(directory.path)")
+        }
+    }
+
+    func finishFirst() { firstRelease.signal() }
+    func finishSecond() { secondRelease.signal() }
+}
+
+private final class CheckoutCallRecorder: @unchecked Sendable {
+    private let lock = NSLock()
+    private var calls = 0
+
+    var callCount: Int { lock.withLock { calls } }
+
+    func record(branch _: GitBranch, root _: URL) {
+        lock.withLock { calls += 1 }
     }
 }
