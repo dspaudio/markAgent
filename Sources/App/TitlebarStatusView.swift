@@ -209,28 +209,30 @@ private struct GitBranchPopoverView: View {
                 .foregroundStyle(.blue)
 
             if showsRemoteRefresh {
-                Button {
-                    status.refreshBranchesFromRemotes()
-                } label: {
-                    if status.isLoadingBranches {
-                        HStack(spacing: 4) {
-                            ProgressView()
-                                .controlSize(.mini)
-                            Text("가져오는 중...")
-                                .font(.system(size: 10, weight: .medium))
-                        }
-                    } else {
+                if status.isRefreshingRemotes {
+                    HStack(spacing: 4) {
+                        ProgressView()
+                            .controlSize(.mini)
+                        Text("동기화 중")
+                            .font(.system(size: 10, weight: .semibold))
+                            .fixedSize(horizontal: true, vertical: false)
+                    }
+                    .foregroundStyle(.primary)
+                    .accessibilityElement(children: .combine)
+                    .accessibilityLabel(String(localized: "원격 브랜치 가져오는 중"))
+                } else {
+                    Button {
+                        status.refreshBranchesFromRemotes()
+                    } label: {
                         Image(systemName: "arrow.triangle.2.circlepath")
                             .font(.system(size: 11, weight: .medium))
                     }
+                    .buttonStyle(.plain)
+                    .disabled(status.isLoadingBranches || status.isCheckingOut)
+                    .help(String(localized: "원격 브랜치 새로고침"))
+                    .accessibilityLabel(String(localized: "원격 브랜치 새로고침"))
+                    .accessibilityIdentifier("git-refresh-remote-branches")
                 }
-                .buttonStyle(.plain)
-                .disabled(status.isLoadingBranches || status.isCheckingOut)
-                .help(String(localized: "원격 브랜치 새로고침"))
-                .accessibilityLabel(
-                    String(localized: status.isLoadingBranches ? "원격 브랜치 가져오는 중" : "원격 브랜치 새로고침")
-                )
-                .accessibilityIdentifier("git-refresh-remote-branches")
             }
         }
         .foregroundStyle(.secondary)

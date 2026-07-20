@@ -109,7 +109,7 @@
 "브랜치" = "Branches";
 "브랜치 목록 새로고침" = "Refresh branch list";
 "원격 브랜치 새로고침" = "Fetch and refresh remote branches";
-"가져오는 중..." = "Fetching...";
+"동기화 중" = "Syncing";
 "원격 브랜치 가져오는 중" = "Fetching remote branches";
 "체크아웃 진행 중..." = "Checking out...";
 "클릭해서 %@ 체크아웃" = "Click to checkout %@";

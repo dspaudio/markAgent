@@ -55,6 +55,7 @@ final class GitRepositoryStatus {
     private(set) var localBranches: [GitBranch] = []
     private(set) var remoteBranchGroups: [GitRemoteBranchGroup] = []
     private(set) var isLoadingBranches = false
+    private(set) var isRefreshingRemotes = false
     private(set) var isInitializingRepository = false
     private(set) var isCheckingOut = false
     private(set) var checkoutTargetBranch: GitBranch?
@@ -95,6 +96,7 @@ final class GitRepositoryStatus {
         branchTask?.cancel()
         branchTask = nil
         isLoadingBranches = false
+        isRefreshingRemotes = false
         let token = refreshToken
         refreshTask?.cancel()
 
@@ -156,6 +158,7 @@ final class GitRepositoryStatus {
         let generation = branchGeneration
         let loader = branchSnapshotLoader
         isLoadingBranches = true
+        isRefreshingRemotes = false
         checkoutErrorMessage = nil
         branchTask?.cancel()
 
@@ -175,6 +178,7 @@ final class GitRepositoryStatus {
                   generation == self.branchGeneration,
                   repositoryRoot == self.repositoryRoot else { return }
             self.isLoadingBranches = false
+            self.isRefreshingRemotes = false
             self.branchTask = nil
 
             switch result {
@@ -196,6 +200,7 @@ final class GitRepositoryStatus {
         let fetcher = remoteFetcher
         let timeout = gitCommandTimeout
         isLoadingBranches = true
+        isRefreshingRemotes = true
         checkoutErrorMessage = nil
 
         branchTask = Task { [repositoryRoot, generation, loader, fetcher, timeout] in
@@ -216,6 +221,7 @@ final class GitRepositoryStatus {
                   generation == self.branchGeneration,
                   repositoryRoot == self.repositoryRoot else { return }
             self.isLoadingBranches = false
+            self.isRefreshingRemotes = false
             self.branchTask = nil
 
             switch result {
@@ -480,68 +486,241 @@ final class GitRepositoryStatus {
         environment: [String: String] = ProcessInfo.processInfo.environment,
         timeout: TimeInterval
     ) throws -> String {
-        let process = Process()
-        process.executableURL = executableURL
-        process.arguments = arguments
-        process.currentDirectoryURL = currentDirectoryURL
-        process.environment = environment
-
-        let captureDirectory = FileManager.default.temporaryDirectory
-            .appendingPathComponent("MarkAgent-git-\(UUID().uuidString)", isDirectory: true)
-        try FileManager.default.createDirectory(at: captureDirectory, withIntermediateDirectories: false)
-        defer { try? FileManager.default.removeItem(at: captureDirectory) }
-
-        let outputURL = captureDirectory.appendingPathComponent("stdout")
-        let errorURL = captureDirectory.appendingPathComponent("stderr")
-        guard FileManager.default.createFile(atPath: outputURL.path, contents: nil),
-              FileManager.default.createFile(atPath: errorURL.path, contents: nil),
-              let outputHandle = FileHandle(forWritingAtPath: outputURL.path),
-              let errorHandle = FileHandle(forWritingAtPath: errorURL.path) else {
+        var outputDescriptors = [Int32](repeating: -1, count: 2)
+        var errorDescriptors = [Int32](repeating: -1, count: 2)
+        guard outputDescriptors.withUnsafeMutableBufferPointer({ Darwin.pipe($0.baseAddress!) }) == 0,
+              errorDescriptors.withUnsafeMutableBufferPointer({ Darwin.pipe($0.baseAddress!) }) == 0 else {
+            outputDescriptors.filter { $0 >= 0 }.forEach { Darwin.close($0) }
             throw GitRepositoryStatusError.commandFailed(String(localized: "git 명령을 실행할 수 없습니다."))
         }
         defer {
-            try? outputHandle.close()
-            try? errorHandle.close()
+            Darwin.close(outputDescriptors[0])
+            Darwin.close(errorDescriptors[0])
         }
-        process.standardOutput = outputHandle
-        process.standardError = errorHandle
 
-        try process.run()
+        for descriptor in [outputDescriptors[0], errorDescriptors[0]] {
+            let flags = fcntl(descriptor, F_GETFL)
+            if flags >= 0 {
+                _ = fcntl(descriptor, F_SETFL, flags | O_NONBLOCK)
+            }
+        }
+
+        let processIdentifier: pid_t
+        do {
+            processIdentifier = try spawnProcess(
+                executableURL: executableURL,
+                arguments: arguments,
+                currentDirectoryURL: currentDirectoryURL,
+                environment: environment,
+                standardOutput: outputDescriptors,
+                standardError: errorDescriptors
+            )
+        } catch {
+            Darwin.close(outputDescriptors[1])
+            Darwin.close(errorDescriptors[1])
+            throw error
+        }
+        Darwin.close(outputDescriptors[1])
+        Darwin.close(errorDescriptors[1])
+
+        var outputCapture = BoundedOutputCapture(limit: 256 * 1024)
+        var errorCapture = BoundedOutputCapture(limit: 256 * 1024)
         let deadline = Date().addingTimeInterval(max(timeout, 0))
-        while process.isRunning, !Task.isCancelled, Date() < deadline {
+        var waitStatus: Int32 = 0
+        var hasExited = false
+        var wasCancelled = false
+        var didTimeOut = false
+
+        while !hasExited {
+            outputCapture.drain(descriptor: outputDescriptors[0])
+            errorCapture.drain(descriptor: errorDescriptors[0])
+            let waitResult = waitpid(processIdentifier, &waitStatus, WNOHANG)
+            if waitResult == processIdentifier {
+                hasExited = true
+                break
+            }
+            if waitResult == -1, errno != EINTR {
+                throw GitRepositoryStatusError.commandFailed(String(localized: "git 명령을 실행할 수 없습니다."))
+            }
+            if Task.isCancelled {
+                wasCancelled = true
+                break
+            }
+            if Date() >= deadline {
+                didTimeOut = true
+                break
+            }
             Thread.sleep(forTimeInterval: 0.01)
         }
 
-        if process.isRunning {
-            process.terminate()
-            let terminationDeadline = Date().addingTimeInterval(0.2)
-            while process.isRunning, Date() < terminationDeadline {
-                Thread.sleep(forTimeInterval: 0.01)
-            }
-            if process.isRunning {
-                kill(process.processIdentifier, SIGKILL)
-            }
-            process.waitUntilExit()
+        if wasCancelled || didTimeOut {
+            terminateProcessGroup(
+                processIdentifier,
+                waitStatus: &waitStatus,
+                hasExited: &hasExited,
+                outputDescriptor: outputDescriptors[0],
+                errorDescriptor: errorDescriptors[0],
+                outputCapture: &outputCapture,
+                errorCapture: &errorCapture
+            )
         }
-        try outputHandle.close()
-        try errorHandle.close()
+        outputCapture.drain(descriptor: outputDescriptors[0])
+        errorCapture.drain(descriptor: errorDescriptors[0])
 
-        if Task.isCancelled {
+        if wasCancelled {
             throw CancellationError()
         }
-        if Date() >= deadline {
+        if didTimeOut {
             throw GitRepositoryStatusError.commandTimedOut
         }
 
-        let output = String(data: try Data(contentsOf: outputURL), encoding: .utf8)?
-            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        guard process.terminationStatus == 0 else {
-            let error = String(data: try Data(contentsOf: errorURL), encoding: .utf8)?
-                .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-            throw GitRepositoryStatusError.commandFailed(error.isEmpty ? output : error)
+        let output = outputCapture.string
+        guard waitStatus == 0 else {
+            let error = errorCapture.string
+            throw GitRepositoryStatusError.commandFailed(
+                redactSensitiveURLParts(in: error.isEmpty ? output : error)
+            )
         }
 
         return output
+    }
+
+    private nonisolated static func spawnProcess(
+        executableURL: URL,
+        arguments: [String],
+        currentDirectoryURL: URL,
+        environment: [String: String],
+        standardOutput: [Int32],
+        standardError: [Int32]
+    ) throws -> pid_t {
+        var fileActions: posix_spawn_file_actions_t?
+        var attributes: posix_spawnattr_t?
+        guard posix_spawn_file_actions_init(&fileActions) == 0,
+              posix_spawnattr_init(&attributes) == 0 else {
+            throw GitRepositoryStatusError.commandFailed(String(localized: "git 명령을 실행할 수 없습니다."))
+        }
+        defer {
+            posix_spawn_file_actions_destroy(&fileActions)
+            posix_spawnattr_destroy(&attributes)
+        }
+
+        guard posix_spawn_file_actions_addchdir_np(&fileActions, currentDirectoryURL.path) == 0,
+              posix_spawn_file_actions_adddup2(&fileActions, standardOutput[1], STDOUT_FILENO) == 0,
+              posix_spawn_file_actions_adddup2(&fileActions, standardError[1], STDERR_FILENO) == 0,
+              posix_spawn_file_actions_addclose(&fileActions, standardOutput[0]) == 0,
+              posix_spawn_file_actions_addclose(&fileActions, standardError[0]) == 0,
+              posix_spawn_file_actions_addclose(&fileActions, standardOutput[1]) == 0,
+              posix_spawn_file_actions_addclose(&fileActions, standardError[1]) == 0,
+              posix_spawnattr_setflags(&attributes, Int16(POSIX_SPAWN_SETPGROUP)) == 0,
+              posix_spawnattr_setpgroup(&attributes, 0) == 0 else {
+            throw GitRepositoryStatusError.commandFailed(String(localized: "git 명령을 실행할 수 없습니다."))
+        }
+
+        let argumentPointers = ([executableURL.path] + arguments).map { strdup($0) } + [nil]
+        let environmentPointers = environment
+            .map { strdup("\($0.key)=\($0.value)") } + [nil]
+        defer {
+            argumentPointers.compactMap { $0 }.forEach { free($0) }
+            environmentPointers.compactMap { $0 }.forEach { free($0) }
+        }
+
+        var processIdentifier: pid_t = 0
+        let result = argumentPointers.withUnsafeBufferPointer { argumentsBuffer in
+            environmentPointers.withUnsafeBufferPointer { environmentBuffer in
+                posix_spawn(
+                    &processIdentifier,
+                    executableURL.path,
+                    &fileActions,
+                    &attributes,
+                    UnsafeMutablePointer(mutating: argumentsBuffer.baseAddress!),
+                    UnsafeMutablePointer(mutating: environmentBuffer.baseAddress!)
+                )
+            }
+        }
+        guard result == 0 else {
+            throw POSIXError(POSIXErrorCode(rawValue: result) ?? .EIO)
+        }
+        return processIdentifier
+    }
+
+    private nonisolated static func terminateProcessGroup(
+        _ processIdentifier: pid_t,
+        waitStatus: inout Int32,
+        hasExited: inout Bool,
+        outputDescriptor: Int32,
+        errorDescriptor: Int32,
+        outputCapture: inout BoundedOutputCapture,
+        errorCapture: inout BoundedOutputCapture
+    ) {
+        _ = kill(-processIdentifier, SIGTERM)
+        let terminationDeadline = Date().addingTimeInterval(0.2)
+        while Date() < terminationDeadline {
+            outputCapture.drain(descriptor: outputDescriptor)
+            errorCapture.drain(descriptor: errorDescriptor)
+            Thread.sleep(forTimeInterval: 0.01)
+        }
+
+        _ = kill(-processIdentifier, SIGKILL)
+        while waitpid(processIdentifier, &waitStatus, 0) == -1, errno == EINTR {}
+        hasExited = true
+    }
+
+    private nonisolated static func redactSensitiveURLParts(in message: String) -> String {
+        guard let detector = try? NSRegularExpression(pattern: #"https?://[^\s<>\"']+"#) else {
+            return message
+        }
+        let range = NSRange(message.startIndex..., in: message)
+        return detector.matches(in: message, range: range).reversed().reduce(into: message) { result, match in
+            guard let matchRange = Range(match.range, in: result),
+                  var components = URLComponents(string: String(result[matchRange])) else { return }
+            if components.user != nil { components.user = "REDACTED" }
+            if components.password != nil { components.password = "REDACTED" }
+            let sensitiveNames: Set<String> = [
+                "access_token", "auth", "key", "password", "secret", "signature", "token",
+            ]
+            components.queryItems = components.queryItems?.map { item in
+                sensitiveNames.contains(item.name.lowercased())
+                    ? URLQueryItem(name: item.name, value: "REDACTED")
+                    : item
+            }
+            if let redacted = components.string {
+                result.replaceSubrange(matchRange, with: redacted)
+            }
+        }
+    }
+}
+
+private struct BoundedOutputCapture {
+    private let limit: Int
+    private var data = Data()
+    private var discardedBytes = 0
+
+    init(limit: Int) {
+        self.limit = limit
+    }
+
+    mutating func drain(descriptor: Int32) {
+        var bytes = [UInt8](repeating: 0, count: 16 * 1024)
+        while true {
+            let count = Darwin.read(descriptor, &bytes, bytes.count)
+            guard count > 0 else {
+                if count == -1, errno == EINTR { continue }
+                return
+            }
+            data.append(contentsOf: bytes.prefix(Int(count)))
+            if data.count > limit {
+                let overflow = data.count - limit
+                data.removeFirst(overflow)
+                discardedBytes += overflow
+            }
+        }
+    }
+
+    var string: String {
+        let content = String(decoding: data, as: UTF8.self)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard discardedBytes > 0 else { return content }
+        return "[\(discardedBytes) bytes truncated]\n\(content)"
     }
 }
 

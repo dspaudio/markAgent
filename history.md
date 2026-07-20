@@ -61,6 +61,7 @@
 61. [세션 57: Git 브랜치 선택 접근성 회귀 보강](#세션-57-git-브랜치-선택-접근성-회귀-보강)
 62. [세션 58: Git 원격 갱신 경쟁 및 타임아웃 보강](#세션-58-git-원격-갱신-경쟁-및-타임아웃-보강)
 63. [세션 59: Remote 갱신 진행 상태 시각 보강](#세션-59-remote-갱신-진행-상태-시각-보강)
+64. [세션 60: Remote 상태 분리 및 Git 프로세스 트리 정리](#세션-60-remote-상태-분리-및-git-프로세스-트리-정리)
 
 ---
 
@@ -144,6 +145,7 @@
 | 74 | Git 브랜치 선택 접근성 회귀 보강 | 브랜치 행을 실제 Button으로 노출해 기존 앱 내부 checkout을 접근성 입력으로도 검증 가능하게 보강 |
 | 75 | Git 원격 갱신 경쟁 및 타임아웃 보강 | 저장소 전환 중 늦은 fetch 결과를 차단하고 원격 명령 타임아웃·취소·중복 refresh 회귀 테스트를 추가 |
 | 76 | Remote 갱신 진행 상태 시각 보강 | 작은 스피너만 표시하던 Remote refresh 로딩 상태에 명시적인 가져오기 문구와 동적 접근성 라벨을 추가 |
+| 77 | Remote 상태 분리 및 Git 프로세스 트리 정리 | Remote 전용 동기화 상태를 분리하고 Git helper 후손 종료, 출력 상한, 오류 URL 비밀값 마스킹을 보강 |
 
 ---
 
@@ -3099,3 +3101,22 @@ Git 브랜치 상태·원격 목록 갱신 작업의 실제 앱 회귀 검증 �
 Remote 섹션의 갱신 버튼이 로딩 중일 때 스피너와 함께 `가져오는 중...` 문구를 표시하고, 접근성 라벨도 `원격 브랜치 가져오는 중`으로 전환하도록 변경했다. 영어·한국어 로컬라이제이션을 함께 추가했으며 전체 테스트 132개 통과를 확인했다.
 
 변경 파일: `Sources/App/TitlebarStatusView.swift`, `Sources/App/Resources/en.lproj/Localizable.strings`, `Sources/App/Resources/ko.lproj/Localizable.strings`, `history.md`
+
+---
+
+## 세션 60: Remote 상태 분리 및 Git 프로세스 트리 정리
+
+> 날짜: 2026-07-20
+> 경로: ~/workspace/markAgent
+
+최종 시각·보안 검토에서 Remote 로딩 문구의 잘림과 낮은 대비, 응답 없는 Git 전송 helper 후손이 직계 프로세스 종료 뒤 남을 수 있는 경로를 확인해 보강했다.
+
+### 대화 1: 동기화 상태와 프로세스 수명 보강
+
+**사용자:**
+> 현재 브랜치 자동 반영과 Remote 새로고침 수정 작업을 진행해줘.
+
+**응답:**
+일반 브랜치 목록 로딩과 Remote fetch 상태를 분리하고, Remote 동기화 중에는 비활성 버튼 대신 짧은 `동기화 중` 문구와 스피너를 독립 상태 요소로 표시해 잘림과 disabled 대비 저하를 제거했다. Git 실행을 `posix_spawn` 전용 프로세스 그룹으로 전환해 timeout·취소 시 SSH나 credential helper 같은 후손까지 TERM/KILL로 정리한다. stdout/stderr는 각각 256KiB tail로 제한하고, 사용자에게 표시하는 오류 URL의 userinfo와 민감 query 값을 마스킹했다. TERM/HUP를 무시하는 후손의 timeout·취소 제거, 출력 상한·비밀값 마스킹, cwd·환경·stdout 계약, Remote 상태 정리를 집중 테스트로 고정했다.
+
+변경 파일: `Sources/Core/GitRepositoryStatus.swift`, `Sources/App/TitlebarStatusView.swift`, `Sources/App/Resources/en.lproj/Localizable.strings`, `Sources/App/Resources/ko.lproj/Localizable.strings`, `Tests/MarkAgentTests/GitRepositoryStatusTests.swift`, `history.md`

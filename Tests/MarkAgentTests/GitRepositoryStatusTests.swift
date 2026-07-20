@@ -171,6 +171,7 @@ final class GitRepositoryStatusTests: XCTestCase {
         let startedRefresh = await waitUntil { fetcher.callCount == 1 }
         XCTAssertTrue(startedRefresh)
         XCTAssertTrue(status.isLoadingBranches)
+        XCTAssertTrue(status.isRefreshingRemotes)
 
         status.refreshBranchesFromRemotes()
         XCTAssertEqual(fetcher.callCount, 1, "로딩 중에는 중복 Remote refresh를 시작하지 않아야 합니다.")
@@ -178,6 +179,7 @@ final class GitRepositoryStatusTests: XCTestCase {
         fetcher.finish()
         let finishedRefresh = await waitUntil { !status.isLoadingBranches }
         XCTAssertTrue(finishedRefresh)
+        XCTAssertFalse(status.isRefreshingRemotes)
         XCTAssertEqual(fetcher.callCount, 1)
     }
 
@@ -204,11 +206,13 @@ final class GitRepositoryStatusTests: XCTestCase {
         let startedRefresh = await waitUntil { fetcher.callCount == 1 }
         XCTAssertTrue(startedRefresh)
         XCTAssertTrue(status.isLoadingBranches)
+        XCTAssertTrue(status.isRefreshingRemotes)
 
         status.refresh(for: repositoryB.root)
         let foundRepositoryB = await waitUntil { status.repositoryRoot == repositoryB.root }
         XCTAssertTrue(foundRepositoryB)
         XCTAssertFalse(status.isLoadingBranches)
+        XCTAssertFalse(status.isRefreshingRemotes)
         status.loadBranches()
         let loadedRepositoryBBranches = await waitUntil {
             !status.isLoadingBranches && status.localBranches.contains(where: { $0.name == "repo-b-only" })
@@ -221,6 +225,34 @@ final class GitRepositoryStatusTests: XCTestCase {
         XCTAssertEqual(status.repositoryRoot, repositoryB.root)
         XCTAssertTrue(status.localBranches.contains(where: { $0.name == "repo-b-only" }))
         XCTAssertFalse(status.isLoadingBranches)
+        XCTAssertFalse(status.isRefreshingRemotes)
+    }
+
+    @MainActor
+    func testRepositoryRefreshCancelsRemoteRefreshAndClearsDedicatedState() async throws {
+        let repository = try makeRepository()
+        defer { try? FileManager.default.removeItem(at: repository.root) }
+        let fetcher = BlockingRemoteFetcher()
+        let status = GitRepositoryStatus(
+            currentDirectory: repository.root,
+            remoteFetcher: { _, _ in try fetcher.fetch() }
+        )
+
+        status.refresh(for: repository.root)
+        let foundRepository = await waitUntil { status.repositoryRoot == repository.root }
+        XCTAssertTrue(foundRepository)
+
+        status.refreshBranchesFromRemotes()
+        let startedRefresh = await waitUntil { fetcher.callCount == 1 }
+        XCTAssertTrue(startedRefresh)
+        XCTAssertTrue(status.isLoadingBranches)
+        XCTAssertTrue(status.isRefreshingRemotes)
+
+        status.refresh(for: repository.root)
+
+        XCTAssertFalse(status.isLoadingBranches)
+        XCTAssertFalse(status.isRefreshingRemotes)
+        fetcher.finish()
     }
 
     func testRunProcessTimesOutAndTerminatesHungCommand() throws {
@@ -263,6 +295,114 @@ final class GitRepositoryStatusTests: XCTestCase {
         } catch {
             XCTFail("예상하지 못한 오류: \(error)")
         }
+    }
+
+    func testRunProcessTimeoutTerminatesSignalIgnoringDescendant() throws {
+        let fixture = FileManager.default.temporaryDirectory
+            .appendingPathComponent("GitRepositoryStatusTests-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: fixture, withIntermediateDirectories: false)
+        defer { try? FileManager.default.removeItem(at: fixture) }
+        let descendantPIDURL = fixture.appendingPathComponent("descendant.pid")
+
+        XCTAssertThrowsError(
+            try GitRepositoryStatus.runProcess(
+                executableURL: URL(fileURLWithPath: "/bin/sh"),
+                arguments: ["-c", signalIgnoringProcessTreeScript(pidFile: descendantPIDURL.path)],
+                currentDirectoryURL: fixture,
+                timeout: 0.3
+            )
+        ) { error in
+            guard case GitRepositoryStatusError.commandTimedOut = error else {
+                return XCTFail("예상하지 못한 오류: \(error)")
+            }
+        }
+
+        let descendantPID = try readPID(from: descendantPIDURL)
+        XCTAssertTrue(
+            waitForProcessToExit(descendantPID),
+            "timeout 후 TERM/HUP를 무시하는 후손 PID \(descendantPID)가 남으면 안 됩니다."
+        )
+    }
+
+    func testRunProcessCancellationTerminatesSignalIgnoringDescendant() async throws {
+        let fixture = FileManager.default.temporaryDirectory
+            .appendingPathComponent("GitRepositoryStatusTests-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: fixture, withIntermediateDirectories: false)
+        defer { try? FileManager.default.removeItem(at: fixture) }
+        let descendantPIDURL = fixture.appendingPathComponent("descendant.pid")
+        let script = signalIgnoringProcessTreeScript(pidFile: descendantPIDURL.path)
+
+        let task = Task.detached {
+            try GitRepositoryStatus.runProcess(
+                executableURL: URL(fileURLWithPath: "/bin/sh"),
+                arguments: ["-c", script],
+                currentDirectoryURL: fixture,
+                timeout: 5
+            )
+        }
+        XCTAssertTrue(waitForFile(descendantPIDURL))
+        task.cancel()
+
+        do {
+            _ = try await task.value
+            XCTFail("취소된 프로세스가 성공하면 안 됩니다.")
+        } catch is CancellationError {
+            let descendantPID = try readPID(from: descendantPIDURL)
+            XCTAssertTrue(
+                waitForProcessToExit(descendantPID),
+                "취소 후 TERM/HUP를 무시하는 후손 PID \(descendantPID)가 남으면 안 됩니다."
+            )
+        } catch {
+            XCTFail("예상하지 못한 오류: \(error)")
+        }
+    }
+
+    func testRunProcessBoundsCapturedStderrAndRedactsSensitiveURLParts() throws {
+        let sensitiveURL = "https://alice:password@example.com/repo.git?access_token=secret-token&ref=main"
+
+        XCTAssertThrowsError(
+            try GitRepositoryStatus.runProcess(
+                executableURL: URL(fileURLWithPath: "/bin/sh"),
+                arguments: [
+                    "-c",
+                    "yes padding | head -c 1048576 >&2; printf '\\n%s\\n' '\(sensitiveURL)' >&2; exit 7",
+                ],
+                currentDirectoryURL: FileManager.default.temporaryDirectory,
+                timeout: 5
+            )
+        ) { error in
+            guard case GitRepositoryStatusError.commandFailed(let message) = error else {
+                return XCTFail("예상하지 못한 오류: \(error)")
+            }
+            XCTAssertLessThanOrEqual(message.utf8.count, 262_500)
+            XCTAssertFalse(message.contains("alice"))
+            XCTAssertFalse(message.contains("password"))
+            XCTAssertFalse(message.contains("secret-token"))
+            XCTAssertTrue(message.contains("REDACTED"))
+        }
+    }
+
+    func testRunProcessPreservesWorkingDirectoryEnvironmentAndStandardOutput() throws {
+        let fixture = FileManager.default.temporaryDirectory
+            .appendingPathComponent("GitRepositoryStatusTests-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: fixture, withIntermediateDirectories: false)
+        defer { try? FileManager.default.removeItem(at: fixture) }
+        var environment = ProcessInfo.processInfo.environment
+        environment["MARKAGENT_PROCESS_TEST"] = "expected-value"
+
+        let output = try GitRepositoryStatus.runProcess(
+            executableURL: URL(fileURLWithPath: "/bin/sh"),
+            arguments: ["-c", "printf '%s|%s' \"$PWD\" \"$MARKAGENT_PROCESS_TEST\""],
+            currentDirectoryURL: fixture,
+            environment: environment,
+            timeout: 2
+        )
+
+        let components = output.split(separator: "|", maxSplits: 1).map(String.init)
+        XCTAssertEqual(components.count, 2)
+        XCTAssertEqual(components.last, "expected-value")
+        let workingDirectory = try XCTUnwrap(components.first)
+        XCTAssertEqual(URL(fileURLWithPath: workingDirectory).lastPathComponent, fixture.lastPathComponent)
     }
 
     private func makeRepository() throws -> (root: URL, defaultBranch: String) {
@@ -325,6 +465,40 @@ final class GitRepositoryStatusTests: XCTestCase {
         groups.first(where: { $0.remoteName == remoteName })?
             .branches
             .contains(where: { $0.name == branchName }) == true
+    }
+
+    private func signalIgnoringProcessTreeScript(pidFile: String) -> String {
+        """
+        trap '' TERM HUP
+        (trap '' TERM HUP; while :; do sleep 1; done) &
+        child=$!
+        printf '%d' "$child" > '\(pidFile)'
+        wait "$child"
+        """
+    }
+
+    private func readPID(from url: URL) throws -> pid_t {
+        let value = try String(contentsOf: url, encoding: .utf8)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return try XCTUnwrap(pid_t(value))
+    }
+
+    private func waitForFile(_ url: URL, timeout: TimeInterval = 2) -> Bool {
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            if FileManager.default.fileExists(atPath: url.path) { return true }
+            Thread.sleep(forTimeInterval: 0.01)
+        }
+        return FileManager.default.fileExists(atPath: url.path)
+    }
+
+    private func waitForProcessToExit(_ pid: pid_t, timeout: TimeInterval = 2) -> Bool {
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            if kill(pid, 0) == -1, errno == ESRCH { return true }
+            Thread.sleep(forTimeInterval: 0.01)
+        }
+        return kill(pid, 0) == -1 && errno == ESRCH
     }
 
     @MainActor
