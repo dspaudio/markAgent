@@ -66,6 +66,7 @@
 66. [세션 62: 브랜치 비동기 상태 경쟁 최종 보강](#세션-62-브랜치-비동기-상태-경쟁-최종-보강)
 67. [세션 63: Remote 로딩 헤더 압축 수정](#세션-63-remote-로딩-헤더-압축-수정)
 68. [세션 64: Git 브랜치 동기화 및 v1.7.7 릴리즈](#세션-64-git-브랜치-동기화-및-v177-릴리즈)
+69. [세션 65: HTML 메모리 감사, Ghostty upstream 전환 및 v1.7.8 릴리즈](#세션-65-html-메모리-감사-ghostty-upstream-전환-및-v178-릴리즈)
 
 ---
 
@@ -154,6 +155,7 @@
 | 79 | 브랜치 비동기 상태 경쟁 최종 보강 | HEAD·checkout·Git Init의 늦은 완료를 세대별로 격리하고 URL 비밀값·프로세스 초기화·로딩 중 입력을 보강 |
 | 80 | Remote 로딩 헤더 압축 수정 | 동기화 상태가 표시될 때 `REMOTE` 제목이 `REM`으로 줄어드는 레이아웃 회귀 수정 |
 | 81 | Git 브랜치 동기화 및 v1.7.7 릴리즈 | 외부 checkout 즉시 반영과 Remote 새로고침을 문서화하고 앱 번들 버전 1.7.7 갱신 |
+| 82 | HTML 메모리 감사, Ghostty upstream 전환 및 v1.7.8 릴리즈 | HTML·라인 번호·터미널 메모리 경로를 실제 프로세스로 감사하고 PR #23이 포함된 libghostty-spm 1.4.0으로 전환한 뒤 앱 번들 버전 1.7.8 갱신 |
 
 ---
 
@@ -3071,6 +3073,39 @@ Git 브랜치 상태·원격 목록 갱신 작업의 실제 앱 회귀 검증 �
 기존 `onTapGesture` 행을 시각적 배치와 동작은 유지하는 plain `Button`으로 교체했다. 마우스 클릭뿐 아니라 macOS 접근성 Press 동작으로도 같은 `GitRepositoryStatus.checkout(_:)` 경로가 실행되므로, 실제 번들 앱에서 기존 로컬 브랜치 checkout 회귀를 검증할 수 있다.
 
 변경 파일: `Sources/App/TitlebarStatusView.swift`, `history.md`
+
+---
+
+## 세션 65: HTML 메모리 감사, Ghostty upstream 전환 및 v1.7.8 릴리즈
+
+> 날짜: 2026-08-24
+> 경로: ~/workspace/markAgent
+
+HTML 파일을 열 때 보고된 메모리 누수와 앱 전반의 수명주기 경로를 실제 프로세스에서 감사하고, 선택 영역 복사 누수 수정 PR이 반영된 공식 Ghostty 패키지로 의존성을 전환한 뒤 v1.7.8 릴리스를 준비했다.
+
+### 대화 1: HTML 및 터미널 메모리 감사와 Ghostty upstream 전환
+
+**사용자:**
+> 파일을 열었을 때 메모리 leak 현상이 발생해. html 파일을 열었을 때 해당 증상이 생겼어. 전체적으로 앱 내에서 메모리 leak 부분을 파악하고 수정해야해. 그리고, ghostty lib가 내 pr을 받아들여서 업데이트 되었어. 로컬에 다운로드 받은건 이제 사용하지 말고 최신 라이브러리로 변경해야해.
+
+**응답:**
+valid·zero-byte·malformed HTML을 각각 실제 앱 프로세스로 열어 RSS, heap, CGWindow, `leaks`를 비교하고 `EditorLineNumberGutterView`, `NSTextView`, `MarkdownTabState`, `FileWatcher`가 활성 편집기당 하나만 존재하며 MarkAgent 소유 누수 root가 없음을 확인했다. 실제 Ghostty PTY에서 선택 영역을 만들고 shipped Cmd+Shift+C 경로로 스니펫을 25회 저장한 동일 PID에서도 제품 소유 누수 root가 없었다. 로컬 path 의존성은 PR #23을 포함하는 공식 `Lakr233/libghostty-spm` 1.4.0, revision `356f730bec03281fc7b83666a129b0246137ea26`으로 교체했다.
+
+변경 파일: `Package.swift`, `Package.resolved`
+
+---
+
+### 대화 2: v1.7.8 버전 갱신과 dev·main 승격 릴리즈
+
+**사용자:**
+> 버전을 1.7.8로 올리고 release 해줘.
+>
+> dev pr 머지, main pr 머지까지
+
+**응답:**
+앱 short/build version을 `1.7.8`로 갱신하고 전체 테스트와 release 번들을 검증한다. 릴리스 작업 브랜치를 dev PR로 병합하고, 이어 dev를 main PR로 승격한 뒤 최신 main merge commit에 `v1.7.8` 태그를 생성해 `MarkAgent-v1.7.8.zip`을 GitHub Release 자산으로 게시한다.
+
+변경 파일: `Sources/App/Info.plist`, `history.md`
 
 ---
 

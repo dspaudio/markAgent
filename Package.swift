@@ -11,7 +11,7 @@ let package = Package(
     dependencies: [
         .package(url: "https://github.com/apple/swift-markdown.git", from: "0.5.0"),
         .package(name: "HighlightSwift", path: "Vendor/highlightswift"),
-        .package(path: "Vendor/libghostty-spm"),
+        .package(url: "https://github.com/Lakr233/libghostty-spm.git", from: "1.4.0"),
     ],
     targets: [
         .executableTarget(
