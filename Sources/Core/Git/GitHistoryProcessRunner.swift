@@ -26,6 +26,21 @@ struct GitHistoryProcessRequest: Equatable, Sendable {
 
 typealias GitHistoryCommandRunner = @Sendable (GitHistoryProcessRequest) async throws -> GitHistoryRawOutput
 
+struct GitHistoryPipeCompletionState: Equatable, Sendable {
+    private(set) var stdoutEnded = false
+    private(set) var stderrEnded = false
+
+    var isComplete: Bool { stdoutEnded && stderrEnded }
+
+    mutating func markStdoutEnded() {
+        stdoutEnded = true
+    }
+
+    mutating func markStderrEnded() {
+        stderrEnded = true
+    }
+}
+
 struct GitHistoryProcessRunner: Sendable {
     static nonisolated func run(_ request: GitHistoryProcessRequest) async throws -> GitHistoryRawOutput {
         let seconds = request.timeoutSeconds
@@ -40,10 +55,7 @@ struct GitHistoryProcessRunner: Sendable {
         deadline: @escaping @Sendable () async -> Void
     ) async throws -> GitHistoryRawOutput {
         let process = try spawn(request)
-        defer {
-            Darwin.close(process.stdout)
-            Darwin.close(process.stderr)
-        }
+        defer { process.output.closeAll() }
 
         let processGroup = ProcessGroupToken(pid: process.pid)
         let cancellation = CancellationSignal()
@@ -66,8 +78,7 @@ struct GitHistoryProcessRunner: Sendable {
 
     private struct SpawnedProcess: Sendable {
         let pid: pid_t
-        let stdout: Int32
-        let stderr: Int32
+        let output: OutputDescriptorToken
     }
 
     fileprivate enum Stream: Sendable {
@@ -77,6 +88,7 @@ struct GitHistoryProcessRunner: Sendable {
 
     fileprivate enum Event: Sendable {
         case chunk(Stream, Data)
+        case idle(Stream)
         case end(Stream)
         case readFailure(Stream, Int32)
         case outputLimitExceeded(Stream)
@@ -96,16 +108,15 @@ struct GitHistoryProcessRunner: Sendable {
     ) async throws -> GitHistoryRawOutput {
         var stdout = Data()
         var stderr = Data()
-        var stdoutEnded = false
-        var stderrEnded = false
+        var pipeCompletion = GitHistoryPipeCompletionState()
         var waitStatus: Int32?
         var failure: GitHistoryRunnerFailure?
         var escalationScheduled = false
 
         return try await withThrowingTaskGroup(of: Event.self) { group in
-            group.addTask { read(process.stdout, stream: .stdout, budget: budget, enforceLimit: true) }
-            group.addTask { read(process.stderr, stream: .stderr, budget: budget, enforceLimit: true) }
-            group.addTask { waitForExit(process.pid) }
+            group.addTask { read(process.output.stdout, output: process.output, stream: .stdout, budget: budget, enforceLimit: true) }
+            group.addTask { read(process.output.stderr, output: process.output, stream: .stderr, budget: budget, enforceLimit: true) }
+            group.addTask { waitForExit(process.pid, output: process.output) }
             group.addTask {
                 await deadline()
                 return Task.isCancelled ? .cancelled : .deadline
@@ -125,21 +136,41 @@ struct GitHistoryProcessRunner: Sendable {
                     switch stream {
                     case .stdout:
                         group.addTask {
-                            read(process.stdout, stream: .stdout, budget: budget, enforceLimit: shouldEnforceLimit)
+                            read(process.output.stdout, output: process.output, stream: .stdout, budget: budget, enforceLimit: shouldEnforceLimit)
                         }
                     case .stderr:
                         group.addTask {
-                            read(process.stderr, stream: .stderr, budget: budget, enforceLimit: shouldEnforceLimit)
+                            read(process.output.stderr, output: process.output, stream: .stderr, budget: budget, enforceLimit: shouldEnforceLimit)
                         }
                     }
 
+                case .idle(let stream):
+                    let shouldEnforceLimit = failure == nil
+                    switch stream {
+                    case .stdout where !pipeCompletion.stdoutEnded:
+                        group.addTask {
+                            read(process.output.stdout, output: process.output, stream: .stdout, budget: budget, enforceLimit: shouldEnforceLimit)
+                        }
+                    case .stderr where !pipeCompletion.stderrEnded:
+                        group.addTask {
+                            read(process.output.stderr, output: process.output, stream: .stderr, budget: budget, enforceLimit: shouldEnforceLimit)
+                        }
+                    default:
+                        break
+                    }
+
                 case .end(.stdout):
-                    stdoutEnded = true
+                    pipeCompletion.markStdoutEnded()
                 case .end(.stderr):
-                    stderrEnded = true
+                    pipeCompletion.markStderrEnded()
 
                 case .readFailure(let stream, let errorNumber):
-                    if failure == nil {
+                    switch stream {
+                    case .stdout: pipeCompletion.markStdoutEnded()
+                    case .stderr: pipeCompletion.markStderrEnded()
+                    }
+                    let hasNonzeroExit = waitStatus.map { decodedExitCode($0) != 0 } == true
+                    if failure == nil, !hasNonzeroExit {
                         switch stream {
                         case .stdout: failure = .stdoutReadFailed(errno: errorNumber)
                         case .stderr: failure = .stderrReadFailed(errno: errorNumber)
@@ -153,16 +184,21 @@ struct GitHistoryProcessRunner: Sendable {
                         processGroup.terminate()
                     }
                     switch stream {
-                    case .stdout where !stdoutEnded:
-                        group.addTask { read(process.stdout, stream: .stdout, budget: budget, enforceLimit: false) }
-                    case .stderr where !stderrEnded:
-                        group.addTask { read(process.stderr, stream: .stderr, budget: budget, enforceLimit: false) }
+                    case .stdout where !pipeCompletion.stdoutEnded:
+                        group.addTask { read(process.output.stdout, output: process.output, stream: .stdout, budget: budget, enforceLimit: false) }
+                    case .stderr where !pipeCompletion.stderrEnded:
+                        group.addTask { read(process.output.stderr, output: process.output, stream: .stderr, budget: budget, enforceLimit: false) }
                     default:
                         break
                     }
 
                 case .exited(let status):
                     waitStatus = status
+                    if decodedExitCode(status) != 0 {
+                        processGroup.terminate()
+                        processGroup.killNow()
+                        process.output.closeAll()
+                    }
 
                 case .deadline:
                     if failure == nil {
@@ -178,9 +214,12 @@ struct GitHistoryProcessRunner: Sendable {
 
                 case .escalate:
                     processGroup.killNow()
+                    process.output.closeAll()
                 }
 
-                if failure != nil, !escalationScheduled {
+                let requiresEscalation = failure != nil
+                    || waitStatus.map { decodedExitCode($0) != 0 } == true
+                if requiresEscalation, !escalationScheduled {
                     escalationScheduled = true
                     group.addTask {
                         await terminationGraceDeadline()
@@ -188,7 +227,7 @@ struct GitHistoryProcessRunner: Sendable {
                     }
                 }
 
-                if waitStatus != nil, stdoutEnded, stderrEnded {
+                if waitStatus != nil, pipeCompletion.isComplete {
                     cancellation.finish()
                     group.cancelAll()
                     while try await group.next() != nil {}
@@ -210,12 +249,27 @@ struct GitHistoryProcessRunner: Sendable {
 
     private static nonisolated func read(
         _ descriptor: Int32,
+        output: OutputDescriptorToken,
         stream: Stream,
         budget: CombinedOutputBudget,
         enforceLimit: Bool
     ) -> Event {
         var bytes = [UInt8](repeating: 0, count: 64 * 1024)
         while true {
+            var descriptorState = pollfd(
+                fd: descriptor,
+                events: Int16(POLLIN | POLLHUP | POLLERR),
+                revents: 0
+            )
+            let readiness = Darwin.poll(&descriptorState, 1, 100)
+            if readiness == -1 {
+                if errno == EINTR { continue }
+                return .readFailure(stream, errno)
+            }
+            if readiness == 0 {
+                return output.isClosed ? .end(stream) : .idle(stream)
+            }
+
             let count = Darwin.read(descriptor, &bytes, bytes.count)
             if count > 0 {
                 let data = Data(bytes.prefix(Int(count)))
@@ -230,11 +284,21 @@ struct GitHistoryProcessRunner: Sendable {
         }
     }
 
-    private static nonisolated func waitForExit(_ pid: pid_t) -> Event {
+    private static nonisolated func waitForExit(
+        _ pid: pid_t,
+        output: OutputDescriptorToken
+    ) -> Event {
         var status: Int32 = 0
         while true {
             let result = waitpid(pid, &status, 0)
-            if result == pid { return .exited(status) }
+            if result == pid {
+                if decodedExitCode(status) != 0 {
+                    _ = Darwin.kill(-pid, SIGTERM)
+                    _ = Darwin.kill(-pid, SIGKILL)
+                    output.closeAll()
+                }
+                return .exited(status)
+            }
             if result == -1, errno == EINTR { continue }
             return .exited(127 << 8)
         }
@@ -362,11 +426,41 @@ struct GitHistoryProcessRunner: Sendable {
         Darwin.close(stderrPipe[1])
         stderrPipe[1] = -1
         ownsDescriptors = false
-        return SpawnedProcess(pid: pid, stdout: stdoutPipe[0], stderr: stderrPipe[0])
+        return SpawnedProcess(
+            pid: pid,
+            output: OutputDescriptorToken(stdout: stdoutPipe[0], stderr: stderrPipe[0])
+        )
     }
 
     private static nonisolated func launchFailure(_ errorNumber: Int32) -> GitHistoryRunnerFailure {
         .launchFailed(String(cString: strerror(errorNumber)))
+    }
+}
+
+private final class OutputDescriptorToken: @unchecked Sendable {
+    let stdout: Int32
+    let stderr: Int32
+    private let lock = NSLock()
+    private var closed = false
+
+    init(stdout: Int32, stderr: Int32) {
+        self.stdout = stdout
+        self.stderr = stderr
+    }
+
+    var isClosed: Bool {
+        lock.withLock { closed }
+    }
+
+    func closeAll() {
+        let shouldClose = lock.withLock {
+            guard !closed else { return false }
+            closed = true
+            return true
+        }
+        guard shouldClose else { return }
+        Darwin.close(stdout)
+        Darwin.close(stderr)
     }
 }
 

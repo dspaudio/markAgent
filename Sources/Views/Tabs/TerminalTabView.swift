@@ -57,11 +57,34 @@ struct TerminalTabView: NSViewRepresentable {
         Coordinator()
     }
 
+    static func dismantleNSView(_ nsView: AppTerminalView, coordinator: Coordinator) {
+        tearDown(nsView, coordinator: coordinator)
+    }
+
+    static func tearDown(_ view: AppTerminalView, coordinator: Coordinator) {
+        TerminalFocusPolicy.resignIfNeeded(view)
+        view.setSurfaceVisible(false)
+        coordinator.detach(from: view)
+        if let searchAwareView = view as? SearchAwareTerminalView {
+            searchAwareView.onSearchShortcut = { _ in }
+            searchAwareView.onSnippetShortcut = { _ in }
+        }
+        view.delegate = nil
+        view.controller = nil
+    }
+
     class Coordinator: NSObject, TerminalSurfaceTitleDelegate, TerminalSurfaceCloseDelegate, TerminalSurfacePwdDelegate {
         private weak var state: TerminalTabState?
 
         func observeState(_ state: TerminalTabState) {
             self.state = state
+        }
+
+        func detach(from view: AppTerminalView) {
+            if state?.terminalView === view {
+                state?.terminalView = nil
+            }
+            state = nil
         }
 
         func terminalDidChangeTitle(_ title: String) {

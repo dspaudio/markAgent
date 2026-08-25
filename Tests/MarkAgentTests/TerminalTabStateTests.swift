@@ -146,6 +146,25 @@ final class TerminalTabStateTests: XCTestCase {
     }
 
     @MainActor
+    func testTerminalViewTeardownClearsStateDelegateAndController() {
+        let state = TerminalTabState(
+            workingDirectory: FileManager.default.homeDirectoryForCurrentUser
+        )
+        let view = SearchAwareTerminalView()
+        let coordinator = TerminalTabView.Coordinator()
+        coordinator.observeState(state)
+        view.controller = state.terminalViewState.controller
+        view.delegate = coordinator
+        state.terminalView = view
+
+        TerminalTabView.tearDown(view, coordinator: coordinator)
+
+        XCTAssertNil(state.terminalView)
+        XCTAssertNil(view.delegate)
+        XCTAssertNil(view.controller)
+    }
+
+    @MainActor
     func testDeferredTerminalFocusUsesLatestWorkspaceActivity() async {
         let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 200, height: 120),

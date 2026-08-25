@@ -34,9 +34,12 @@ sessions remain alive. Its public `tabs` projection exposes only the active
 order, active tab, and last active group. A/B/A switching changes only the active projection
 and restores the same tab, terminal, `TabGroupState`, and right-utility route objects.
 
-Inactive tabs remain mounted but are not visible, hit-testable, accessible, or eligible for
-first-responder focus. An inactive terminal synchronously relinquishes first responder, and
-deferred focus rechecks authoritative active-workspace state on the next main runloop.
+Inactive terminal views remain mounted so their Ghostty surfaces and shell sessions stay alive,
+but they are not visible, hit-testable, accessible, or eligible for first-responder focus. An
+inactive terminal synchronously relinquishes first responder, and deferred focus rechecks
+authoritative active-workspace state on the next main runloop. Inactive nonterminal views are
+unmounted while their tab/model objects remain retained; this prevents Settings, Markdown,
+About, and Git Diff controls from keeping keyboard focus in another workspace.
 
 The fixed `미분류` row exposes the launch workspace and receives open tabs when a project is
 deleted. Project path edits keep existing shells and add one terminal at the new canonical
@@ -139,16 +142,25 @@ File Browser exists only on the right and receives the unchanged app-scoped scan
 
 Git History is one outer tool with two group-scoped internal modes: `History` and `Changes`. The mode controls are actual interactive controls identified by `git-utility-mode-history` and `git-utility-mode-changes`. History uses `GitHistoryStore`; Changes preserves `GitDiffState`, `GitChangesSidebar`, changed-file preview, mention badges, diff-tab open/focus callbacks, refresh, and Git behavior. General right visibility is not stored in `GitDiffState`.
 
-History runs this bounded command through `/usr/bin/env`:
+History executes the absolute `/usr/bin/git` binary with structured arguments:
 
 ```text
-git -C <repository-root> log --all --max-count=100 --date=iso-strict \
+/usr/bin/git -C <repository-root> log --all --max-count=100 --date=iso-strict \
   --pretty=format:%H%x00%h%x00%an%x00%ae%x00%aI%x00%s%x00%b%x00
 ```
 
 Each record has seven NUL-terminated fields. Git's one inter-record LF is stripped only from subsequent full-hash fields; hashes, arity, UTF-8, and dates are validated, while empty and multiline bodies are preserved. Output order is Git order and the result is capped at 100 commits.
 
-The runner has a `5s` deadline and a combined stdout/stderr ceiling of `4MiB`. It uses `posix_spawn` with `POSIX_SPAWN_SETPGROUP` so the child process group exists atomically before execution, and file actions wire stdout/stderr. Timeout, cancellation, oversize output, read failure, or nonzero exit terminates and reaps the whole group with structured cleanup. Main-actor publication is guarded by request generation and standardized repository root so stale work cannot overwrite current state.
+The runner has a `5s` deadline and a combined stdout/stderr ceiling of `4MiB`. It uses
+`posix_spawn` with `POSIX_SPAWN_SETPGROUP | POSIX_SPAWN_CLOEXEC_DEFAULT`, explicitly wires only
+stdin/stdout/stderr, and passes only fixed `PATH=/usr/bin:/bin:/usr/sbin:/sbin` and
+`LC_ALL=en_US.UTF-8` environment entries. Pipe reads wait in bounded kernel `poll` windows so
+descriptor closure and cancellation cannot strand a blocking read. Timeout, cancellation,
+oversize output, read failure, or nonzero exit terminates and reaps the whole group with
+structured cleanup, including the case where the direct child exits before a descendant.
+SHA-1 and SHA-256 object IDs are accepted. Parsing runs off the main actor; publication is
+guarded by request generation and standardized repository root so stale work cannot overwrite
+current state.
 
 ### Workspace switching and accessibility
 

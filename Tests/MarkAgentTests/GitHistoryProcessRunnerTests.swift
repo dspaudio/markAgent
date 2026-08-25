@@ -4,6 +4,20 @@ import XCTest
 @testable import ma
 
 final class GitHistoryProcessRunnerTests: XCTestCase {
+    func testReadFailureCompletionStateTreatsFailedStreamAsTerminal() {
+        var state = GitHistoryPipeCompletionState()
+
+        state.markStdoutEnded()
+
+        XCTAssertTrue(state.stdoutEnded)
+        XCTAssertFalse(state.stderrEnded)
+        XCTAssertFalse(state.isComplete)
+
+        state.markStderrEnded()
+
+        XCTAssertTrue(state.isComplete)
+    }
+
     @MainActor
     func testChildIsItsOwnProcessGroupLeader() async throws {
         let output = try await awaitRunnerResult(
@@ -188,6 +202,51 @@ final class GitHistoryProcessRunnerTests: XCTestCase {
         XCTAssertTrue(processDoesNotExist(try readPID(from: fixture.pidFile)))
     }
 
+    @MainActor
+    func testNonzeroLeaderExitTerminatesDescendantAndPreservesStderr() async throws {
+        let fixture = try makeFixture()
+        defer { try? FileManager.default.removeItem(at: fixture.directory) }
+        let leaderReadyFile = fixture.directory.appendingPathComponent("leader-ready")
+        let releaseFile = fixture.directory.appendingPathComponent("release-descendant")
+        FileManager.default.createFile(atPath: leaderReadyFile.path, contents: Data())
+        let leaderReadyObserved = try observeWrite(
+            to: leaderReadyFile,
+            expectation: expectation(description: "nonzero leader spawned descendant")
+        )
+        defer { leaderReadyObserved.cancel() }
+        let completion = expectation(description: "nonzero runner terminated descendant")
+        let cleanupCompletion = expectation(description: "nonzero runner cleanup completed")
+        let result = RunnerResultBox()
+        let processRequest = Self.request(
+            script: Self.descendantHoldingPipesAfterNonzeroLeaderExit(
+                pidFile: fixture.pidFile.path,
+                leaderReadyFile: leaderReadyFile.path,
+                releaseFile: releaseFile.path
+            )
+        )
+
+        Task { @MainActor in
+            result.store(await Self.runnerResult(processRequest))
+            completion.fulfill()
+            cleanupCompletion.fulfill()
+        }
+
+        await fulfillment(of: [leaderReadyObserved.expectation], timeout: 1)
+        await fulfillment(of: [completion], timeout: 1)
+        XCTAssertTrue(
+            processDoesNotExist(try readPID(from: fixture.pidFile)),
+            "Nonzero leader exit must kill the descendant before deadline fallback."
+        )
+        FileManager.default.createFile(atPath: releaseFile.path, contents: Data())
+        await fulfillment(of: [cleanupCompletion], timeout: 1)
+
+        XCTAssertEqual(
+            result.value,
+            .failure(.nonZeroExit(exitCode: 7, stderr: Data("leader failed\n".utf8)))
+        )
+        XCTAssertTrue(processDoesNotExist(try readPID(from: fixture.pidFile)))
+    }
+
     private static func request(script: String) -> GitHistoryProcessRequest {
         .init(
             executableURL: URL(fileURLWithPath: "/bin/sh"),
@@ -272,6 +331,34 @@ final class GitHistoryProcessRunnerTests: XCTestCase {
         """
     }
 
+    private static func descendantHoldingPipesAfterNonzeroLeaderExit(
+        pidFile: String,
+        leaderReadyFile: String,
+        releaseFile: String
+    ) -> String {
+        """
+        exec /usr/bin/perl -MPOSIX -e '
+            my ($pid_file, $ready_file, $release_file) = @ARGV;
+            my $child = fork();
+            die "fork failed" unless defined $child;
+            if ($child == 0) {
+                $SIG{TERM} = "IGNORE";
+                $SIG{HUP} = "IGNORE";
+                while (!-e $release_file) {}
+                POSIX::_exit(0);
+            }
+            open(my $child_fh, ">", $pid_file) or die $!;
+            print $child_fh $child;
+            close($child_fh);
+            open(my $ready_fh, ">", $ready_file) or die $!;
+            print $ready_fh "ready";
+            close($ready_fh);
+            print STDERR "leader failed\\n";
+            POSIX::_exit(7);
+        ' '\(pidFile)' '\(leaderReadyFile)' '\(releaseFile)'
+        """
+    }
+
     private func readPID(from url: URL) throws -> pid_t {
         let value = try String(contentsOf: url, encoding: .utf8)
             .trimmingCharacters(in: .whitespacesAndNewlines)
@@ -303,6 +390,10 @@ private final class RunnerResultBox: @unchecked Sendable {
 
     var value: Result<GitHistoryRawOutput, GitHistoryRunnerFailure> {
         lock.withLock { storedValue! }
+    }
+
+    var optionalValue: Result<GitHistoryRawOutput, GitHistoryRunnerFailure>? {
+        lock.withLock { storedValue }
     }
 
     func store(_ result: Result<GitHistoryRawOutput, GitHistoryRunnerFailure>) {
