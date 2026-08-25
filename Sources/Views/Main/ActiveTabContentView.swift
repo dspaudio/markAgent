@@ -15,9 +15,12 @@ struct ActiveTabContentView: View {
 
     var body: some View {
         ZStack {
-            ForEach(tabs.tabs, id: \.id) { tab in
-                tabContent(for: tab, isActive: tabs.activeTabID == tab.id)
-                    .opacity(tabs.activeTabID == tab.id ? 1 : 0)
+            ForEach(tabs.allTabs, id: \.id) { tab in
+                let isActive = tabs.isActiveTab(id: tab.id)
+                tabContent(for: tab, isActive: isActive)
+                    .opacity(isActive ? 1 : 0)
+                    .allowsHitTesting(isActive)
+                    .accessibilityHidden(!isActive)
             }
 
             if tabs.tabs.isEmpty {
@@ -33,6 +36,9 @@ struct ActiveTabContentView: View {
             TerminalTabView(
                 state: terminalTab.state,
                 isActive: isActive,
+                isStillActive: {
+                    tabs.isActiveTab(id: terminalTab.id)
+                },
                 onSearchShortcut: onSearchShortcut,
                 onSnippetShortcut: onSnippetShortcut
             )

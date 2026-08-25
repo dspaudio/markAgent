@@ -4,6 +4,7 @@ import SwiftUI
 struct TerminalTabView: NSViewRepresentable {
     var state: TerminalTabState
     var isActive: Bool
+    var isStillActive: @MainActor () -> Bool
     var onSearchShortcut: (SidebarSearchMode) -> Void = { _ in }
     var onSnippetShortcut: (String) -> Void = { _ in }
 
@@ -20,9 +21,10 @@ struct TerminalTabView: NSViewRepresentable {
 
         state.startIfNeeded()
 
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-            guard isActive else { return }
-            view.window?.makeFirstResponder(view)
+        if isActive {
+            TerminalFocusPolicy.requestFocus(view, isActive: isStillActive)
+        } else {
+            TerminalFocusPolicy.resignIfNeeded(view)
         }
 
         return view
@@ -45,9 +47,9 @@ struct TerminalTabView: NSViewRepresentable {
         state.terminalView = nsView
 
         if isActive {
-            DispatchQueue.main.async {
-                nsView.window?.makeFirstResponder(nsView)
-            }
+            TerminalFocusPolicy.requestFocus(nsView, isActive: isStillActive)
+        } else {
+            TerminalFocusPolicy.resignIfNeeded(nsView)
         }
     }
 
@@ -72,6 +74,30 @@ struct TerminalTabView: NSViewRepresentable {
 
         func terminalDidChangeWorkingDirectory(_ path: String) {
             state?.updateWorkingDirectory(path)
+        }
+    }
+}
+
+@MainActor
+enum TerminalFocusPolicy {
+    static func resignIfNeeded(_ view: NSView) {
+        guard let window = view.window,
+              window.firstResponder === view else {
+            return
+        }
+        window.makeFirstResponder(nil)
+    }
+
+    static func requestFocus(
+        _ view: NSView,
+        isActive: @escaping @MainActor () -> Bool
+    ) {
+        DispatchQueue.main.async {
+            guard isActive() else {
+                resignIfNeeded(view)
+                return
+            }
+            view.window?.makeFirstResponder(view)
         }
     }
 }
