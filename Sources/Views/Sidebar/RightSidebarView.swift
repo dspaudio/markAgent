@@ -1,127 +1,152 @@
 import SwiftUI
 
 struct RightSidebarView: View {
+    var selectedTab: RightSidebarTab
+    var presentation: RightUtilityPresentation
+    var onSelectTab: (RightSidebarTab) -> Void
+    var gitRepositoryStatus: GitRepositoryStatus
+    var onCollapse: () -> Void
+
+    var gitMode: GitUtilityMode
+    var onSelectGitMode: (GitUtilityMode) -> Void
+    var gitHistoryStore: GitHistoryStore
+    var repositoryRoot: URL?
     var gitDiffState: GitDiffState
-    var snippetStore: PromptSnippetStore
-    var timelineStore: AgentTimelineStore
-    var width: Double
     var isGitDiffTabOpen: Bool
-    var onSelectFile: (GitChangedFile) -> Void
+    var onOpenGitFileInTab: (GitChangedFile) -> Void
+    var onFocusGitFileInTab: (GitChangedFile) -> Void
     var mentionedFileIDs: Set<GitChangedFile.ID> = []
 
-    @Binding var selectedTab: RightSidebarTab
+    var snippetStore: PromptSnippetStore
+    var timelineStore: AgentTimelineStore
+
+    var scanner: DirectoryScanner
+    var recentStore: RecentDocumentStore
+    var currentFileURL: URL?
+    var onOpenMarkdown: (URL) -> Void
+    var onOpenOtherFile: (URL) -> Void
+    var searchCommandCenter: SidebarSearchCommandCenter?
+
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.terminalAppTheme) private var terminalAppTheme
 
     var body: some View {
-        VStack(spacing: 0) {
-            header
-            Divider()
-            content
-        }
-        .frame(width: width)
-        .frame(maxHeight: .infinity, alignment: .top)
-        .background(appColors?.panel ?? Color(NSColor.controlBackgroundColor))
-        .foregroundStyle(appColors?.foreground ?? Color.primary)
-        .onChange(of: gitDiffState.repositoryRoot) { _, newRoot in
-            if newRoot == nil && selectedTab == .gitChanges {
-                selectedTab = .snippets
-            }
-        }
-        .onAppear {
-            if gitDiffState.repositoryRoot == nil && selectedTab == .gitChanges {
-                selectedTab = .snippets
-            }
-        }
+        presentationContent
+            .background(appColors?.panel ?? Color(nsColor: .controlBackgroundColor))
+            .foregroundStyle(appColors?.foreground ?? Color.primary)
     }
 
     private var appColors: TerminalAppColors? {
         terminalAppTheme?.colors(for: colorScheme)
     }
 
-    private var header: some View {
-        VStack(spacing: 8) {
-            HStack(spacing: 8) {
-                Image(systemName: selectedTab.systemImage)
-                    .foregroundStyle(.secondary)
-                Text("작업 사이드바")
-                    .font(.system(size: 13, weight: .bold))
-                Spacer()
-                gitRefreshControls
-            }
-
-            Picker("", selection: $selectedTab) {
-                ForEach(RightSidebarTab.allCases) { tab in
-                    Text(tab.title).tag(tab)
-                }
-            }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 10)
-    }
-
     @ViewBuilder
-    private var gitRefreshControls: some View {
-        if selectedTab == .gitChanges {
-            if gitDiffState.isRefreshing {
-                ProgressView()
-                    .scaleEffect(0.45)
-                    .frame(width: 14, height: 14)
+    private var presentationContent: some View {
+        switch presentation {
+        case .hidden:
+            EmptyView()
+        case .railOnly(let width):
+            HStack(spacing: 0) {
+                collapseButton
             }
-            Button {
-                if let root = gitDiffState.repositoryRoot {
-                    gitDiffState.refresh(for: root)
+            .frame(width: width, height: ShellChromeMetrics.headerHeight)
+            .frame(maxHeight: .infinity, alignment: .top)
+        case .expanded(let width):
+            VStack(spacing: 0) {
+                utilityHeader
+                Divider()
+
+                TitlebarGitBranchView(status: gitRepositoryStatus)
+                    .padding(.horizontal, 8)
+                    .frame(height: 32)
+
+                Divider()
+
+                GeometryReader { geometry in
+                    selectedBody(width: geometry.size.width)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
                 }
-            } label: {
-                Image(systemName: "arrow.clockwise")
             }
-            .buttonStyle(.plain)
-            .help(String(localized: "새로고침"))
-            .disabled(gitDiffState.isRefreshing)
+            .frame(width: width)
+            .frame(maxHeight: .infinity, alignment: .top)
         }
     }
 
+    private var utilityHeader: some View {
+        HStack(spacing: 0) {
+            ForEach(RightSidebarTab.allCases) { tab in
+                utilityButton(tab)
+            }
+
+            Spacer(minLength: 0)
+            collapseButton
+        }
+        .padding(.horizontal, 4)
+        .frame(height: ShellChromeMetrics.headerHeight)
+    }
+
+    private var collapseButton: some View {
+        Button(action: onCollapse) {
+            Image(systemName: "sidebar.right")
+                .font(.system(size: 14, weight: .medium))
+                .frame(width: 32, height: 28)
+        }
+        .buttonStyle(.plain)
+        .help(String(localized: "오른쪽 사이드바 숨기기"))
+        .accessibilityIdentifier("sidebar.right")
+    }
+
+    private func utilityButton(_ tab: RightSidebarTab) -> some View {
+        let isSelected = selectedTab == tab
+        return Button {
+            onSelectTab(tab)
+        } label: {
+            Image(systemName: tab.systemImage)
+                .font(.system(size: 13, weight: .semibold))
+                .frame(width: 32, height: ShellChromeMetrics.headerHeight)
+                .contentShape(Rectangle())
+                .overlay(alignment: .bottom) {
+                    Rectangle()
+                        .fill(isSelected ? (appColors?.accent ?? Color.accentColor) : Color.clear)
+                        .frame(width: 18, height: 2)
+                }
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(isSelected ? (appColors?.accent ?? Color.accentColor) : Color.secondary)
+        .help(tab.title)
+        .accessibilityLabel(tab.title)
+        .accessibilityIdentifier(tab.accessibilityIdentifier)
+    }
+
     @ViewBuilder
-    private var content: some View {
+    private func selectedBody(width: Double) -> some View {
         switch selectedTab {
-        case .gitChanges:
-            GitChangesSidebar(
-                state: gitDiffState,
-                isGitDiffTabOpen: isGitDiffTabOpen,
-                onOpenFileInTab: onSelectFile,
-                onFocusFileInTab: onSelectFile,
-                mentionedFileIDs: mentionedFileIDs
-            )
         case .snippets:
             PromptSnippetsSidebarView(store: snippetStore)
         case .timeline:
             AgentTimelineSidebarView(store: timelineStore)
-        }
-    }
-}
-
-private extension RightSidebarTab {
-    var title: String {
-        switch self {
-        case .gitChanges:
-            return String(localized: "Git 변경 파일")
-        case .timeline:
-            return String(localized: "타임라인")
-        case .snippets:
-            return String(localized: "스니펫")
-        }
-    }
-
-    var systemImage: String {
-        switch self {
-        case .gitChanges:
-            return "arrow.left.arrow.right.circle"
-        case .timeline:
-            return "clock.arrow.circlepath"
-        case .snippets:
-            return "text.quote"
+        case .gitHistory:
+            GitUtilitySidebarView(
+                mode: gitMode,
+                onSelectMode: onSelectGitMode,
+                historyStore: gitHistoryStore,
+                repositoryRoot: repositoryRoot,
+                gitDiffState: gitDiffState,
+                isGitDiffTabOpen: isGitDiffTabOpen,
+                onOpenFileInTab: onOpenGitFileInTab,
+                onFocusFileInTab: onFocusGitFileInTab,
+                mentionedFileIDs: mentionedFileIDs
+            )
+        case .fileBrowser:
+            FileBrowserSidebar(
+                scanner: scanner,
+                recentStore: recentStore,
+                currentFileURL: currentFileURL,
+                onOpenMarkdown: onOpenMarkdown,
+                onOpenOtherFile: onOpenOtherFile,
+                width: width,
+                searchCommandCenter: searchCommandCenter
+            )
         }
     }
 }

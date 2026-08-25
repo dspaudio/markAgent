@@ -37,6 +37,24 @@ struct GhosttyConfig {
         )
     }
 
+    static func resolvedAppTheme(
+        fileManager: FileManager = .default,
+        homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser
+    ) -> TerminalAppTheme? {
+        let config = userConfig(
+            fileManager: fileManager,
+            homeDirectory: homeDirectory
+        )
+        if let colorTheme = config?.colorTheme {
+            return colorTheme
+        }
+
+        let selectedThemeName = parseThemeName(from: config?.contents ?? "")
+            ?? "Dark Modern"
+        return parseColorTheme(from: "theme = \(selectedThemeName)")
+            ?? parseColorTheme(from: "theme = Dark Modern")
+    }
+
     static func parseFontFamilies(from contents: String) -> [String] {
         parseValues(forKey: "font-family", from: contents)
     }

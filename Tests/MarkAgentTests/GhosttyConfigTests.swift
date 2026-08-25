@@ -90,6 +90,38 @@ final class GhosttyConfigTests: XCTestCase {
         XCTAssertEqual(config?.fontFamilies, ["\"JetBrains Mono\"", "\"Apple SD Gothic Neo\""])
     }
 
+    func testResolvedAppThemeUsesDarkModernWhenConfigFileIsMissing() throws {
+        let home = FileManager.default.temporaryDirectory
+            .appendingPathComponent("GhosttyConfigTests-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: home) }
+
+        let theme = GhosttyConfig.resolvedAppTheme(homeDirectory: home)
+
+        XCTAssertEqual(theme?.theme(for: .dark)?.name, "Dark Modern")
+        XCTAssertEqual(theme?.preferredColorScheme, .dark)
+    }
+
+    func testResolvedAppThemeUsesConfiguredNamedTheme() throws {
+        let home = FileManager.default.temporaryDirectory
+            .appendingPathComponent("GhosttyConfigTests-\(UUID().uuidString)")
+        let configURL = home.appendingPathComponent(".config/ghostty/config")
+        defer { try? FileManager.default.removeItem(at: home) }
+        try FileManager.default.createDirectory(
+            at: configURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        try "theme = Catppuccin Latte\n".write(
+            to: configURL,
+            atomically: true,
+            encoding: .utf8
+        )
+
+        let theme = GhosttyConfig.resolvedAppTheme(homeDirectory: home)
+
+        XCTAssertEqual(theme?.theme(for: .light)?.name, "Catppuccin Latte")
+        XCTAssertEqual(theme?.preferredColorScheme, .light)
+    }
+
     func testPreferencesReadThemeAndFontChoices() throws {
         let home = FileManager.default.temporaryDirectory
             .appendingPathComponent("GhosttyConfigTests-\(UUID().uuidString)")

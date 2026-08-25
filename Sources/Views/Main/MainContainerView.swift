@@ -1,16 +1,28 @@
 import SwiftUI
 
+enum ShellChromeMetrics {
+    static let headerHeight: CGFloat = 40
+}
+
+@MainActor
 struct MainContainerView: View {
     var tabs: TabCollection
     var scanner: DirectoryScanner
     var recentStore: RecentDocumentStore
     var snippetStore: PromptSnippetStore
+    var projectStore: ProjectStore
+    var gitRepositoryStatus: GitRepositoryStatus
     var searchCommandCenter: SidebarSearchCommandCenter
+    var onSelectProject: (Project) -> Void
+    var onSelectUnscoped: () -> Void
+    var onProjectUpdated: (Project) -> Void
+    var onProjectDeleted: (Project) -> Void
     var onOpenFile: () -> Void
     var onDocumentChanged: () -> Void
-    var onConfigurationSaved: () -> Void = {}
-    var onDirectoryChanged: (URL) -> Void = { _ in }
+    var onConfigurationSaved: () -> Void
+    var onDirectoryChanged: (URL) -> Void
 
+    @State private var projectSidebarController: ProjectSidebarController
     @State private var isShowingNewTabChooser = false
     @AppStorage("isLeftSidebarVisible") private var isLeftSidebarVisible = true
     @AppStorage("leftSidebarWidth") private var leftSidebarWidth: Double = 260
@@ -26,127 +38,61 @@ struct MainContainerView: View {
 
     private let sidebarResizeHandleHitWidth: Double = 8
     private let sidebarResizeHandleVisibleWidth: Double = 4
-    
-    var body: some View {
-        VStack(spacing: 0) {
-            TabBarView(
-                tabs: tabs,
-                onNewTab: { isShowingNewTabChooser = true },
-                isLeftSidebarVisible: isLeftSidebarVisible,
-                onToggleLeftSidebar: {
-                    withAnimation(.easeInOut(duration: 0.16)) {
-                        isLeftSidebarVisible.toggle()
-                    }
-                },
-                isDiffEnabled: activeGitDiffState?.isInGitRepository ?? false,
-                isDiffVisible: activeGitDiffState?.isShowingSidebar ?? false,
-                onToggleDiff: {
-                    activeGitDiffState?.toggleSidebar(for: scanner.currentDirectory)
-                }
+
+    init(
+        tabs: TabCollection,
+        scanner: DirectoryScanner,
+        recentStore: RecentDocumentStore,
+        snippetStore: PromptSnippetStore,
+        projectStore: ProjectStore,
+        gitRepositoryStatus: GitRepositoryStatus,
+        searchCommandCenter: SidebarSearchCommandCenter,
+        onSelectProject: @escaping (Project) -> Void,
+        onSelectUnscoped: @escaping () -> Void = {},
+        onProjectUpdated: @escaping (Project) -> Void = { _ in },
+        onProjectDeleted: @escaping (Project) -> Void = { _ in },
+        onOpenFile: @escaping () -> Void,
+        onDocumentChanged: @escaping () -> Void,
+        onConfigurationSaved: @escaping () -> Void = {},
+        onDirectoryChanged: @escaping (URL) -> Void = { _ in }
+    ) {
+        self.tabs = tabs
+        self.scanner = scanner
+        self.recentStore = recentStore
+        self.snippetStore = snippetStore
+        self.projectStore = projectStore
+        self.gitRepositoryStatus = gitRepositoryStatus
+        self.searchCommandCenter = searchCommandCenter
+        self.onSelectProject = onSelectProject
+        self.onSelectUnscoped = onSelectUnscoped
+        self.onProjectUpdated = onProjectUpdated
+        self.onProjectDeleted = onProjectDeleted
+        self.onOpenFile = onOpenFile
+        self.onDocumentChanged = onDocumentChanged
+        self.onConfigurationSaved = onConfigurationSaved
+        self.onDirectoryChanged = onDirectoryChanged
+        _projectSidebarController = State(
+            initialValue: ProjectSidebarController(
+                projectStore: projectStore,
+                onSelectProject: onSelectProject,
+                onSelectUnscoped: onSelectUnscoped,
+                onProjectUpdated: onProjectUpdated,
+                onProjectDeleted: onProjectDeleted
             )
-            
-            GeometryReader { geometry in
-                ZStack(alignment: .topLeading) {
-                    HStack(spacing: 0) {
-                        if isLeftSidebarVisible {
-                            FileBrowserSidebar(
-                                scanner: scanner,
-                                recentStore: recentStore,
-                                currentFileURL: tabs.activeMarkdownTab?.fileURL,
-                                onOpenMarkdown: openMarkdownFromSidebar,
-                                onOpenOtherFile: openFileFromSidebar,
-                                width: currentLeftSidebarWidth(for: geometry.size.width),
-                                searchCommandCenter: searchCommandCenter
-                            )
-                        }
+        )
+    }
 
-                        ActiveTabContentView(
-                            tabs: tabs,
-                            onOpenFile: onOpenFile,
-                            onNewTab: { isShowingNewTabChooser = true },
-                            onDocumentChanged: onDocumentChanged,
-                            onConfigurationSaved: onConfigurationSaved,
-                            mentionedGitFileIDs: openMarkdownMentionedGitFileIDs,
-                            onSearchShortcut: focusSidebarSearch,
-                            onSnippetShortcut: saveSnippetFromTerminalSelection
-                        )
-                        .frame(minWidth: 0, maxWidth: .infinity, maxHeight: .infinity)
+    var body: some View {
+        GeometryReader { geometry in
+            let allocation = ShellWidthAllocator.allocate(
+                containerWidth: geometry.size.width,
+                requestedLeftWidth: pendingLeftSidebarWidth ?? leftSidebarWidth,
+                requestedRightWidth: pendingRightSidebarWidth ?? rightSidebarWidth,
+                wantsLeft: isLeftSidebarVisible,
+                wantsRight: activeTabGroup?.rightUtilityRoute.isVisible ?? false
+            )
 
-                        if let gitDiffState = activeGitDiffState,
-                           let timelineStore = activeTimelineStore,
-                           gitDiffState.isShowingSidebar {
-                            RightSidebarView(
-                                gitDiffState: gitDiffState,
-                                snippetStore: snippetStore,
-                                timelineStore: timelineStore,
-                                width: currentRightSidebarWidth(for: geometry.size.width),
-                                isGitDiffTabOpen: isGitDiffTabOpen,
-                                onSelectFile: openGitDiffFile,
-                                mentionedFileIDs: openMarkdownMentionedGitFileIDs,
-                                selectedTab: activeRightSidebarTab
-                            )
-                            .id(tabs.activeTabGroup?.id.rawValue)
-                        }
-                    }
-
-                    if isLeftSidebarVisible {
-                        sidebarResizeHandle(
-                            isHovering: isHoveringLeftSidebarResizeHandle,
-                            isDragging: isDraggingLeftSidebarResizeHandle,
-                            visibleAlignment: .trailing,
-                            onHoverChanged: { isHoveringLeftSidebarResizeHandle = $0 },
-                            onDragChanged: { pointerX in
-                                isDraggingLeftSidebarResizeHandle = true
-                                pendingLeftSidebarWidth = clampedLeftSidebarWidth(
-                                    for: geometry.size.width,
-                                    proposedWidth: pointerX + sidebarResizeHandleVisibleWidth / 2
-                                )
-                            },
-                            onDragEnded: {
-                                if let pendingLeftSidebarWidth {
-                                    leftSidebarWidth = pendingLeftSidebarWidth
-                                }
-                                pendingLeftSidebarWidth = nil
-                                isDraggingLeftSidebarResizeHandle = false
-                            }
-                        )
-                        .position(
-                            x: currentLeftSidebarWidth(for: geometry.size.width) - sidebarResizeHandleHitWidth / 2,
-                            y: geometry.size.height / 2
-                        )
-                        .zIndex(10)
-                    }
-
-                    if activeGitDiffState?.isShowingSidebar == true {
-                        sidebarResizeHandle(
-                            isHovering: isHoveringSidebarResizeHandle,
-                            isDragging: isDraggingSidebarResizeHandle,
-                            visibleAlignment: .leading,
-                            onHoverChanged: { isHoveringSidebarResizeHandle = $0 },
-                            onDragChanged: { pointerX in
-                                isDraggingSidebarResizeHandle = true
-                                pendingRightSidebarWidth = clampedSidebarWidth(
-                                    for: geometry.size.width,
-                                    proposedWidth: geometry.size.width - pointerX + sidebarResizeHandleVisibleWidth / 2
-                                )
-                            },
-                            onDragEnded: {
-                                if let pendingRightSidebarWidth {
-                                    rightSidebarWidth = pendingRightSidebarWidth
-                                }
-                                pendingRightSidebarWidth = nil
-                                isDraggingSidebarResizeHandle = false
-                            }
-                        )
-                        .position(
-                            x: geometry.size.width - currentRightSidebarWidth(for: geometry.size.width) + sidebarResizeHandleHitWidth / 2,
-                            y: geometry.size.height / 2
-                        )
-                        .zIndex(10)
-                    }
-                }
-                .coordinateSpace(name: "main-container")
-            }
+            shell(allocation: allocation, size: geometry.size)
         }
         .sheet(isPresented: $isShowingNewTabChooser) {
             NewTabChooserView(
@@ -177,16 +123,23 @@ struct MainContainerView: View {
             setupActiveTabDirectoryObserver()
             onDocumentChanged()
         }
+        .onChange(of: tabs.activeWorkspaceID) { _, _ in
+            syncDirectoryToActiveTab()
+            activeGitDiffState?.refresh(for: scanner.currentDirectory)
+            onDirectoryChanged(scanner.currentDirectory)
+            setupActiveTabDirectoryObserver()
+            onDocumentChanged()
+        }
         .onChange(of: scanner.currentDirectory) { _, directory in
             activeGitDiffState?.refresh(for: directory)
             onDirectoryChanged(directory)
         }
         .onChange(of: activeGitDiffState?.repositoryRoot?.path) { _, _ in
-            tabs.activeTabGroup?.syncTimelineToGitRepository()
+            activeTabGroup?.syncTimelineToGitRepository()
         }
         .onChange(of: activeGitDiffState?.isRefreshing) { _, isRefreshing in
             if isRefreshing == false {
-                tabs.activeTabGroup?.syncTimelineToGitRepository()
+                activeTabGroup?.syncTimelineToGitRepository()
             }
         }
         .background(appColors?.background ?? Color(nsColor: .windowBackgroundColor))
@@ -194,44 +147,189 @@ struct MainContainerView: View {
         .tint(appColors?.accent ?? Color.accentColor)
     }
 
+    private func shell(allocation: ShellWidthAllocation, size: CGSize) -> some View {
+        ZStack(alignment: .topLeading) {
+            HStack(spacing: 0) {
+                if let leftWidth = allocation.leftWidth {
+                    ProjectSidebar(
+                        projectStore: projectStore,
+                        controller: projectSidebarController,
+                        activeWorkspaceID: tabs.activeWorkspaceID,
+                        width: leftWidth,
+                        onHide: {
+                            withAnimation(.easeInOut(duration: 0.16)) {
+                                isLeftSidebarVisible = false
+                            }
+                        }
+                    )
+                }
+
+                VStack(spacing: 0) {
+                    TabBarView(
+                        tabs: tabs,
+                        onNewTab: { isShowingNewTabChooser = true },
+                        showsLeftSidebarToggle: allocation.leftWidth == nil,
+                        onToggleLeftSidebar: {
+                            withAnimation(.easeInOut(duration: 0.16)) {
+                                isLeftSidebarVisible = true
+                            }
+                        },
+                        showsRightSidebarToggle: isRightSidebarAbsent(allocation.right),
+                        onToggleRightSidebar: {
+                            activeTabGroup?.toggleRightUtility()
+                        }
+                    )
+
+                    ActiveTabContentView(
+                        tabs: tabs,
+                        onOpenFile: onOpenFile,
+                        onNewTab: { isShowingNewTabChooser = true },
+                        onDocumentChanged: onDocumentChanged,
+                        onConfigurationSaved: onConfigurationSaved,
+                        mentionedGitFileIDs: openMarkdownMentionedGitFileIDs,
+                        onSearchShortcut: showFileBrowserSearch,
+                        onSnippetShortcut: saveSnippetFromTerminalSelection
+                    )
+                    .frame(minWidth: 0, maxWidth: .infinity, maxHeight: .infinity)
+                }
+                .frame(minWidth: 0)
+                .frame(width: allocation.centerWidth)
+                .frame(maxHeight: .infinity)
+
+                if let group = activeTabGroup {
+                    RightSidebarView(
+                        selectedTab: group.rightUtilityRoute.selectedTab,
+                        presentation: allocation.right,
+                        onSelectTab: group.selectRightUtility,
+                        gitRepositoryStatus: gitRepositoryStatus,
+                        onCollapse: group.toggleRightUtility,
+                        gitMode: group.gitUtilityMode,
+                        onSelectGitMode: group.selectGitUtilityMode,
+                        gitHistoryStore: group.gitHistoryStore,
+                        repositoryRoot: group.gitDiffState.repositoryRoot,
+                        gitDiffState: group.gitDiffState,
+                        isGitDiffTabOpen: isGitDiffTabOpen,
+                        onOpenGitFileInTab: openGitDiffFile,
+                        onFocusGitFileInTab: focusGitDiffFile,
+                        mentionedFileIDs: openMarkdownMentionedGitFileIDs,
+                        snippetStore: snippetStore,
+                        timelineStore: group.timelineStore,
+                        scanner: scanner,
+                        recentStore: recentStore,
+                        currentFileURL: tabs.activeMarkdownTab?.fileURL,
+                        onOpenMarkdown: openMarkdownFromSidebar,
+                        onOpenOtherFile: openFileFromSidebar,
+                        searchCommandCenter: searchCommandCenter
+                    )
+                    .id(group.id.rawValue)
+                }
+            }
+
+            if let leftWidth = allocation.leftWidth {
+                sidebarResizeHandle(
+                    isHovering: isHoveringLeftSidebarResizeHandle,
+                    isDragging: isDraggingLeftSidebarResizeHandle,
+                    visibleAlignment: .trailing,
+                    onHoverChanged: { isHoveringLeftSidebarResizeHandle = $0 },
+                    onDragChanged: { pointerX in
+                        isDraggingLeftSidebarResizeHandle = true
+                        pendingLeftSidebarWidth = max(
+                            ShellWidthAllocator.minimumLeftWidth,
+                            min(pointerX + sidebarResizeHandleVisibleWidth / 2, 800)
+                        )
+                    },
+                    onDragEnded: commitLeftSidebarResize
+                )
+                .position(
+                    x: leftWidth - sidebarResizeHandleHitWidth / 2,
+                    y: size.height / 2
+                )
+                .zIndex(10)
+            }
+
+            if let rightWidth = expandedWidth(allocation.right) {
+                sidebarResizeHandle(
+                    isHovering: isHoveringSidebarResizeHandle,
+                    isDragging: isDraggingSidebarResizeHandle,
+                    visibleAlignment: .leading,
+                    onHoverChanged: { isHoveringSidebarResizeHandle = $0 },
+                    onDragChanged: { pointerX in
+                        isDraggingSidebarResizeHandle = true
+                        pendingRightSidebarWidth = max(
+                            ShellWidthAllocator.minimumRightWidth,
+                            min(size.width - pointerX + sidebarResizeHandleVisibleWidth / 2, 800)
+                        )
+                    },
+                    onDragEnded: commitRightSidebarResize
+                )
+                .position(
+                    x: size.width - rightWidth + sidebarResizeHandleHitWidth / 2,
+                    y: size.height / 2
+                )
+                .zIndex(10)
+            }
+        }
+        .coordinateSpace(name: "main-container")
+    }
+
     private var appColors: TerminalAppColors? {
         terminalAppTheme?.colors(for: colorScheme)
+    }
+
+    private var activeTabGroup: TabGroupState? {
+        tabs.activeTabGroup
+    }
+
+    private var activeGitDiffState: GitDiffState? {
+        activeTabGroup?.gitDiffState
     }
 
     private var openMarkdownMentionedGitFileIDs: Set<GitChangedFile.ID> {
         let markdown = tabs.tabs
             .compactMap { tab -> String? in
                 guard let markdownTab = tab as? MarkdownTab,
-                      markdownTab.groupState?.id == tabs.activeTabGroup?.id
+                      markdownTab.groupState?.id == activeTabGroup?.id
                 else { return nil }
                 return markdownTab.state.document.editableContent
             }
             .joined(separator: "\n")
-        return MarkdownGitReferenceIndex.mentionedFileIDs(in: String(markdown), changedFiles: activeGitDiffState?.changedFiles ?? [])
+        return MarkdownGitReferenceIndex.mentionedFileIDs(
+            in: String(markdown),
+            changedFiles: activeGitDiffState?.changedFiles ?? []
+        )
     }
 
     private var isGitDiffTabOpen: Bool {
         tabs.tabs.contains { tab in
             guard let gitDiffTab = tab as? GitDiffTab else { return false }
-            return gitDiffTab.groupState?.id == tabs.activeTabGroup?.id
+            return gitDiffTab.groupState?.id == activeTabGroup?.id
         }
     }
 
-    private var activeGitDiffState: GitDiffState? {
-        tabs.activeTabGroup?.gitDiffState
+    private func expandedWidth(_ presentation: RightUtilityPresentation) -> Double? {
+        guard case .expanded(let width) = presentation else { return nil }
+        return width
     }
 
-    private var activeTimelineStore: AgentTimelineStore? {
-        tabs.activeTabGroup?.timelineStore
+    private func isRightSidebarAbsent(_ presentation: RightUtilityPresentation) -> Bool {
+        if case .hidden = presentation { return true }
+        return false
     }
 
-    private var activeRightSidebarTab: Binding<RightSidebarTab> {
-        Binding(
-            get: { tabs.activeTabGroup?.rightSidebarTab ?? .gitChanges },
-            set: { newValue in
-                tabs.activeTabGroup?.rightSidebarTab = newValue
-            }
-        )
+    private func commitLeftSidebarResize() {
+        if let pendingLeftSidebarWidth {
+            leftSidebarWidth = pendingLeftSidebarWidth
+        }
+        pendingLeftSidebarWidth = nil
+        isDraggingLeftSidebarResizeHandle = false
+    }
+
+    private func commitRightSidebarResize() {
+        if let pendingRightSidebarWidth {
+            rightSidebarWidth = pendingRightSidebarWidth
+        }
+        pendingRightSidebarWidth = nil
+        isDraggingSidebarResizeHandle = false
     }
 
     private func sidebarResizeHandle(
@@ -244,76 +342,45 @@ struct MainContainerView: View {
     ) -> some View {
         Rectangle()
             .fill(Color.clear)
-        .frame(width: sidebarResizeHandleHitWidth)
-        .frame(maxHeight: .infinity)
-        .contentShape(Rectangle())
-        .background(sidebarResizeHandleColor(isHovering: isHovering, isDragging: isDragging))
-        .overlay(alignment: visibleAlignment) {
-            Rectangle()
-                .fill(sidebarResizeHandleVisibleColor(isHovering: isHovering, isDragging: isDragging))
-                .frame(width: sidebarResizeHandleVisibleWidth)
-        }
-        .onHover { hovering in
-            onHoverChanged(hovering)
-            if hovering {
-                NSCursor.resizeLeftRight.set()
-            } else {
-                NSCursor.arrow.set()
+            .frame(width: sidebarResizeHandleHitWidth)
+            .frame(maxHeight: .infinity)
+            .contentShape(Rectangle())
+            .background(sidebarResizeHandleColor(isHovering: isHovering, isDragging: isDragging))
+            .overlay(alignment: visibleAlignment) {
+                Rectangle()
+                    .fill(sidebarResizeHandleVisibleColor(isHovering: isHovering, isDragging: isDragging))
+                    .frame(width: sidebarResizeHandleVisibleWidth)
             }
-        }
-        .highPriorityGesture(
-            DragGesture(minimumDistance: 0, coordinateSpace: .named("main-container"))
-                .onChanged { value in
-                    onDragChanged(value.location.x)
+            .onHover { hovering in
+                onHoverChanged(hovering)
+                if hovering {
+                    NSCursor.resizeLeftRight.set()
+                } else {
+                    NSCursor.arrow.set()
                 }
-                .onEnded { _ in
-                    onDragEnded()
-                }
-        )
+            }
+            .highPriorityGesture(
+                DragGesture(minimumDistance: 0, coordinateSpace: .named("main-container"))
+                    .onChanged { value in onDragChanged(value.location.x) }
+                    .onEnded { _ in onDragEnded() }
+            )
     }
 
     private func sidebarResizeHandleColor(isHovering: Bool, isDragging: Bool) -> Color {
         if isDragging {
             return (appColors?.accent ?? Color.accentColor).opacity(0.18)
         }
-
         if isHovering {
             return (appColors?.accent ?? Color.accentColor).opacity(0.10)
         }
-
         return Color.clear
-    }
-
-    private var sidebarResizeHandleAccent: Color {
-        appColors?.accent ?? Color.accentColor
     }
 
     private func sidebarResizeHandleVisibleColor(isHovering: Bool, isDragging: Bool) -> Color {
         if isHovering || isDragging {
-            return sidebarResizeHandleAccent
+            return appColors?.accent ?? Color.accentColor
         }
-
         return appColors?.border ?? Color.secondary.opacity(0.35)
-    }
-
-    private func currentRightSidebarWidth(for containerWidth: Double) -> Double {
-        clampedSidebarWidth(for: containerWidth, proposedWidth: pendingRightSidebarWidth ?? rightSidebarWidth)
-    }
-
-    private func currentLeftSidebarWidth(for containerWidth: Double) -> Double {
-        clampedLeftSidebarWidth(for: containerWidth, proposedWidth: pendingLeftSidebarWidth ?? leftSidebarWidth)
-    }
-
-    private func clampedSidebarWidth(for containerWidth: Double, proposedWidth: Double) -> Double {
-        return max(250, min(800, min(proposedWidth, max(containerWidth - 120, 250))))
-    }
-
-    private func clampedLeftSidebarWidth(for containerWidth: Double, proposedWidth: Double) -> Double {
-        return max(220, min(proposedWidth, leftSidebarMaxWidth(for: containerWidth)))
-    }
-
-    private func leftSidebarMaxWidth(for containerWidth: Double) -> Double {
-        max(220, containerWidth * 0.5)
     }
 
     private func createTerminalTab() {
@@ -326,21 +393,20 @@ struct MainContainerView: View {
         )
         tab.groupState.recordTimeline(.terminalCreated(directory: scanner.currentDirectory))
     }
-    
+
     private func createMarkdownTab() {
         tabs.createMarkdownTab(fileURL: nil)
     }
 
-    private func focusSidebarSearch(_ mode: SidebarSearchMode) {
-        isLeftSidebarVisible = true
-        searchCommandCenter.focus(mode)
+    private func showFileBrowserSearch(_ mode: SidebarSearchMode) {
+        activeTabGroup?.showFileBrowserSearch(mode, commandCenter: searchCommandCenter)
     }
 
     private func saveSnippetFromTerminalSelection(_ body: String) {
         _ = snippetStore.add(body: body)
-        tabs.activeTabGroup?.showSnippetsSidebar()
+        activeTabGroup?.showSnippetsSidebar()
     }
-    
+
     private func openMarkdownFromSidebar(_ url: URL) {
         openFileFromSidebar(url)
     }
@@ -349,7 +415,7 @@ struct MainContainerView: View {
         tabs.createMarkdownTab(fileURL: url)
         recentStore.record(url: url)
         scanner.setDirectory(url.deletingLastPathComponent())
-        tabs.activeTabGroup?.recordTimeline(.markdownOpened(url: url))
+        activeTabGroup?.recordTimeline(.markdownOpened(url: url))
         onDocumentChanged()
     }
 
@@ -360,12 +426,24 @@ struct MainContainerView: View {
         onDocumentChanged()
     }
 
+    private func focusGitDiffFile(_ file: GitChangedFile) {
+        guard let groupID = activeTabGroup?.id,
+              let tab = tabs.tabs.compactMap({ $0 as? GitDiffTab }).first(where: { $0.groupState?.id == groupID })
+        else { return }
+        tab.state.focus(file)
+        tabs.selectTab(id: tab.id)
+        tab.groupState?.recordTimeline(.gitDiffFocused(relativePath: file.relativePath))
+        onDocumentChanged()
+    }
+
     private func syncDirectoryToActiveTab() {
         if let terminalTab = tabs.activeTerminalTab {
             scanner.setDirectory(terminalTab.state.workingDirectory)
         } else if let markdownTab = tabs.activeMarkdownTab,
                   let fileURL = markdownTab.fileURL {
             scanner.setDirectory(fileURL.deletingLastPathComponent())
+        } else if let directory = tabs.activeWorkingDirectory {
+            scanner.setDirectory(directory)
         }
     }
 

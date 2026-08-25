@@ -126,6 +126,74 @@ final class TerminalTabStateTests: XCTestCase {
         XCTAssertEqual(state.workingDirectory, directory)
     }
 
+    @MainActor
+    func testInactiveTerminalFocusPolicyResignsFirstResponder() {
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 200, height: 120),
+            styleMask: [.titled],
+            backing: .buffered,
+            defer: false
+        )
+        let view = TerminalFocusTestView(frame: window.contentView?.bounds ?? .zero)
+        window.contentView?.addSubview(view)
+
+        XCTAssertTrue(window.makeFirstResponder(view))
+        XCTAssertTrue(window.firstResponder === view)
+
+        TerminalFocusPolicy.resignIfNeeded(view)
+
+        XCTAssertFalse(window.firstResponder === view)
+    }
+
+    @MainActor
+    func testTerminalViewTeardownClearsStateDelegateAndController() {
+        let state = TerminalTabState(
+            workingDirectory: FileManager.default.homeDirectoryForCurrentUser
+        )
+        let view = SearchAwareTerminalView()
+        let coordinator = TerminalTabView.Coordinator()
+        coordinator.observeState(state)
+        view.controller = state.terminalViewState.controller
+        view.delegate = coordinator
+        state.terminalView = view
+
+        TerminalTabView.tearDown(view, coordinator: coordinator)
+
+        XCTAssertNil(state.terminalView)
+        XCTAssertNil(view.delegate)
+        XCTAssertNil(view.controller)
+    }
+
+    @MainActor
+    func testDeferredTerminalFocusUsesLatestWorkspaceActivity() async {
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 200, height: 120),
+            styleMask: [.titled],
+            backing: .buffered,
+            defer: false
+        )
+        let firstView = TerminalFocusTestView(frame: window.contentView?.bounds ?? .zero)
+        let secondView = TerminalFocusTestView(frame: window.contentView?.bounds ?? .zero)
+        window.contentView?.addSubview(firstView)
+        window.contentView?.addSubview(secondView)
+        let firstActivity = TerminalFocusActivity(isActive: true)
+        let secondActivity = TerminalFocusActivity(isActive: false)
+
+        TerminalFocusPolicy.requestFocus(firstView) { firstActivity.isActive }
+        firstActivity.isActive = false
+        secondActivity.isActive = true
+        TerminalFocusPolicy.requestFocus(secondView) { secondActivity.isActive }
+
+        let callbacksCompleted = expectation(description: "main queue focus callbacks completed")
+        DispatchQueue.main.async {
+            callbacksCompleted.fulfill()
+        }
+        await fulfillment(of: [callbacksCompleted], timeout: 1)
+
+        XCTAssertFalse(window.firstResponder === firstView)
+        XCTAssertTrue(window.firstResponder === secondView)
+    }
+
     private func keyEvent(key: String, keyCode: UInt16, modifiers: NSEvent.ModifierFlags) throws -> NSEvent {
         try XCTUnwrap(NSEvent.keyEvent(
             with: .keyDown,
@@ -139,5 +207,18 @@ final class TerminalTabStateTests: XCTestCase {
             isARepeat: false,
             keyCode: keyCode
         ))
+    }
+}
+
+private final class TerminalFocusTestView: NSView {
+    override var acceptsFirstResponder: Bool { true }
+}
+
+@MainActor
+private final class TerminalFocusActivity {
+    var isActive: Bool
+
+    init(isActive: Bool) {
+        self.isActive = isActive
     }
 }

@@ -67,6 +67,7 @@
 67. [세션 63: Remote 로딩 헤더 압축 수정](#세션-63-remote-로딩-헤더-압축-수정)
 68. [세션 64: Git 브랜치 동기화 및 v1.7.7 릴리즈](#세션-64-git-브랜치-동기화-및-v177-릴리즈)
 69. [세션 65: HTML 메모리 감사, Ghostty upstream 전환 및 v1.7.8 릴리즈](#세션-65-html-메모리-감사-ghostty-upstream-전환-및-v178-릴리즈)
+70. [세션 66: 프로젝트 워크스페이스와 Git 유틸리티 및 v1.8.0 릴리즈](#세션-66-프로젝트-워크스페이스와-git-유틸리티-및-v180-릴리즈)
 
 ---
 
@@ -156,6 +157,7 @@
 | 80 | Remote 로딩 헤더 압축 수정 | 동기화 상태가 표시될 때 `REMOTE` 제목이 `REM`으로 줄어드는 레이아웃 회귀 수정 |
 | 81 | Git 브랜치 동기화 및 v1.7.7 릴리즈 | 외부 checkout 즉시 반영과 Remote 새로고침을 문서화하고 앱 번들 버전 1.7.7 갱신 |
 | 82 | HTML 메모리 감사, Ghostty upstream 전환 및 v1.7.8 릴리즈 | HTML·라인 번호·터미널 메모리 경로를 실제 프로세스로 감사하고 PR #23이 포함된 libghostty-spm 1.4.0으로 전환한 뒤 앱 번들 버전 1.7.8 갱신 |
+| 83 | 프로젝트 워크스페이스와 Git 유틸리티 및 v1.8.0 릴리즈 | 프로젝트별 탭·터미널 상태를 격리하고 3열 워크스페이스, Git History/Changes, 반응형 사이드바, 테마·탭 chrome 회귀 수정을 통합해 앱 번들 버전 1.8.0 갱신 |
 
 ---
 
@@ -3239,3 +3241,58 @@ HEAD watcher와 브랜치 snapshot의 현재 브랜치 쓰기를 단일 세대 �
 LOCAL/REMOTE 섹션 제목을 수평 압축 대상에서 제외해 Remote 개수와 `동기화 중` 상태가 함께 나타나도 제목이 온전히 표시되도록 했다. 잘못된 시점에 저장된 앱 내부 checkout 증거도 새 번들에서 실제 Git HEAD·타이틀바·선택 행이 모두 일치하는 화면으로 다시 수집하도록 최종 QA 범위를 갱신했다.
 
 변경 파일: `Sources/App/TitlebarStatusView.swift`, `history.md`
+
+---
+
+## 세션 66: 프로젝트 워크스페이스와 Git 유틸리티 및 v1.8.0 릴리즈
+
+> 날짜: 2026-08-25
+> 경로: ~/workspace/markAgent
+
+여러 프로젝트를 왼쪽 사이드바에서 전환하며 각 프로젝트의 탭·터미널·Git 유틸리티 상태를 유지하는 워크스페이스 구조를 도입하고, 중앙 작업 영역과 오른쪽 유틸리티를 반응형 3열 shell로 재구성했다. 실제 macOS bundle에서 프로젝트 전환, 탭 격리, Git History/Changes, 사이드바 폭, 터미널 포커스, 테마와 탭 chrome을 검증한 뒤 v1.8.0 릴리즈를 준비한다.
+
+### 대화 1: 프로젝트 워크스페이스와 반응형 3열 shell 구현
+
+**사용자:**
+> Orca의 워크스페이스 구조를 참고해 프로젝트 사이드바와 프로젝트별 작업 공간을 구현하고 실제 앱에서 검증해줘.
+
+**응답:**
+`ProjectStore`와 `ProjectSidebar`를 추가하고, `TabCollection`을 `TabWorkspaceID`별 visible projection과 retained `allTabs` 구조로 확장했다. 프로젝트 선택 시 탭 strip·active content·right utility 전체가 해당 workspace로 전환되며, 비활성 Ghostty surface와 shell session은 유지하되 focus·접근성·hit testing에서는 제외한다. 570pt 최소 창 폭과 `ShellWidthAllocator`, 저장 frame 복원 정책을 추가해 좁은 화면에서도 중앙 320pt와 오른쪽 utility body를 보장했다.
+
+변경 파일: `Sources/Core/ProjectStore.swift`, `Sources/Core/Tabs/TabWorkspaceID.swift`, `Sources/Core/Tabs/TabCollection.swift`, `Sources/App/WindowFramePolicy.swift`, `Sources/Views/Main/ShellWidthAllocator.swift`, `Sources/Views/Main/MainContainerView.swift`, `Sources/Views/Sidebar/ProjectSidebar.swift`, `Sources/Views/Sidebar/ProjectSidebarController.swift`, `DESIGN.md`
+
+---
+
+### 대화 2: Git History/Changes 유틸리티와 안정성 보강
+
+**사용자:**
+> 우측 영역을 유틸리티 사이드바로 정리하고 프로젝트별 Git 히스토리와 변경 사항을 확인할 수 있게 해줘.
+
+**응답:**
+오른쪽 utility header를 Snippets, Timeline, Git History, File Browser 순서로 통합하고 History/Changes 내부 mode를 추가했다. `GitHistoryStore`는 `git log --all`의 7개 NUL field를 엄격히 파싱하며, 5초 timeout·4MiB 출력 상한·프로세스 그룹 단위 취소/정리를 적용했다. repository root와 request generation으로 늦은 결과를 격리하고, 기존 Git Diff·검색·스니펫 route를 workspace별 `TabGroupState`에 유지했다.
+
+변경 파일: `Sources/Core/Git/GitHistoryProcessRunner.swift`, `Sources/Core/Git/GitHistoryStore.swift`, `Sources/Core/Tabs/GitUtilityMode.swift`, `Sources/Core/Tabs/RightUtilityRouting.swift`, `Sources/Core/Tabs/RightSidebarTab.swift`, `Sources/Core/Tabs/TabGroupState.swift`, `Sources/Views/Sidebar/GitHistorySidebarView.swift`, `Sources/Views/Sidebar/GitUtilitySidebarView.swift`, `Sources/Views/Sidebar/RightSidebarView.swift`
+
+---
+
+### 대화 3: 실제 앱 회귀 수정과 v1.8.0 배포
+
+**사용자:**
+> 탭 오른쪽 artifact와 config가 없을 때 Dark Modern이 적용되지 않는 문제를 수정하고, 1.8.0으로 릴리즈 배포해줘. dev PR 머지, main PR 머지까지 해줘.
+
+**응답:**
+다음 sibling이 없는 active tab에는 trailing stacking shadow를 그리지 않도록 수정해 회색 block artifact를 제거했다. config 파일이 없을 때 Settings만 `Dark Modern`을 표시하고 root theme는 nil이던 불일치를 `GhosttyConfig.resolvedAppTheme()`으로 통일해 실제 전체 앱도 dark appearance를 사용하도록 했다. 프로젝트 전환·탭 격리·right utility·Git history·터미널 focus·theme fallback을 자동화 테스트와 최신 bundle 사용자 확인으로 검증하고 앱 short/build version을 `1.8.0`으로 갱신한다.
+
+변경 파일: `Sources/Views/Main/TabBarView.swift`, `Sources/Core/Tabs/GhosttyConfig.swift`, `Sources/App/AppDelegate.swift`, `Tests/MarkAgentTests/GhosttyConfigTests.swift`, `README.md`, `history.md`
+
+---
+
+### 대화 4: PR 전 독립 review blocker 보강
+
+**사용자:**
+> 1.8.0으로 릴리즈 배포하고, dev PR 머지, main PR 머지 해줘.
+
+**응답:**
+PR 전 frozen-tree 5-way review에서 발견한 release blocker를 push 전에 수정했다. Git History는 `/usr/bin/git` 절대 경로와 최소 환경만 사용하고 `POSIX_SPAWN_CLOEXEC_DEFAULT`로 외부 file descriptor 상속을 차단한다. direct child가 먼저 종료하거나 nonzero로 끝나도 descendant가 pipe를 보유하면 process group을 정리하고, read failure도 해당 stream의 terminal 상태로 처리한다. nonzero 경로는 parent read descriptor를 collector만 닫도록 소유권을 분리해 1MiB stderr를 끝까지 보존한 뒤 structured exit error를 반환한다. SHA-1과 SHA-256 object ID를 모두 파싱하며 최대 4MiB decode 작업을 main actor 밖에서 수행한다. 비활성 프로젝트 삭제 후 미분류 workspace의 active tab을 복원하고, 비터미널 inactive view를 unmount해 Settings focus가 남지 않게 했다. 선택 workspace 접근성 trait, right utility 단일 source of truth, 누락 localization도 보강했다. custom terminal representable에는 explicit dismantle hook을 추가해 닫힌 tab의 Ghostty surface와 PTY child가 즉시 해제되도록 했으며, 실제 bundle에서 child 종료와 product-owned leak root 부재를 확인했다. 전체 테스트 237개 통과를 확인했다.
+
+변경 파일: `Sources/Core/Git/GitHistoryProcessRunner.swift`, `Sources/Core/Git/GitHistoryStore.swift`, `Sources/Core/GitDiffState.swift`, `Sources/Core/Tabs/TabCollection.swift`, `Sources/Core/Tabs/TabGroupState.swift`, `Sources/Views/Main/ActiveTabContentView.swift`, `Sources/Views/Sidebar/ProjectSidebar.swift`, `Sources/Views/Tabs/TerminalTabView.swift`, `Sources/App/Resources/en.lproj/Localizable.strings`, `Sources/App/Resources/ko.lproj/Localizable.strings`, `Tests/MarkAgentTests/GitHistoryProcessRunnerTests.swift`, `Tests/MarkAgentTests/GitHistoryStoreTests.swift`, `Tests/MarkAgentTests/GitDiffStateTests.swift`, `Tests/MarkAgentTests/ProjectSidebarControllerTests.swift`, `Tests/MarkAgentTests/TabCollectionWorkspaceTests.swift`, `Tests/MarkAgentTests/TerminalSnippetSelectionSaverTests.swift`, `Tests/MarkAgentTests/TerminalTabStateTests.swift`, `DESIGN.md`, `history.md`

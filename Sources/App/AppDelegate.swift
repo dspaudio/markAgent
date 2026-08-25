@@ -4,27 +4,44 @@ import UniformTypeIdentifiers
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
-    let tabs = TabCollection()
-    let recentStore = RecentDocumentStore()
-    let snippetStore = PromptSnippetStore()
-    let sidebarSearchCommands = SidebarSearchCommandCenter()
+    let tabs: TabCollection
+    let recentStore: RecentDocumentStore
+    let snippetStore: PromptSnippetStore
+    let projectStore: ProjectStore
+    let sidebarSearchCommands: SidebarSearchCommandCenter
     let directoryScanner: DirectoryScanner
     let gitRepositoryStatus: GitRepositoryStatus
     let dirtyPrompter: AppDirtyDocumentPrompter
-    var isAlwaysOnTop = false
+    var isAlwaysOnTop: Bool
     var window: NSWindow?
 
-    private var isClosingAfterDirtyConfirmation = false
-    private let windowFrameDefaultsKey = "MarkAgent.windowFrame"
-    private let leftSidebarVisibleDefaultsKey = "isLeftSidebarVisible"
+    private var isClosingAfterDirtyConfirmation: Bool
+    private let windowFrameDefaultsKey: String
+    private let leftSidebarVisibleDefaultsKey: String
     private var rootHostingView: NSHostingView<AnyView>?
     private var searchKeyMonitor: Any?
 
-    override init() {
+    override convenience init() {
+        self.init(projectStore: ProjectStore())
+    }
+
+    init(projectStore: ProjectStore) {
         let homeURL = URL(fileURLWithPath: NSHomeDirectory())
+        self.tabs = TabCollection(unscopedRootDirectory: homeURL)
+        self.recentStore = RecentDocumentStore()
+        self.snippetStore = PromptSnippetStore()
+        self.projectStore = projectStore
+        self.sidebarSearchCommands = SidebarSearchCommandCenter()
         self.directoryScanner = DirectoryScanner(currentDirectory: homeURL)
         self.gitRepositoryStatus = GitRepositoryStatus(currentDirectory: homeURL)
         self.dirtyPrompter = AppDirtyDocumentPrompter(window: nil)
+        self.isAlwaysOnTop = false
+        self.window = nil
+        self.isClosingAfterDirtyConfirmation = false
+        self.windowFrameDefaultsKey = "MarkAgent.windowFrame"
+        self.leftSidebarVisibleDefaultsKey = "isLeftSidebarVisible"
+        self.rootHostingView = nil
+        self.searchKeyMonitor = nil
         super.init()
         tabs.dirtyPrompter = dirtyPrompter
     }
@@ -61,6 +78,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             defer: false
         )
         window.contentView = hostingView
+        let minimumContentSize = WindowFramePolicy.minimumContentSize
+        window.contentMinSize = minimumContentSize
+        window.minSize = window.frameRect(
+            forContentRect: NSRect(origin: .zero, size: minimumContentSize)
+        ).size
         window.titleVisibility = .hidden
         window.collectionBehavior = [.fullScreenPrimary]
         window.tabbingMode = .disallowed
@@ -84,13 +106,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func makeRootView() -> AnyView {
-        let appTheme = GhosttyConfig.userConfig()?.colorTheme
+        let appTheme = GhosttyConfig.resolvedAppTheme()
         let contentView = MainContainerView(
             tabs: tabs,
             scanner: directoryScanner,
             recentStore: recentStore,
             snippetStore: snippetStore,
+            projectStore: projectStore,
+            gitRepositoryStatus: gitRepositoryStatus,
             searchCommandCenter: sidebarSearchCommands,
+            onSelectProject: { [weak self] project in
+                guard let self else { return }
+                if !self.openProject(project) {
+                    self.showUnavailableProjectAlert()
+                }
+            },
+            onSelectUnscoped: { [weak self] in
+                self?.selectUnscopedWorkspace()
+            },
+            onProjectUpdated: { [weak self] project in
+                self?.projectDidUpdate(project)
+            },
+            onProjectDeleted: { [weak self] project in
+                self?.projectDidDelete(project)
+            },
             onOpenFile: { [weak self] in
                 self?.openFile()
             },
@@ -116,13 +155,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         pathController.view = titlebarHostingView(rootView: pathView, width: 560)
         pathController.layoutAttribute = .left
         window.addTitlebarAccessoryViewController(pathController)
-
-        let branchView = TitlebarGitBranchView(status: gitRepositoryStatus)
-            .frame(minWidth: 80, idealWidth: 420, maxWidth: 640, alignment: .trailing)
-        let branchController = NSTitlebarAccessoryViewController()
-        branchController.view = titlebarHostingView(rootView: branchView, width: 420)
-        branchController.layoutAttribute = .right
-        window.addTitlebarAccessoryViewController(branchController)
     }
 
     private func titlebarHostingView<Content: View>(rootView: Content, width: CGFloat) -> NSHostingView<Content> {
@@ -133,8 +165,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func restoreWindowFrame(_ window: NSWindow) {
-        if let savedFrame = savedWindowFrame(), isFrameVisible(savedFrame) {
-            window.setFrame(savedFrame, display: true)
+        if let savedFrame = savedWindowFrame(),
+           let restoredFrame = WindowFramePolicy.restoredSavedFrame(
+               savedFrame,
+               minimumFrameSize: window.minSize,
+               isVisible: isFrameVisible
+           ) {
+            window.setFrame(restoredFrame, display: true)
             return
         }
 
@@ -146,8 +183,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard let value else { return nil }
 
         let frame = NSRectFromString(value)
-        guard !frame.isEmpty, frame.width >= 480, frame.height >= 320 else { return nil }
-        return frame
+        return frame.isEmpty ? nil : frame
     }
 
     private func isFrameVisible(_ frame: NSRect) -> Bool {
@@ -409,7 +445,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func reloadConfiguration() {
-        for tab in tabs.tabs {
+        for tab in tabs.allTabs {
             guard let terminalTab = tab as? TerminalTab else { continue }
             terminalTab.state.reloadConfiguration()
         }
@@ -514,6 +550,90 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             panel.beginSheetModal(for: window, completionHandler: completion)
         } else {
             completion(panel.runModal())
+        }
+    }
+
+    @discardableResult
+    func openProject(_ project: Project) -> Bool {
+        guard let directoryURL = projectStore.validatedDirectoryURL(for: project) else {
+            return false
+        }
+
+        let workspaceID = TabWorkspaceID.project(project.id)
+        if let currentRoot = tabs.workspaceRoot(for: workspaceID) {
+            if currentRoot.standardizedFileURL != directoryURL.standardizedFileURL {
+                _ = tabs.updateWorkspaceRoot(directoryURL, for: workspaceID)
+                tabs.createTerminalTab(
+                    workingDirectory: directoryURL,
+                    workspaceID: workspaceID
+                )
+            }
+        } else {
+            _ = tabs.ensureWorkspace(workspaceID, rootDirectory: directoryURL)
+            tabs.createTerminalTab(
+                workingDirectory: directoryURL,
+                workspaceID: workspaceID
+            )
+        }
+
+        _ = tabs.selectWorkspace(workspaceID)
+        syncActiveWorkspaceDirectory(fallback: directoryURL)
+        return true
+    }
+
+    private func selectUnscopedWorkspace() {
+        guard tabs.selectWorkspace(.unscoped) else { return }
+        syncActiveWorkspaceDirectory(
+            fallback: FileManager.default.homeDirectoryForCurrentUser
+        )
+    }
+
+    private func projectDidUpdate(_ project: Project) {
+        let workspaceID = TabWorkspaceID.project(project.id)
+        guard tabs.workspaceRoot(for: workspaceID) != nil,
+              let directoryURL = projectStore.validatedDirectoryURL(for: project),
+              tabs.updateWorkspaceRoot(directoryURL, for: workspaceID) else {
+            return
+        }
+
+        tabs.createTerminalTab(
+            workingDirectory: directoryURL,
+            workspaceID: workspaceID
+        )
+        if tabs.activeWorkspaceID == workspaceID {
+            syncActiveWorkspaceDirectory(fallback: directoryURL)
+        }
+    }
+
+    private func projectDidDelete(_ project: Project) {
+        let workspaceID = TabWorkspaceID.project(project.id)
+        let wasActive = tabs.activeWorkspaceID == workspaceID
+        guard tabs.removeWorkspace(workspaceID) else { return }
+        if wasActive {
+            syncActiveWorkspaceDirectory(
+                fallback: FileManager.default.homeDirectoryForCurrentUser
+            )
+        }
+    }
+
+    private func syncActiveWorkspaceDirectory(fallback: URL) {
+        let activeDirectory = tabs.activeWorkingDirectory ?? fallback
+        directoryScanner.setDirectory(activeDirectory)
+        gitRepositoryStatus.refresh(for: activeDirectory)
+        updateWindowTitle()
+    }
+
+    private func showUnavailableProjectAlert() {
+        let alert = NSAlert()
+        alert.messageText = String(localized: "프로젝트 폴더를 사용할 수 없습니다.")
+        alert.informativeText = String(localized: "저장된 프로젝트 폴더를 찾을 수 없습니다. 프로젝트를 편집하거나 삭제하세요.")
+        alert.alertStyle = .warning
+        alert.addButton(withTitle: String(localized: "확인"))
+
+        if let window {
+            alert.beginSheetModal(for: window)
+        } else {
+            alert.runModal()
         }
     }
 
@@ -650,8 +770,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func focusSidebarSearch(mode: SidebarSearchMode) {
-        UserDefaults.standard.set(true, forKey: leftSidebarVisibleDefaultsKey)
-        sidebarSearchCommands.focus(mode)
+        tabs.activeTabGroup?.showFileBrowserSearch(mode, commandCenter: sidebarSearchCommands)
         window?.makeKeyAndOrderFront(nil)
         NSRunningApplication.current.activate()
         updateViewMenuState()
@@ -705,11 +824,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func updateWindowTitle() {
-        var title = tabs.activeTab?.title ?? "MarkAgent"
-        if tabs.activeTab?.isDirty == true { title += " *" }
-        if isAlwaysOnTop { title += " 📌" }
+        let isTerminalActive = tabs.activeTerminalTab != nil
+        var title = isTerminalActive ? "" : (tabs.activeTab?.title ?? "MarkAgent")
+        if !isTerminalActive, tabs.activeTab?.isDirty == true { title += " *" }
+        if !isTerminalActive, isAlwaysOnTop { title += " 📌" }
         window?.title = title
-        window?.isDocumentEdited = tabs.tabs.contains { $0.isDirty }
+        window?.isDocumentEdited = tabs.allTabs.contains { $0.isDirty }
         updateViewMenuState()
     }
 
@@ -762,7 +882,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func updateViewMenuState() {
-        guard let viewMenu = NSApp.mainMenu?.item(withTitle: String(localized: "View"))?.submenu else { return }
+        guard let application = NSApp,
+              let viewMenu = application.mainMenu?.item(withTitle: String(localized: "View"))?.submenu
+        else { return }
         let document = tabs.activeMarkdownTab?.state.document
         viewMenu.items.first { $0.action == #selector(toggleViewMode) }?.state = document?.viewMode == .preview ? .on : .off
         viewMenu.items.first { $0.action == #selector(showRawView) }?.state = document?.viewMode == .rawEdit ? .on : .off
@@ -787,7 +909,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func confirmCloseAllDirtyMarkdownTabs() async -> Bool {
-        for tab in tabs.tabs {
+        for tab in tabs.allTabs {
             guard let markdownTab = tab as? MarkdownTab else { continue }
             guard await markdownTab.state.prepareForClose(prompt: dirtyPrompter) else { return false }
         }
@@ -846,7 +968,7 @@ extension AppDelegate: NSWindowDelegate {
 
     func windowShouldClose(_ sender: NSWindow) -> Bool {
         if isClosingAfterDirtyConfirmation { return true }
-        guard tabs.tabs.contains(where: { $0 is MarkdownTab && $0.isDirty }) else { return true }
+        guard tabs.allTabs.contains(where: { $0 is MarkdownTab && $0.isDirty }) else { return true }
 
         Task { [weak self, weak sender] in
             guard let self, let sender else { return }
