@@ -3283,4 +3283,4 @@ LOCAL/REMOTE 섹션 제목을 수평 압축 대상에서 제외해 Remote 개수
 **응답:**
 다음 sibling이 없는 active tab에는 trailing stacking shadow를 그리지 않도록 수정해 회색 block artifact를 제거했다. config 파일이 없을 때 Settings만 `Dark Modern`을 표시하고 root theme는 nil이던 불일치를 `GhosttyConfig.resolvedAppTheme()`으로 통일해 실제 전체 앱도 dark appearance를 사용하도록 했다. 프로젝트 전환·탭 격리·right utility·Git history·터미널 focus·theme fallback을 자동화 테스트와 최신 bundle 사용자 확인으로 검증하고 앱 short/build version을 `1.8.0`으로 갱신한다.
 
-변경 파일: `Sources/Views/Main/TabBarView.swift`, `Sources/Core/Tabs/GhosttyConfig.swift`, `Sources/App/AppDelegate.swift`, `Tests/MarkAgentTests/GhosttyConfigTests.swift`, `history.md`
+변경 파일: `Sources/Views/Main/TabBarView.swift`, `Sources/Core/Tabs/GhosttyConfig.swift`, `Sources/App/AppDelegate.swift`, `Tests/MarkAgentTests/GhosttyConfigTests.swift`, `README.md`, `history.md`
