@@ -12,9 +12,9 @@ final class GitHistoryStoreTests: XCTestCase {
         await store.refresh(repositoryRoot: root)
 
         let request = try XCTUnwrap(runner.requests.first)
-        XCTAssertEqual(request.executableURL, URL(fileURLWithPath: "/usr/bin/env"))
+        XCTAssertEqual(request.executableURL, URL(fileURLWithPath: "/usr/bin/git"))
         XCTAssertEqual(request.arguments, [
-            "git", "-C", root.path,
+            "-C", root.path,
             "log", "--all", "--max-count=100", "--date=iso-strict",
             "--pretty=format:%H%x00%h%x00%an%x00%ae%x00%aI%x00%s%x00%b%x00",
         ])
@@ -37,6 +37,23 @@ final class GitHistoryStoreTests: XCTestCase {
         XCTAssertEqual(store.commits.first?.authorEmail, "ada@example.com")
         XCTAssertEqual(store.commits.first?.subject, "initial")
         XCTAssertEqual(store.commits.first?.body, "")
+    }
+
+    func testParsesSHA256ObjectID() async {
+        let hash = String(repeating: "a", count: 64)
+        let commit = fixtureCommit(
+            hash: hash,
+            shortHash: "aaaaaaaaaaaa",
+            subject: "sha256",
+            body: ""
+        )
+        let store = makeStore(stdout: record(commit))
+
+        await store.refresh(repositoryRoot: fixtureRoot)
+
+        XCTAssertEqual(store.state, .loaded)
+        XCTAssertEqual(store.commits.first?.id, hash)
+        XCTAssertEqual(store.commits.first?.shortHash, "aaaaaaaaaaaa")
     }
 
     func testParsesMultipleRecordsInGitOutputOrderAndStripsOnlyInterRecordLF() async {
@@ -115,6 +132,25 @@ final class GitHistoryStoreTests: XCTestCase {
         XCTAssertEqual(store.state, .loaded)
         XCTAssertTrue(store.commits.isEmpty)
         XCTAssertNil(store.selectedCommit)
+    }
+
+    func testRefreshParsesOutputOffMainThread() async {
+        let probe = ParserThreadProbe()
+        let runner = RecordingHistoryRunner(
+            result: .success(.init(stdout: Data(), stderr: Data()))
+        )
+        let store = GitHistoryStore(
+            commandRunner: { request in try await runner.run(request) },
+            parser: { _ in
+                probe.recordCurrentThread()
+                return []
+            }
+        )
+
+        await store.refresh(repositoryRoot: fixtureRoot)
+
+        XCTAssertEqual(probe.ranOnMainThread, false)
+        XCTAssertEqual(store.state, .loaded)
     }
 
     func testRunnerFailurePublishesStructuredError() async {
@@ -248,6 +284,19 @@ private final class SequencedHistoryRunner: @unchecked Sendable {
     func run(_: GitHistoryProcessRequest) async throws -> GitHistoryRawOutput {
         let output = lock.withLock { outputs.removeFirst() }
         return .init(stdout: output, stderr: Data())
+    }
+}
+
+private final class ParserThreadProbe: @unchecked Sendable {
+    private let lock = NSLock()
+    private var recordedValue: Bool?
+
+    var ranOnMainThread: Bool? {
+        lock.withLock { recordedValue }
+    }
+
+    func recordCurrentThread() {
+        lock.withLock { recordedValue = Thread.isMainThread }
     }
 }
 

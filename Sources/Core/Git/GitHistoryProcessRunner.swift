@@ -163,7 +163,6 @@ struct GitHistoryProcessRunner: Sendable {
 
                 case .exited(let status):
                     waitStatus = status
-                    processGroup.markExited()
 
                 case .deadline:
                     if failure == nil {
@@ -178,12 +177,10 @@ struct GitHistoryProcessRunner: Sendable {
                     }
 
                 case .escalate:
-                    if waitStatus == nil {
-                        processGroup.killNow()
-                    }
+                    processGroup.killNow()
                 }
 
-                if failure != nil, waitStatus == nil, !escalationScheduled {
+                if failure != nil, !escalationScheduled {
                     escalationScheduled = true
                     group.addTask {
                         await terminationGraceDeadline()
@@ -296,7 +293,10 @@ struct GitHistoryProcessRunner: Sendable {
         guard result == 0 else { throw launchFailure(result) }
         defer { posix_spawnattr_destroy(&attributes) }
 
-        result = posix_spawnattr_setflags(&attributes, Int16(POSIX_SPAWN_SETPGROUP))
+        result = posix_spawnattr_setflags(
+            &attributes,
+            Int16(POSIX_SPAWN_SETPGROUP | POSIX_SPAWN_CLOEXEC_DEFAULT)
+        )
         guard result == 0 else { throw GitHistoryRunnerFailure.processGroupFailed(errno: result) }
         result = posix_spawnattr_setpgroup(&attributes, 0)
         guard result == 0 else { throw GitHistoryRunnerFailure.processGroupFailed(errno: result) }
@@ -320,16 +320,40 @@ struct GitHistoryProcessRunner: Sendable {
             }
         }
 
+        let environmentStrings = [
+            "PATH=/usr/bin:/bin:/usr/sbin:/sbin",
+            "LC_ALL=en_US.UTF-8",
+        ]
+        var environment: [UnsafeMutablePointer<CChar>?] = []
+        environment.reserveCapacity(environmentStrings.count + 1)
+        for value in environmentStrings {
+            guard let pointer = strdup(value) else {
+                for pointer in environment {
+                    if let pointer { free(pointer) }
+                }
+                throw GitHistoryRunnerFailure.launchFailed("Unable to allocate process environment")
+            }
+            environment.append(pointer)
+        }
+        environment.append(nil)
+        defer {
+            for pointer in environment {
+                if let pointer { free(pointer) }
+            }
+        }
+
         var pid: pid_t = 0
-        result = arguments.withUnsafeMutableBufferPointer { buffer in
-            posix_spawn(
-                &pid,
-                request.executableURL.path,
-                &actions,
-                &attributes,
-                buffer.baseAddress!,
-                environ
-            )
+        result = arguments.withUnsafeMutableBufferPointer { argumentBuffer in
+            environment.withUnsafeMutableBufferPointer { environmentBuffer in
+                posix_spawn(
+                    &pid,
+                    request.executableURL.path,
+                    &actions,
+                    &attributes,
+                    argumentBuffer.baseAddress!,
+                    environmentBuffer.baseAddress!
+                )
+            }
         }
         guard result == 0 else { throw launchFailure(result) }
 
@@ -351,7 +375,6 @@ private final class ProcessGroupToken: @unchecked Sendable {
     private let lock = NSLock()
     private let pid: pid_t
     private var sentTermination = false
-    private var exited = false
 
     init(pid: pid_t) {
         self.pid = pid
@@ -359,7 +382,7 @@ private final class ProcessGroupToken: @unchecked Sendable {
 
     func terminate() {
         let shouldSignal = lock.withLock {
-            guard !exited, !sentTermination else { return false }
+            guard !sentTermination else { return false }
             sentTermination = true
             return true
         }
@@ -367,12 +390,7 @@ private final class ProcessGroupToken: @unchecked Sendable {
     }
 
     func killNow() {
-        let shouldSignal = lock.withLock { !exited }
-        if shouldSignal { _ = Darwin.kill(-pid, SIGKILL) }
-    }
-
-    func markExited() {
-        lock.withLock { exited = true }
+        _ = Darwin.kill(-pid, SIGKILL)
     }
 }
 

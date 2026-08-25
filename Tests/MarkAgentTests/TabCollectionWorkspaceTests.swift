@@ -2,6 +2,15 @@ import XCTest
 @testable import ma
 
 final class TabCollectionWorkspaceTests: XCTestCase {
+    func testInactiveWorkspaceRetainsOnlyTerminalContentMounts() {
+        XCTAssertTrue(TabContentMountPolicy.shouldMount(kind: .terminal, isActive: false))
+        XCTAssertFalse(TabContentMountPolicy.shouldMount(kind: .markdown, isActive: false))
+        XCTAssertFalse(TabContentMountPolicy.shouldMount(kind: .gitDiff, isActive: false))
+        XCTAssertFalse(TabContentMountPolicy.shouldMount(kind: .settings, isActive: false))
+        XCTAssertFalse(TabContentMountPolicy.shouldMount(kind: .about, isActive: false))
+        XCTAssertTrue(TabContentMountPolicy.shouldMount(kind: .settings, isActive: true))
+    }
+
     @MainActor
     func testProjectWorkspacesExposeDisjointVisibleTabsAndRetainAllTabs() {
         let tabs = TabCollection()
@@ -168,5 +177,7 @@ final class TabCollectionWorkspaceTests: XCTestCase {
         XCTAssertEqual(tabs.activeTabID, secondTerminal.id)
         XCTAssertEqual(tabs.tabs.map(\.id), [secondTerminal.id])
         XCTAssertTrue(tabs.tabs(in: .unscoped).contains { $0.id == firstTerminal.id })
+        XCTAssertTrue(tabs.selectWorkspace(.unscoped))
+        XCTAssertEqual(tabs.activeTabID, firstTerminal.id)
     }
 }

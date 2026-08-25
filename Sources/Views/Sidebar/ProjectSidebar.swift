@@ -1,6 +1,12 @@
 import AppKit
 import SwiftUI
 
+enum ProjectWorkspaceAccessibility {
+    static func traits(isSelected: Bool) -> AccessibilityTraits {
+        isSelected ? .isSelected : []
+    }
+}
+
 @MainActor
 struct ProjectSidebar: View {
     var projectStore: ProjectStore
@@ -131,6 +137,9 @@ struct ProjectSidebar: View {
         .padding(.vertical, 9)
         .background(selectionBackground(for: .unscoped))
         .accessibilityIdentifier("project-sidebar-row-unscoped")
+        .accessibilityAddTraits(
+            ProjectWorkspaceAccessibility.traits(isSelected: activeWorkspaceID == .unscoped)
+        )
     }
 
     private func projectRow(_ project: Project) -> some View {
@@ -162,6 +171,11 @@ struct ProjectSidebar: View {
             }
             .buttonStyle(.plain)
             .accessibilityIdentifier("project-sidebar-row-\(project.id.uuidString)")
+            .accessibilityAddTraits(
+                ProjectWorkspaceAccessibility.traits(
+                    isSelected: activeWorkspaceID == .project(project.id)
+                )
+            )
 
             Button {
                 controller.beginEdit(project)

@@ -50,7 +50,6 @@ final class TabGroupState {
 
     func showSnippetsSidebar() {
         _ = rightUtilityRoute.handle(.showSnippets)
-        gitDiffState.isShowingSidebar = true
     }
 
     func showFileBrowserSearch(_ mode: SidebarSearchMode, commandCenter: SidebarSearchCommandCenter) {

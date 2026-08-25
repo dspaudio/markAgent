@@ -270,7 +270,9 @@
 "프로젝트 편집" = "Edit Project";
 "프로젝트 삭제" = "Delete Project";
 "프로젝트를 삭제할까요?" = "Delete project?";
-"저장된 프로젝트 기록만 삭제되며 폴더는 삭제되지 않습니다." = "Only the saved project record will be removed. The folder will not be deleted.";
+"폴더는 삭제되지 않으며 열려 있는 탭은 미분류 workspace로 이동합니다." = "The folder will not be deleted. Open tabs will move to the Unscoped workspace.";
+"미분류" = "Unscoped";
+"확인" = "OK";
 "프로젝트 폴더 선택" = "Choose Project Folder";
 "선택" = "Choose";
 "이름" = "Name";

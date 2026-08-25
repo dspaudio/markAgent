@@ -36,7 +36,6 @@ final class TerminalSnippetSelectionSaverTests: XCTestCase {
         let pasteboard = NSPasteboard.withUniqueName()
         let store = PromptSnippetStore(defaults: defaults)
         let group = TabGroupState()
-        group.gitDiffState.isShowingSidebar = false
         group.rightUtilityRoute.selectedTab = .gitHistory
 
         let consumed = TerminalSnippetSelectionSaver.saveSelection(
@@ -54,7 +53,7 @@ final class TerminalSnippetSelectionSaverTests: XCTestCase {
 
         XCTAssertTrue(consumed)
         XCTAssertEqual(store.snippets.map(\.body), ["selected terminal text"])
-        XCTAssertTrue(group.gitDiffState.isShowingSidebar)
+        XCTAssertTrue(group.rightUtilityRoute.isVisible)
         XCTAssertEqual(group.rightUtilityRoute.selectedTab, .snippets)
     }
 

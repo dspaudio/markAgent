@@ -3284,3 +3284,15 @@ LOCAL/REMOTE 섹션 제목을 수평 압축 대상에서 제외해 Remote 개수
 다음 sibling이 없는 active tab에는 trailing stacking shadow를 그리지 않도록 수정해 회색 block artifact를 제거했다. config 파일이 없을 때 Settings만 `Dark Modern`을 표시하고 root theme는 nil이던 불일치를 `GhosttyConfig.resolvedAppTheme()`으로 통일해 실제 전체 앱도 dark appearance를 사용하도록 했다. 프로젝트 전환·탭 격리·right utility·Git history·터미널 focus·theme fallback을 자동화 테스트와 최신 bundle 사용자 확인으로 검증하고 앱 short/build version을 `1.8.0`으로 갱신한다.
 
 변경 파일: `Sources/Views/Main/TabBarView.swift`, `Sources/Core/Tabs/GhosttyConfig.swift`, `Sources/App/AppDelegate.swift`, `Tests/MarkAgentTests/GhosttyConfigTests.swift`, `README.md`, `history.md`
+
+---
+
+### 대화 4: PR 전 독립 review blocker 보강
+
+**사용자:**
+> 1.8.0으로 릴리즈 배포하고, dev PR 머지, main PR 머지 해줘.
+
+**응답:**
+PR 전 frozen-tree 5-way review에서 발견한 release blocker를 push 전에 수정했다. Git History는 `/usr/bin/git` 절대 경로와 최소 환경만 사용하고 `POSIX_SPAWN_CLOEXEC_DEFAULT`로 외부 file descriptor 상속을 차단한다. direct child가 먼저 종료해도 descendant가 pipe를 보유하면 process group에 TERM/KILL escalation을 계속 적용하며, SHA-1과 SHA-256 object ID를 모두 파싱하고 최대 4MiB decode 작업을 main actor 밖에서 수행한다. 비활성 프로젝트 삭제 후 미분류 workspace의 active tab을 복원하고, 비터미널 inactive view를 unmount해 Settings focus가 남지 않게 했다. 선택 workspace 접근성 trait, right utility 단일 source of truth, 누락 localization도 보강했으며 전체 테스트 234개 통과를 확인했다.
+
+변경 파일: `Sources/Core/Git/GitHistoryProcessRunner.swift`, `Sources/Core/Git/GitHistoryStore.swift`, `Sources/Core/GitDiffState.swift`, `Sources/Core/Tabs/TabCollection.swift`, `Sources/Core/Tabs/TabGroupState.swift`, `Sources/Views/Main/ActiveTabContentView.swift`, `Sources/Views/Sidebar/ProjectSidebar.swift`, `Sources/App/Resources/en.lproj/Localizable.strings`, `Sources/App/Resources/ko.lproj/Localizable.strings`, `Tests/MarkAgentTests/GitHistoryProcessRunnerTests.swift`, `Tests/MarkAgentTests/GitHistoryStoreTests.swift`, `Tests/MarkAgentTests/GitDiffStateTests.swift`, `Tests/MarkAgentTests/ProjectSidebarControllerTests.swift`, `Tests/MarkAgentTests/TabCollectionWorkspaceTests.swift`, `Tests/MarkAgentTests/TerminalSnippetSelectionSaverTests.swift`, `history.md`

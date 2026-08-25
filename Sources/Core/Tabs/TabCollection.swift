@@ -386,9 +386,10 @@ final class TabCollection {
         }
 
         destination.tabIDs.append(contentsOf: migratedIDs)
+        let migratedActiveID = activeReplacementID
+            ?? source.activeTabID.flatMap { migratedIDs.contains($0) ? $0 : nil }
         if activeWorkspaceID == workspaceID {
-            destination.activeTabID = activeReplacementID
-                ?? source.activeTabID.flatMap { migratedIDs.contains($0) ? $0 : nil }
+            destination.activeTabID = migratedActiveID
                 ?? destination.activeTabID
                 ?? migratedIDs.first
             destination.lastActiveGroupID = destination.activeTabID
@@ -396,6 +397,11 @@ final class TabCollection {
                 ?? source.lastActiveGroupID
                 ?? destination.lastActiveGroupID
             activeWorkspaceID = destinationID
+        } else if destination.activeTabID.flatMap({ destination.tabIDs.contains($0) }) == nil {
+            destination.activeTabID = migratedActiveID ?? migratedIDs.first
+            destination.lastActiveGroupID = destination.activeTabID
+                .flatMap { tab(withID: $0)?.groupID }
+                ?? destination.lastActiveGroupID
         }
 
         workspaces[destinationID] = destination

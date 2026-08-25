@@ -32,9 +32,9 @@ enum GitHistoryCommand {
 
     static func request(repositoryRoot: URL) -> GitHistoryProcessRequest {
         GitHistoryProcessRequest(
-            executableURL: URL(fileURLWithPath: "/usr/bin/env"),
+            executableURL: URL(fileURLWithPath: "/usr/bin/git"),
             arguments: [
-                "git", "-C", repositoryRoot.path,
+                "-C", repositoryRoot.path,
                 "log", "--all", "--max-count=100", "--date=iso-strict",
                 "--pretty=format:%H%x00%h%x00%an%x00%ae%x00%aI%x00%s%x00%b%x00",
             ],
@@ -47,16 +47,23 @@ enum GitHistoryCommand {
 @MainActor
 @Observable
 final class GitHistoryStore {
+    typealias Parser = @Sendable (Data) throws -> [GitCommit]
+
     private(set) var state: GitHistoryLoadState = .idle
     private(set) var commits: [GitCommit] = []
     private(set) var selectedCommitID: GitCommit.ID?
 
     private let commandRunner: GitHistoryCommandRunner
+    private let parser: Parser
     private var refreshGeneration = 0
     private var repositoryRoot: URL?
 
-    init(commandRunner: @escaping GitHistoryCommandRunner = GitHistoryProcessRunner.run) {
+    init(
+        commandRunner: @escaping GitHistoryCommandRunner = GitHistoryProcessRunner.run,
+        parser: @escaping Parser = GitHistoryStore.parse
+    ) {
         self.commandRunner = commandRunner
+        self.parser = parser
     }
 
     var selectedCommit: GitCommit? {
@@ -86,7 +93,11 @@ final class GitHistoryStore {
             let output = try await commandRunner(GitHistoryCommand.request(repositoryRoot: requestedRoot))
             guard canPublish(generation: generation, repositoryRoot: requestedRoot) else { return }
 
-            let parsedCommits = try Self.parse(output.stdout)
+            let parser = parser
+            let stdout = output.stdout
+            let parsedCommits = try await Task.detached(priority: .utility) {
+                try parser(stdout)
+            }.value
             guard canPublish(generation: generation, repositoryRoot: requestedRoot) else { return }
 
             let previousSelection = selectedCommitID
@@ -144,8 +155,13 @@ final class GitHistoryStore {
             if recordIndex > 0, hash.first == "\n" {
                 hash.removeFirst()
             }
-            guard hash.count == 40, hash.utf8.allSatisfy(Self.isHexDigit) else {
+            guard (hash.count == 40 || hash.count == 64),
+                  hash.utf8.allSatisfy(Self.isHexDigit) else {
                 throw GitHistoryFailure.invalidHash(hash)
+            }
+            let shortHash = fields[offset + 1]
+            guard !shortHash.isEmpty, shortHash.utf8.allSatisfy(Self.isHexDigit) else {
+                throw GitHistoryFailure.invalidHash(shortHash)
             }
 
             let dateText = fields[offset + 4]
@@ -154,7 +170,7 @@ final class GitHistoryStore {
             }
             commits.append(GitCommit(
                 id: hash,
-                shortHash: fields[offset + 1],
+                shortHash: shortHash,
                 authorName: fields[offset + 2],
                 authorEmail: fields[offset + 3],
                 authoredAt: authoredAt,

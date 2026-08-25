@@ -32,6 +32,51 @@ final class GitHistoryProcessRunnerTests: XCTestCase {
     }
 
     @MainActor
+    func testChildEnvironmentExcludesParentHomeAndGitOverrides() async throws {
+        let request = GitHistoryProcessRequest(
+            executableURL: URL(fileURLWithPath: "/usr/bin/env"),
+            arguments: [],
+            timeoutSeconds: 5,
+            outputByteLimit: 4_194_304
+        )
+        let output = try await awaitRunnerResult(
+            request,
+            named: "sanitized child environment"
+        ).get()
+        let environment = try XCTUnwrap(String(data: output.stdout, encoding: .utf8))
+            .split(whereSeparator: \.isNewline)
+            .map(String.init)
+
+        let keys = Set(environment.compactMap { line in
+            line.split(separator: "=", maxSplits: 1).first.map(String.init)
+        })
+        XCTAssertEqual(keys, ["PATH", "LC_ALL"])
+        XCTAssertEqual(
+            environment.first { $0.hasPrefix("PATH=") },
+            "PATH=/usr/bin:/bin:/usr/sbin:/sbin"
+        )
+        XCTAssertEqual(
+            environment.first { $0.hasPrefix("LC_ALL=") },
+            "LC_ALL=en_US.UTF-8"
+        )
+    }
+
+    @MainActor
+    func testSpawnClosesUnrelatedParentDescriptors() async throws {
+        let descriptor = open("/dev/null", O_RDONLY)
+        XCTAssertGreaterThanOrEqual(descriptor, 0)
+        defer { close(descriptor) }
+        let output = try await awaitRunnerResult(
+            Self.request(
+                script: "if [ -e /dev/fd/\(descriptor) ]; then printf inherited; else printf closed; fi"
+            ),
+            named: "parent descriptor isolation"
+        ).get()
+
+        XCTAssertEqual(output.stdout, Data("closed".utf8))
+    }
+
+    @MainActor
     func testNonzeroExitPreservesStructuredStderr() async {
         let result = await awaitRunnerResult(
             Self.request(script: "printf 'ordinary output'; printf 'structured diagnostic' >&2; exit 23"),
@@ -102,6 +147,47 @@ final class GitHistoryProcessRunnerTests: XCTestCase {
         XCTAssertTrue(processDoesNotExist(try readPID(from: fixture.pidFile)))
     }
 
+    @MainActor
+    func testTimeoutTerminatesDescendantAfterProcessGroupLeaderExits() async throws {
+        let fixture = try makeFixture()
+        defer { try? FileManager.default.removeItem(at: fixture.directory) }
+        let leaderExitedFile = fixture.directory.appendingPathComponent("leader-exited")
+        let releaseFile = fixture.directory.appendingPathComponent("release-descendant")
+        FileManager.default.createFile(atPath: leaderExitedFile.path, contents: Data())
+        let leaderExitObserved = try observeWrite(
+            to: leaderExitedFile,
+            expectation: expectation(description: "descendant observed the reaped group leader")
+        )
+        defer { leaderExitObserved.cancel() }
+        let deadline = ControlledDeadline()
+        let deadlineWait: @Sendable () async -> Void = { await deadline.wait() }
+        let completion = expectation(description: "timed-out runner completed after leader exit")
+        let cleanupCompletion = expectation(description: "runner cleanup completed after fixture release")
+        let result = RunnerResultBox()
+        let processRequest = Self.request(
+            script: Self.descendantHoldingPipesAfterLeaderExit(
+                pidFile: fixture.pidFile.path,
+                leaderExitedFile: leaderExitedFile.path,
+                releaseFile: releaseFile.path
+            )
+        )
+
+        Task { @MainActor in
+            result.store(await Self.runnerResult(processRequest, deadline: deadlineWait))
+            completion.fulfill()
+            cleanupCompletion.fulfill()
+        }
+
+        await fulfillment(of: [leaderExitObserved.expectation], timeout: 1)
+        await deadline.fire()
+        await fulfillment(of: [completion], timeout: 1)
+        FileManager.default.createFile(atPath: releaseFile.path, contents: Data())
+        await fulfillment(of: [cleanupCompletion], timeout: 1)
+
+        XCTAssertEqual(result.value, .failure(.timedOut(seconds: 5)))
+        XCTAssertTrue(processDoesNotExist(try readPID(from: fixture.pidFile)))
+    }
+
     private static func request(script: String) -> GitHistoryProcessRequest {
         .init(
             executableURL: URL(fileURLWithPath: "/bin/sh"),
@@ -164,6 +250,25 @@ final class GitHistoryProcessRunnerTests: XCTestCase {
         child=$!
         printf '%d' "$child" > '\(pidFile)'
         wait "$child"
+        """
+    }
+
+    private static func descendantHoldingPipesAfterLeaderExit(
+        pidFile: String,
+        leaderExitedFile: String,
+        releaseFile: String
+    ) -> String {
+        """
+        parent=$$
+        /bin/sh -c '
+            trap "" TERM HUP
+            while kill -0 "$1" 2>/dev/null; do :; done
+            printf observed > "$2"
+            while [ ! -e "$3" ]; do :; done
+        ' descendant "$parent" '\(leaderExitedFile)' '\(releaseFile)' &
+        child=$!
+        printf '%d' "$child" > '\(pidFile)'
+        exit 0
         """
     }
 

@@ -1,8 +1,43 @@
 import Foundation
+import SwiftUI
 import XCTest
 @testable import ma
 
 final class ProjectSidebarControllerTests: XCTestCase {
+    func testWorkspaceLocalizationKeysExistInKoreanAndEnglish() throws {
+        let keys = [
+            "미분류",
+            "확인",
+            "폴더는 삭제되지 않으며 열려 있는 탭은 미분류 workspace로 이동합니다.",
+        ]
+        let root = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let korean = try String(
+            contentsOf: root.appending(path: "Sources/App/Resources/ko.lproj/Localizable.strings"),
+            encoding: .utf8
+        )
+        let english = try String(
+            contentsOf: root.appending(path: "Sources/App/Resources/en.lproj/Localizable.strings"),
+            encoding: .utf8
+        )
+
+        for key in keys {
+            XCTAssertTrue(korean.contains("\"\(key)\" ="), "Missing Korean key \(key)")
+            XCTAssertTrue(english.contains("\"\(key)\" ="), "Missing English key \(key)")
+        }
+    }
+
+    func testWorkspaceSelectionAccessibilityExposesSelectedTrait() {
+        XCTAssertTrue(
+            ProjectWorkspaceAccessibility.traits(isSelected: true).contains(.isSelected)
+        )
+        XCTAssertFalse(
+            ProjectWorkspaceAccessibility.traits(isSelected: false).contains(.isSelected)
+        )
+    }
+
     @MainActor
     func testSelectDeliversCallbackExactlyOnceWithoutMutatingStore() throws {
         try withIsolatedStore { store, root, defaults in

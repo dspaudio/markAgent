@@ -1,5 +1,11 @@
 import SwiftUI
 
+enum TabContentMountPolicy {
+    static func shouldMount(kind: TabKind, isActive: Bool) -> Bool {
+        isActive || kind == .terminal
+    }
+}
+
 struct ActiveTabContentView: View {
     var tabs: TabCollection
     var onOpenFile: () -> Void
@@ -17,10 +23,12 @@ struct ActiveTabContentView: View {
         ZStack {
             ForEach(tabs.allTabs, id: \.id) { tab in
                 let isActive = tabs.isActiveTab(id: tab.id)
-                tabContent(for: tab, isActive: isActive)
-                    .opacity(isActive ? 1 : 0)
-                    .allowsHitTesting(isActive)
-                    .accessibilityHidden(!isActive)
+                if TabContentMountPolicy.shouldMount(kind: tab.kind, isActive: isActive) {
+                    tabContent(for: tab, isActive: isActive)
+                        .opacity(isActive ? 1 : 0)
+                        .allowsHitTesting(isActive)
+                        .accessibilityHidden(!isActive)
+                }
             }
 
             if tabs.tabs.isEmpty {
