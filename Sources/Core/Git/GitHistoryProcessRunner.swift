@@ -213,7 +213,6 @@ struct GitHistoryProcessRunner: Sendable {
 
                 case .escalate:
                     processGroup.killNow()
-                    process.output.closeAll()
                 }
 
                 let requiresEscalation = failure != nil
