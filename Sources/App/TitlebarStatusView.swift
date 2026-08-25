@@ -43,13 +43,13 @@ struct TitlebarGitBranchView: View {
                         Text(branchName)
                             .font(.system(size: 12, weight: .semibold, design: .monospaced))
                             .lineLimit(1)
-                            .fixedSize(horizontal: true, vertical: false)
+                            .truncationMode(.middle)
                     }
+                    .frame(maxWidth: .infinity, alignment: .trailing)
                 }
                 .buttonStyle(.plain)
                 .foregroundStyle(.blue)
-                .padding(.trailing, 16)
-                .frame(maxWidth: 640, alignment: .trailing)
+                .frame(maxWidth: .infinity, alignment: .trailing)
                 .help(status.repositoryRoot?.path ?? branchName)
                 .popover(isPresented: $isShowingBranches, arrowEdge: .top) {
                     GitBranchPopoverView(status: status)
@@ -76,8 +76,7 @@ struct TitlebarGitBranchView: View {
                 .buttonStyle(.plain)
                 .foregroundStyle(.secondary)
                 .disabled(status.isInitializingRepository)
-                .padding(.trailing, 16)
-                .frame(maxWidth: 240, alignment: .trailing)
+                .frame(maxWidth: .infinity, alignment: .trailing)
                 .help(status.checkoutErrorMessage ?? String(format: String(localized: "%@에서 git init"), status.currentDirectory.path))
             }
         }

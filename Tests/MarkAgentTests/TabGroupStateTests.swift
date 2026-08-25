@@ -3,12 +3,13 @@ import XCTest
 
 final class TabGroupStateTests: XCTestCase {
     @MainActor
-    func testGroupsOwnIndependentGitAndTimelineState() {
+    func testGroupsOwnIndependentGitTimelineAndHistoryState() {
         let first = TabGroupState(workingDirectory: URL(fileURLWithPath: "/tmp/one"))
         let second = TabGroupState(workingDirectory: URL(fileURLWithPath: "/tmp/two"))
 
         XCTAssertTrue(first.gitDiffState !== second.gitDiffState)
         XCTAssertTrue(first.timelineStore !== second.timelineStore)
+        XCTAssertTrue(first.gitHistoryStore !== second.gitHistoryStore)
         XCTAssertNotEqual(first.id, second.id)
     }
 
@@ -35,15 +36,15 @@ final class TabGroupStateTests: XCTestCase {
     }
 
     @MainActor
-    func testShowSnippetsSidebarSelectsSnippetsAndShowsSidebar() {
+    func testShowSnippetsSidebarSelectsSnippetsAndRevealsRightUtility() {
         let group = TabGroupState()
-        group.gitDiffState.isShowingSidebar = false
-        group.rightSidebarTab = .gitChanges
+        group.rightUtilityRoute.isVisible = false
+        group.rightUtilityRoute.selectedTab = .gitHistory
 
         group.showSnippetsSidebar()
 
-        XCTAssertTrue(group.gitDiffState.isShowingSidebar)
-        XCTAssertEqual(group.rightSidebarTab, .snippets)
+        XCTAssertTrue(group.rightUtilityRoute.isVisible)
+        XCTAssertEqual(group.rightUtilityRoute.selectedTab, .snippets)
     }
 
     @MainActor
@@ -52,8 +53,8 @@ final class TabGroupStateTests: XCTestCase {
 
         group.showSnippetsSidebar()
 
-        XCTAssertTrue(group.gitDiffState.isShowingSidebar)
+        XCTAssertTrue(group.rightUtilityRoute.isVisible)
         XCTAssertNil(group.gitDiffState.repositoryRoot)
-        XCTAssertEqual(group.rightSidebarTab, .snippets)
+        XCTAssertEqual(group.rightUtilityRoute.selectedTab, .snippets)
     }
 }

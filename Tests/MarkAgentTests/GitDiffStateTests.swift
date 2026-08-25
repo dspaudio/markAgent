@@ -108,16 +108,13 @@ final class GitDiffStateTests: XCTestCase {
     }
 
     @MainActor
-    func testToggleSidebarOutsideRepositoryShowsSidebarImmediately() {
-        let nonRepository = FileManager.default.temporaryDirectory
-            .appendingPathComponent("GitDiffStateTests-NonRepo-\(UUID().uuidString)")
-        try? FileManager.default.createDirectory(at: nonRepository, withIntermediateDirectories: true)
-        defer { try? FileManager.default.removeItem(at: nonRepository) }
+    func testShowSnippetsOutsideRepositoryUsesRightUtilityRoute() {
+        let group = TabGroupState()
 
-        let state = GitDiffState()
-        state.toggleSidebar(for: nonRepository)
+        group.showSnippetsSidebar()
 
-        XCTAssertTrue(state.isShowingSidebar)
+        XCTAssertTrue(group.rightUtilityRoute.isVisible)
+        XCTAssertEqual(group.rightUtilityRoute.selectedTab, .snippets)
     }
 
     private func makeRepository() throws -> URL {

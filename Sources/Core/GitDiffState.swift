@@ -62,7 +62,6 @@ final class GitDiffState {
     private(set) var isRefreshing = false
     private(set) var isLoadingSelectedDiff = false
     private(set) var isLoadingDiffs = false
-    var isShowingSidebar = false
     var focusedFileID: String?
     private(set) var focusRequestID = 0
     private var refreshTask: Task<Void, Never>?
@@ -186,11 +185,6 @@ final class GitDiffState {
             self.isLoadingDiffs = false
             self.errorMessage = nil
         }
-    }
-
-    func toggleSidebar(for directory: URL) {
-        isShowingSidebar.toggle()
-        refresh(for: directory)
     }
 
     func select(_ file: GitChangedFile) {

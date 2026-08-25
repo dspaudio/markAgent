@@ -4,11 +4,10 @@ import SwiftUI
 struct TabBarView: View {
     var tabs: TabCollection
     var onNewTab: () -> Void
-    var isLeftSidebarVisible = true
+    var showsLeftSidebarToggle = false
     var onToggleLeftSidebar: () -> Void = {}
-    var isDiffEnabled = false
-    var isDiffVisible = false
-    var onToggleDiff: () -> Void = {}
+    var showsRightSidebarToggle = false
+    var onToggleRightSidebar: () -> Void = {}
 
     @State private var draggedTabID: UUID?
     @State private var isCommandKeyPressed = false
@@ -17,63 +16,22 @@ struct TabBarView: View {
     
     var body: some View {
         HStack(spacing: 0) {
-            Button(action: onToggleLeftSidebar) {
-                Image(systemName: "sidebar.left")
-                    .font(.system(size: 14, weight: .medium))
-                    .frame(width: 32, height: 28)
+            if showsLeftSidebarToggle {
+                Button(action: onToggleLeftSidebar) {
+                    Image(systemName: "sidebar.left")
+                        .font(.system(size: 14, weight: .medium))
+                        .frame(width: 32, height: 28)
+                }
+                .buttonStyle(.plain)
+                .help(String(localized: "왼쪽 사이드바 표시"))
+                .accessibilityIdentifier("sidebar.left")
+                .padding(.leading, 8)
             }
-            .buttonStyle(.plain)
-            .foregroundStyle(isLeftSidebarVisible ? (appColors?.accent ?? Color.accentColor) : (appColors?.foreground ?? Color.primary))
-            .help(isLeftSidebarVisible ? String(localized: "왼쪽 사이드바 숨기기") : String(localized: "왼쪽 사이드바 표시"))
-            .padding(.leading, 8)
 
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 0) {
                     ForEach(Array(tabs.tabs.enumerated()), id: \.element.id) { index, tab in
-                        let isActiveTab = tabs.activeTabID == tab.id
-                        let groupDepth = depthInGroup(at: index)
-                        let isParentActive = isFirstTab(in: tab.groupID, at: index) && isActiveTab
-                        let isGroupParentActive = hasActiveParentTab(in: tab.groupID)
-                        let isTuckedBehindParent = !isActiveTab && !isGroupParentActive && groupDepth > 0
-                        let castsTrailingShadow = isParentActive || (!isGroupParentActive && hasNextSiblingTab(in: tab.groupID, after: index))
-
-                        TabItemView(
-                            tab: tab,
-                            isActive: isActiveTab,
-                            groupShortcutNumber: tabs.groupShortcutNumber(for: tab.groupID),
-                            showsGroupShortcut: isCommandKeyPressed,
-                            showsGroupUnderline: hasSiblingTab(in: tab.groupID, excluding: tab.id),
-                            isTuckedBehindParent: isTuckedBehindParent,
-                            castsTrailingShadow: castsTrailingShadow,
-                            onSelect: {
-                                tabs.selectTab(id: tab.id)
-                            },
-                            onClose: {
-                                Task {
-                                    await tabs.closeTab(id: tab.id)
-                                }
-                            }
-                        )
-                        .onDrag {
-                            draggedTabID = tab.id
-                            return NSItemProvider(object: tab.id.uuidString as NSString)
-                        }
-                        .onDrop(
-                            of: [.text],
-                            delegate: TabReorderDropDelegate(
-                                targetTabID: tab.id,
-                                draggedTabID: $draggedTabID,
-                                tabs: tabs
-                            )
-                        )
-                        .padding(.leading, isTuckedBehindParent ? -28 : 0)
-                        .zIndex(isTuckedBehindParent ? -Double(groupDepth) : 1)
-                        .animation(.spring(response: 0.28, dampingFraction: 0.86), value: isTuckedBehindParent)
-
-                        if !hasNextSiblingTab(in: tab.groupID, after: index) {
-                            Divider()
-                                .frame(height: 16)
-                        }
+                        tabEntry(tab, at: index)
                     }
 
                     Button(action: onNewTab) {
@@ -90,20 +48,19 @@ struct TabBarView: View {
 
             Spacer()
 
-            Button(action: onToggleDiff) {
-                Image(systemName: "sidebar.right")
-                    .font(.system(size: 14, weight: .medium))
-                    .frame(width: 32, height: 28)
+            if showsRightSidebarToggle {
+                Button(action: onToggleRightSidebar) {
+                    Image(systemName: "sidebar.right")
+                        .font(.system(size: 14, weight: .medium))
+                        .frame(width: 32, height: 28)
+                }
+                .buttonStyle(.plain)
+                .help(String(localized: "오른쪽 사이드바 표시"))
+                .accessibilityIdentifier("sidebar.right")
+                .padding(.trailing, 8)
             }
-            .buttonStyle(.plain)
-            .foregroundStyle(
-                isDiffVisible
-                ? (appColors?.accent ?? Color.accentColor)
-                : (appColors?.foreground ?? Color.primary)
-            )
-            .help(isDiffVisible ? String(localized: "오른쪽 사이드바 숨기기") : String(localized: "오른쪽 사이드바 표시"))
-            .padding(.trailing, 8)
         }
+        .frame(height: ShellChromeMetrics.headerHeight)
         .background(appColors?.background ?? Color(nsColor: .windowBackgroundColor))
         .overlay(
             Divider().overlay(appColors?.border ?? Color.clear),
@@ -115,6 +72,59 @@ struct TabBarView: View {
 
     private var appColors: TerminalAppColors? {
         terminalAppTheme?.colors(for: colorScheme)
+    }
+
+    @ViewBuilder
+    private func tabEntry(_ tab: any MarkAgentTab, at index: Int) -> some View {
+        let tabID = tab.id
+        let groupID = tab.groupID
+        let isActiveTab = tabs.isActiveTab(id: tabID)
+        let groupDepth = depthInGroup(at: index)
+        let isParentActive = isFirstTab(in: groupID, at: index) && isActiveTab
+        let isGroupParentActive = hasActiveParentTab(in: groupID)
+        let isTuckedBehindParent = !isActiveTab && !isGroupParentActive && groupDepth > 0
+        let hasNextSibling = hasNextSiblingTab(in: groupID, after: index)
+        let castsTrailingShadow = hasNextSibling
+            && (isParentActive || !isGroupParentActive)
+        let dragValue = tabID.uuidString as NSString
+
+        TabItemView(
+            tab: tab,
+            isActive: isActiveTab,
+            groupShortcutNumber: tabs.groupShortcutNumber(for: groupID),
+            showsGroupShortcut: isCommandKeyPressed,
+            showsGroupUnderline: hasSiblingTab(in: groupID, excluding: tabID),
+            isTuckedBehindParent: isTuckedBehindParent,
+            castsTrailingShadow: castsTrailingShadow,
+            onSelect: {
+                tabs.selectTab(id: tabID)
+            },
+            onClose: {
+                Task {
+                    await tabs.closeTab(id: tabID)
+                }
+            }
+        )
+        .onDrag {
+            draggedTabID = tabID
+            return NSItemProvider(object: dragValue)
+        }
+        .onDrop(
+            of: [.text],
+            delegate: TabReorderDropDelegate(
+                targetTabID: tabID,
+                draggedTabID: $draggedTabID,
+                tabs: tabs
+            )
+        )
+        .padding(.leading, isTuckedBehindParent ? -28 : 0)
+        .zIndex(isTuckedBehindParent ? -Double(groupDepth) : 1)
+        .animation(.spring(response: 0.28, dampingFraction: 0.86), value: isTuckedBehindParent)
+
+        if !hasNextSiblingTab(in: groupID, after: index) {
+            Divider()
+                .frame(height: 16)
+        }
     }
 
     private var groupShortcutButtons: some View {
