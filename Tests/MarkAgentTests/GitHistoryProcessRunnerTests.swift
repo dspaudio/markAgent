@@ -242,7 +242,12 @@ final class GitHistoryProcessRunnerTests: XCTestCase {
 
         XCTAssertEqual(
             result.value,
-            .failure(.nonZeroExit(exitCode: 7, stderr: Data("leader failed\n".utf8)))
+            .failure(
+                .nonZeroExit(
+                    exitCode: 7,
+                    stderr: Data(repeating: 0x65, count: 1_048_576)
+                )
+            )
         )
         XCTAssertTrue(processDoesNotExist(try readPID(from: fixture.pidFile)))
     }
@@ -353,7 +358,7 @@ final class GitHistoryProcessRunnerTests: XCTestCase {
             open(my $ready_fh, ">", $ready_file) or die $!;
             print $ready_fh "ready";
             close($ready_fh);
-            print STDERR "leader failed\\n";
+            print STDERR "e" x 1048576;
             POSIX::_exit(7);
         ' '\(pidFile)' '\(leaderReadyFile)' '\(releaseFile)'
         """

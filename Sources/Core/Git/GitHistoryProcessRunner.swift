@@ -116,7 +116,7 @@ struct GitHistoryProcessRunner: Sendable {
         return try await withThrowingTaskGroup(of: Event.self) { group in
             group.addTask { read(process.output.stdout, output: process.output, stream: .stdout, budget: budget, enforceLimit: true) }
             group.addTask { read(process.output.stderr, output: process.output, stream: .stderr, budget: budget, enforceLimit: true) }
-            group.addTask { waitForExit(process.pid, output: process.output) }
+            group.addTask { waitForExit(process.pid) }
             group.addTask {
                 await deadline()
                 return Task.isCancelled ? .cancelled : .deadline
@@ -197,7 +197,6 @@ struct GitHistoryProcessRunner: Sendable {
                     if decodedExitCode(status) != 0 {
                         processGroup.terminate()
                         processGroup.killNow()
-                        process.output.closeAll()
                     }
 
                 case .deadline:
@@ -218,7 +217,6 @@ struct GitHistoryProcessRunner: Sendable {
                 }
 
                 let requiresEscalation = failure != nil
-                    || waitStatus.map { decodedExitCode($0) != 0 } == true
                 if requiresEscalation, !escalationScheduled {
                     escalationScheduled = true
                     group.addTask {
@@ -284,10 +282,7 @@ struct GitHistoryProcessRunner: Sendable {
         }
     }
 
-    private static nonisolated func waitForExit(
-        _ pid: pid_t,
-        output: OutputDescriptorToken
-    ) -> Event {
+    private static nonisolated func waitForExit(_ pid: pid_t) -> Event {
         var status: Int32 = 0
         while true {
             let result = waitpid(pid, &status, 0)
@@ -295,7 +290,6 @@ struct GitHistoryProcessRunner: Sendable {
                 if decodedExitCode(status) != 0 {
                     _ = Darwin.kill(-pid, SIGTERM)
                     _ = Darwin.kill(-pid, SIGKILL)
-                    output.closeAll()
                 }
                 return .exited(status)
             }
