@@ -3,6 +3,7 @@ import GhosttyTheme
 import SwiftUI
 
 struct PreferencesView: View {
+    var subscriptionStatus: SubscriptionStatusModel
     @State private var preferences: GhosttyPreferences
     @State private var selectedThemeFilter: ThemeFilter
     @State private var saveErrorMessage: String?
@@ -19,7 +20,11 @@ struct PreferencesView: View {
     private let codingFonts = FontCatalog.codingFonts()
     private let fallbackFonts = FontCatalog.allFonts()
 
-    init(onSaved: @escaping () -> Void) {
+    init(
+        subscriptionStatus: SubscriptionStatusModel,
+        onSaved: @escaping () -> Void
+    ) {
+        self.subscriptionStatus = subscriptionStatus
         self.onSaved = onSaved
         let initialPreferences = GhosttyConfig.preferences()
         let initialTheme = GhosttyThemeCatalog.theme(named: initialPreferences.themeName)
@@ -97,6 +102,10 @@ struct PreferencesView: View {
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
+            }
+
+            Section("AI Subscriptions") {
+                AISubscriptionsSettingsRows(subscriptionStatus: subscriptionStatus)
             }
 
             Section("Terminal") {
@@ -345,6 +354,128 @@ struct PreferencesView: View {
 
     private func fontSizeLabel(_ size: Double) -> String {
         size.rounded() == size ? "\(Int(size))" : String(format: "%.1f", size)
+    }
+}
+
+@MainActor
+struct AISubscriptionsSettingsRows: View {
+    var subscriptionStatus: SubscriptionStatusModel
+    @State private var cliVersions: [SubscriptionProvider: String] = [:]
+
+    init(
+        subscriptionStatus: SubscriptionStatusModel,
+        cliVersions: [SubscriptionProvider: String] = [:]
+    ) {
+        self.subscriptionStatus = subscriptionStatus
+        _cliVersions = State(initialValue: cliVersions)
+    }
+
+    var body: some View {
+        ForEach(SubscriptionProvider.allCases) { provider in
+            providerRegistrationRow(provider)
+        }
+        .task {
+            await loadCLIVersions()
+        }
+    }
+
+    private func providerRegistrationRow(
+        _ provider: SubscriptionProvider
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                ProviderBrandIcon(provider: provider, size: 16)
+                Text(provider.displayName)
+                    .font(.system(size: 13, weight: .semibold))
+                Spacer()
+                Toggle(
+                    "Enable \(provider.displayName)",
+                    isOn: Binding(
+                        get: { subscriptionStatus.enabledProviders.contains(provider) },
+                        set: { isEnabled in
+                            subscriptionStatus.setEnabled(isEnabled, for: provider)
+                            if isEnabled {
+                                Task { await subscriptionStatus.refresh(provider) }
+                            }
+                        }
+                    )
+                )
+                .labelsHidden()
+                .accessibilityIdentifier("settings-subscription-\(provider.rawValue)")
+            }
+
+            HStack(spacing: 8) {
+                if let executableURL = ProviderExecutableLocator.executableURL(for: provider) {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundStyle(.green)
+                    Text(executableURL.path)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                    if let version = cliVersions[provider] {
+                        Text("· \(version)")
+                            .lineLimit(1)
+                    }
+                } else {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundStyle(.orange)
+                    Text("CLI를 찾을 수 없습니다.")
+                }
+            }
+            .font(.system(size: 10, design: .monospaced))
+            .foregroundStyle(.secondary)
+
+            HStack {
+                Text(providerStateText(subscriptionStatus.state(for: provider)))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Button {
+                    Task { await subscriptionStatus.refresh(provider) }
+                } label: {
+                    Label("Refresh", systemImage: "arrow.clockwise")
+                }
+                .buttonStyle(.borderless)
+                .disabled(!subscriptionStatus.enabledProviders.contains(provider))
+                .accessibilityIdentifier("settings-subscription-refresh-\(provider.rawValue)")
+            }
+        }
+        .padding(.vertical, 4)
+    }
+
+    private func providerStateText(_ state: SubscriptionProviderState) -> String {
+        switch state {
+        case .disabled:
+            return String(localized: "미등록")
+        case .loading:
+            return String(localized: "인증 및 사용량 확인 중…")
+        case .available(let usage):
+            return String(
+                format: String(localized: "연결됨 · %.0f%% 사용 · reset %@"),
+                usage.primary.usedPercent,
+                usage.primary.resetsAt.formatted(.relative(presentation: .named))
+            )
+        case .unavailable(let message):
+            return String(localized: "연결 확인 필요 · \(message)")
+        }
+    }
+
+    private func loadCLIVersions() async {
+        await withTaskGroup(of: (SubscriptionProvider, String?).self) { group in
+            for provider in SubscriptionProvider.allCases {
+                guard let executableURL = ProviderExecutableLocator.executableURL(for: provider) else {
+                    continue
+                }
+                group.addTask {
+                    (
+                        provider,
+                        await ProviderExecutableLocator.version(executableURL: executableURL)
+                    )
+                }
+            }
+            for await (provider, version) in group {
+                cliVersions[provider] = version
+            }
+        }
     }
 }
 
