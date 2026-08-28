@@ -54,14 +54,14 @@ final class SubscriptionStatusModelTests: XCTestCase {
         let primary = Self.window(name: "Five hour", percent: 37.5)
         let secondary = Self.window(name: "Seven day", percent: 81, resetOffset: 7_200)
         await loader.complete(call: 0, with: .success(SubscriptionUsage(primary: primary, secondary: secondary)))
-        await refresh.value
+        _ = await refresh.value
 
         XCTAssertEqual(model.state(for: .claude), .available(SubscriptionUsage(primary: primary, secondary: secondary)))
         XCTAssertEqual(SubscriptionUsage(primary: primary).windows, [primary])
         XCTAssertEqual(SubscriptionUsage(primary: primary, secondary: secondary).windows, [primary, secondary])
     }
 
-    func testNewerRefreshCompletionCannotBeOverwrittenByStaleCompletion() async throws {
+    func testSequentialRefreshPublishesNewestCompletion() async throws {
         let (defaults, suiteName) = try makeDefaults()
         defer { defaults.removePersistentDomain(forName: suiteName) }
         let firstStarted = expectation(description: "first loader started")
@@ -70,18 +70,77 @@ final class SubscriptionStatusModelTests: XCTestCase {
         let model = SubscriptionStatusModel(defaults: defaults, loaders: [.codex: { try await loader.load() }])
         model.setEnabled(true, for: .codex)
 
-        let stale = Task { @MainActor in await model.refresh(.codex) }
+        let firstRefresh = Task { @MainActor in await model.refresh(.codex) }
         await fulfillment(of: [firstStarted], timeout: 1)
-        let current = Task { @MainActor in await model.refresh(.codex) }
-        await fulfillment(of: [secondStarted], timeout: 1)
+        await loader.complete(
+            call: 0,
+            with: .success(SubscriptionUsage(primary: Self.window(percent: 99)))
+        )
+        _ = await firstRefresh.value
 
+        let secondRefresh = Task { @MainActor in await model.refresh(.codex) }
+        await fulfillment(of: [secondStarted], timeout: 1)
         let currentUsage = SubscriptionUsage(primary: Self.window(percent: 22))
         await loader.complete(call: 1, with: .success(currentUsage))
-        await current.value
-        await loader.complete(call: 0, with: .success(SubscriptionUsage(primary: Self.window(percent: 99))))
-        await stale.value
+        _ = await secondRefresh.value
 
         XCTAssertEqual(model.state(for: .codex), .available(currentUsage))
+    }
+
+    func testConcurrentRefreshDoesNotStartSecondProviderLoad() async throws {
+        let (defaults, suiteName) = try makeDefaults()
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let firstLoaderStarted = expectation(description: "first loader started")
+        let loader = ControlledUsageLoader(started: [firstLoaderStarted])
+        let model = SubscriptionStatusModel(
+            defaults: defaults,
+            loaders: [.claude: { try await loader.load() }]
+        )
+        model.setEnabled(true, for: .claude)
+
+        let firstRefresh = Task { @MainActor in
+            await model.refresh(.claude)
+        }
+        await fulfillment(of: [firstLoaderStarted], timeout: 1)
+
+        let didStartSecondRefresh = await model.refresh(.claude)
+
+        let callCount = await loader.currentCallCount()
+        XCTAssertFalse(didStartSecondRefresh)
+        XCTAssertEqual(
+            callCount,
+            1,
+            "Concurrent refreshes must not retain multiple provider loaders."
+        )
+
+        let usage = SubscriptionUsage(primary: Self.window(percent: 42))
+        await loader.completeAll(with: .success(usage))
+        _ = await firstRefresh.value
+
+        XCTAssertEqual(model.state(for: .claude), .available(usage))
+    }
+
+    func testRedundantEnableDoesNotInvalidateInFlightRefresh() async throws {
+        let (defaults, suiteName) = try makeDefaults()
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let loaderStarted = expectation(description: "loader started")
+        let loader = ControlledUsageLoader(started: [loaderStarted])
+        let model = SubscriptionStatusModel(
+            defaults: defaults,
+            loaders: [.claude: { try await loader.load() }]
+        )
+        model.setEnabled(true, for: .claude)
+        let refresh = Task { @MainActor in
+            await model.refresh(.claude)
+        }
+        await fulfillment(of: [loaderStarted], timeout: 1)
+
+        model.setEnabled(true, for: .claude)
+
+        let usage = SubscriptionUsage(primary: Self.window(percent: 27))
+        await loader.completeAll(with: .success(usage))
+        _ = await refresh.value
+        XCTAssertEqual(model.state(for: .claude), .available(usage))
     }
 
     func testDisablingDuringRefreshPreventsLateCompletionFromPublishing() async throws {
@@ -96,7 +155,7 @@ final class SubscriptionStatusModelTests: XCTestCase {
         await fulfillment(of: [started], timeout: 1)
         model.setEnabled(false, for: .claude)
         await loader.complete(call: 0, with: .success(SubscriptionUsage(primary: Self.window(percent: 75))))
-        await refresh.value
+        _ = await refresh.value
 
         XCTAssertEqual(model.state(for: .claude), .disabled)
     }
@@ -266,6 +325,39 @@ final class SubscriptionStatusModelTests: XCTestCase {
         await gate.tick()
     }
 
+    func testPollingUsesCadenceDelayWhenExpiredRetryHasInFlightRefresh() async throws {
+        let (defaults, suiteName) = try makeDefaults()
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let clock = TestNow(Date(timeIntervalSince1970: 1_700_000_000))
+        let gate = PollGate()
+        let secondLoadStarted = expectation(description: "manual retry loader started")
+        let loader = RetryOverlapUsageLoader(secondLoadStarted: secondLoadStarted)
+        let model = SubscriptionStatusModel(
+            defaults: defaults,
+            loaders: [.claude: { try await loader.load() }],
+            now: clock.now,
+            pollWait: { delay in await gate.wait(delay: delay) }
+        )
+        model.setEnabled(true, for: .claude)
+        await model.refresh(.claude)
+
+        clock.advance(by: 29)
+        let manualRefresh = Task { @MainActor in
+            await model.refresh(.claude)
+        }
+        await fulfillment(of: [secondLoadStarted], timeout: 1)
+        clock.advance(by: 1)
+
+        model.startPolling()
+        let requestedDelay = await gate.nextRequestedDelay()
+        XCTAssertEqual(requestedDelay, SubscriptionStatusModel.pollInterval)
+
+        await loader.completeSecond(with: .success(SubscriptionUsage(primary: Self.window(percent: 8))))
+        _ = await manualRefresh.value
+        model.stopPolling()
+        await gate.tick()
+    }
+
     func testStoppingPollingCancelsInFlightProviderRefresh() async throws {
         let (defaults, suiteName) = try makeDefaults()
         defer { defaults.removePersistentDomain(forName: suiteName) }
@@ -322,6 +414,47 @@ final class SubscriptionStatusModelTests: XCTestCase {
         await gate.tick()
     }
 
+    func testPollingWakeSignalRemainsReusableAfterEarlierDeadlineWins() async {
+        let deadlines = ControlledPollingDeadlines()
+        let signal = PollingWakeSignal(scheduleDeadline: deadlines.schedule)
+        let firstWait = Task {
+            await signal.wait(for: 60)
+        }
+
+        let firstDeadline = await deadlines.next()
+        firstDeadline.fire()
+        await firstWait.value
+
+        let secondWait = Task {
+            await signal.wait(for: 60)
+        }
+        let secondDeadline = await deadlines.next()
+        signal.signal()
+        await secondWait.value
+        secondDeadline.fire()
+    }
+
+    func testPollingWakeSignalKeepsOverlappingWaitersIndependent() async {
+        let deadlines = ControlledPollingDeadlines()
+        let signal = PollingWakeSignal(scheduleDeadline: deadlines.schedule)
+        let firstWait = Task {
+            await signal.wait(for: 60)
+        }
+        let firstDeadline = await deadlines.next()
+        let secondWait = Task {
+            await signal.wait(for: 60)
+        }
+        let secondDeadline = await deadlines.next()
+
+        firstWait.cancel()
+        await firstWait.value
+        signal.signal()
+        await secondWait.value
+
+        firstDeadline.fire()
+        secondDeadline.fire()
+    }
+
     nonisolated private static func window(
         name: String = "Five hour",
         percent: Double,
@@ -350,6 +483,53 @@ private actor CallCounter {
     private var value = 0
     func increment() { value += 1 }
     func currentValue() -> Int { value }
+}
+
+private final class ControlledPollingDeadlines: @unchecked Sendable {
+    final class Deadline: @unchecked Sendable {
+        private let workItem: DispatchWorkItem
+
+        init(_ workItem: DispatchWorkItem) {
+            self.workItem = workItem
+        }
+
+        func fire() {
+            workItem.perform()
+        }
+    }
+
+    private let lock = NSLock()
+    private var pending: [Deadline] = []
+    private var observers: [CheckedContinuation<Deadline, Never>] = []
+
+    var schedule: PollingWakeSignal.DeadlineScheduler {
+        { [self] _, deadline in
+            let controlledDeadline = Deadline(deadline)
+            let observer: CheckedContinuation<Deadline, Never>? = lock.withLock {
+                guard !observers.isEmpty else {
+                    pending.append(controlledDeadline)
+                    return nil
+                }
+                return observers.removeFirst()
+            }
+            observer?.resume(returning: controlledDeadline)
+        }
+    }
+
+    func next() async -> Deadline {
+        await withCheckedContinuation { continuation in
+            let deadline: Deadline? = lock.withLock {
+                guard !pending.isEmpty else {
+                    observers.append(continuation)
+                    return nil
+                }
+                return pending.removeFirst()
+            }
+            if let deadline {
+                continuation.resume(returning: deadline)
+            }
+        }
+    }
 }
 
 private final class TestNow: @unchecked Sendable {
@@ -485,10 +665,16 @@ private actor ControlledUsageLoader {
     func load() async throws -> SubscriptionUsage {
         let call = nextCall
         nextCall += 1
-        started[call].fulfill()
+        if started.indices.contains(call) {
+            started[call].fulfill()
+        }
         return try await withCheckedThrowingContinuation { continuation in
             continuations[call] = continuation
         }
+    }
+
+    func currentCallCount() -> Int {
+        nextCall
     }
 
     func complete(call: Int, with result: Result<SubscriptionUsage, Error>) {
@@ -496,6 +682,45 @@ private actor ControlledUsageLoader {
             XCTFail("No suspended loader call \(call)")
             return
         }
+        continuation.resume(with: result)
+    }
+
+    func completeAll(with result: Result<SubscriptionUsage, Error>) {
+        let suspended = continuations.values
+        continuations.removeAll()
+        for continuation in suspended {
+            continuation.resume(with: result)
+        }
+    }
+}
+
+private actor RetryOverlapUsageLoader {
+    private let secondLoadStarted: XCTestExpectation
+    private var callCount = 0
+    private var secondContinuation: CheckedContinuation<SubscriptionUsage, Error>?
+
+    init(secondLoadStarted: XCTestExpectation) {
+        self.secondLoadStarted = secondLoadStarted
+    }
+
+    func load() async throws -> SubscriptionUsage {
+        callCount += 1
+        if callCount == 1 {
+            throw ProviderUsageClientError.httpStatus(503)
+        }
+
+        secondLoadStarted.fulfill()
+        return try await withCheckedThrowingContinuation { continuation in
+            secondContinuation = continuation
+        }
+    }
+
+    func completeSecond(with result: Result<SubscriptionUsage, Error>) {
+        guard let continuation = secondContinuation else {
+            XCTFail("No suspended second loader call")
+            return
+        }
+        secondContinuation = nil
         continuation.resume(with: result)
     }
 }

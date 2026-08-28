@@ -69,6 +69,7 @@
 69. [세션 65: HTML 메모리 감사, Ghostty upstream 전환 및 v1.7.8 릴리즈](#세션-65-html-메모리-감사-ghostty-upstream-전환-및-v178-릴리즈)
 70. [세션 66: 프로젝트 워크스페이스와 Git 유틸리티 및 v1.8.0 릴리즈](#세션-66-프로젝트-워크스페이스와-git-유틸리티-및-v180-릴리즈)
 71. [세션 67: AI 구독 상태와 시스템 상태 바 및 v1.8.1 릴리즈](#세션-67-ai-구독-상태와-시스템-상태-바-및-v181-릴리즈)
+72. [세션 68: 사용량 폴링 메모리 폭주 수정 및 v1.8.2 릴리즈](#세션-68-사용량-폴링-메모리-폭주-수정-및-v182-릴리즈)
 
 ---
 
@@ -160,6 +161,7 @@
 | 82 | HTML 메모리 감사, Ghostty upstream 전환 및 v1.7.8 릴리즈 | HTML·라인 번호·터미널 메모리 경로를 실제 프로세스로 감사하고 PR #23이 포함된 libghostty-spm 1.4.0으로 전환한 뒤 앱 번들 버전 1.7.8 갱신 |
 | 83 | 프로젝트 워크스페이스와 Git 유틸리티 및 v1.8.0 릴리즈 | 프로젝트별 탭·터미널 상태를 격리하고 3열 워크스페이스, Git History/Changes, 반응형 사이드바, 테마·탭 chrome 회귀 수정을 통합해 앱 번들 버전 1.8.0 갱신 |
 | 84 | AI 구독 상태와 시스템 상태 바 및 v1.8.1 릴리즈 | Claude·Codex 사용량과 리셋 시간, Caffeinate·메모리 상태를 하단 상태 바에 통합하고 앱 번들 버전 1.8.1 갱신 |
+| 85 | 사용량 폴링 메모리 폭주 수정 및 v1.8.2 릴리즈 | 첫 15분 polling tick 뒤 대기 루프가 busy loop로 전환되던 문제와 provider 중복 refresh를 수정하고 앱 번들 버전 1.8.2 갱신 |
 
 ---
 
@@ -3329,3 +3331,48 @@ Claude Code가 소유한 OAuth 자격 증명과 Anthropic usage endpoint를 사�
 앱 short/build version을 `1.8.1`로 갱신하고 공증된 release ZIP을 준비한다. 기능 브랜치를 dev PR로 병합하고, 이어 dev를 main PR로 승격한 뒤 최신 main merge commit에 `v1.8.1` 태그를 생성해 `MarkAgent-v1.8.1.zip`을 GitHub Release 자산으로 게시한다.
 
 변경 파일: `Sources/App/Info.plist`, `history.md`
+
+---
+
+## 세션 68: 사용량 폴링 메모리 폭주 수정 및 v1.8.2 릴리즈
+
+> 날짜: 2026-08-28
+> 경로: ~/workspace/markAgent
+
+Claude·Codex 사용량 검사를 추가한 뒤 MarkAgent resident memory가 8GB 이상으로 계속 증가하는 문제를 실제 앱에서 재현했다. provider 요청 자체와 15분 polling 수명주기를 분리 측정해 root cause를 확정하고, 자동화 회귀 테스트와 실제 15분 앱 실행으로 안정화를 검증한 뒤 v1.8.2로 배포한다.
+
+### 대화 1: 사용량 검사 메모리 폭주 진단 및 수정
+
+**사용자:**
+> 메모리 누수가 있어. [Image #1] 이 문제를 해결해야해.
+>
+> 새로 추가한 클로드 및 코덱스 사용량 검사에서 누수가 발생하는지 확인해야해
+
+**응답:**
+Codex 50회와 Claude 요청·formatter·Keychain·URLSession 경로를 각각 분리 측정하고, 실제 앱의 첫 15분 polling tick 직후 RSS가 약 192MB에서 1.54GB로 증가하는 것을 재현했다. 공유 `AsyncStream` iterator를 timer 승리 시 취소하면서 이후 wait가 즉시 반환해 polling loop가 busy loop로 전환되는 것이 핵심 원인이었다. `PollingWakeSignal`을 lock으로 보호되는 단일 continuation과 Dispatch deadline 구조로 교체해 signal·timer·Task cancellation 중 하나만 resume하도록 했으며, provider별 in-flight refresh도 한 개로 제한했다. 수정 전 실패하는 timer 재사용·중복 refresh 테스트를 추가했고 전체 테스트 268개, debug bundle 빌드, 독립 tester 게이트를 통과했다. 최종 앱을 15분 이상 실행한 결과 RSS는 136,960KB에서 136,800KB로 안정적이었고 CPU 0.0%, 앱 소유 leak root 없음도 확인했다.
+
+변경 파일: `Sources/Core/SubscriptionStatusModel.swift`, `Tests/MarkAgentTests/SubscriptionStatusModelTests.swift`
+
+---
+
+### 대화 2: v1.8.2 dev·main 승격 및 GitHub Release
+
+**사용자:**
+> 릴리즈 및 dev pr 머지, main pr 머지해줘. 1.8.2로 업로드해야해.
+
+**응답:**
+앱 short/build version을 `1.8.2`로 갱신하고 메모리 수정과 회귀 테스트를 기능 브랜치에서 준비한다. 전용 review worktree의 독립 검증을 통과한 뒤 dev PR과 main PR을 순차 병합하고, 최신 main merge commit을 기준으로 Developer ID 서명·Apple 공증·stapling을 완료한 `MarkAgent-v1.8.2.zip`을 `v1.8.2` GitHub Release 자산으로 게시한다.
+
+변경 파일: `Sources/App/Info.plist`, `history.md`
+
+---
+
+### 대화 3: PR 전 timer-first 회귀 테스트 결정성 보강
+
+**사용자:**
+> 릴리즈 및 dev pr 머지, main pr 머지해줘. 1.8.2로 업로드해야해.
+
+**응답:**
+PR 전 전용 review worktree의 5-way 검증에서 timer-first 회귀 테스트가 50ms inverted expectation에 의존해 scheduler timing으로 통과할 수 있다는 blocker를 확인했다. `PollingWakeSignal`의 deadline scheduler를 주입 가능하게 하고, 테스트가 첫 deadline work item을 직접 실행한 뒤 두 번째 waiter의 deadline 등록을 기다리고 signal로 완료하도록 변경해 고정 sleep과 부정 조건 대기를 제거했다. 빠른 stop/start에서 waiter가 교체되는 race는 waiter dictionary로 격리하고, 만료 retry와 in-flight refresh가 겹칠 때 delay 0 busy loop가 재발하지 않도록 해당 provider를 retry delay 계산에서 제외했다. 동일 enable 요청은 generation을 변경하기 전에 no-op 처리하며, 릴리즈 규칙에 맞춰 README의 영어 Features와 한국어 주요 기능에 AI 구독·시스템 상태를 반영했다.
+
+변경 파일: `Sources/Core/SubscriptionStatusModel.swift`, `Tests/MarkAgentTests/SubscriptionStatusModelTests.swift`, `README.md`, `history.md`
