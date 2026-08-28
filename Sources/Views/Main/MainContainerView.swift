@@ -12,6 +12,8 @@ struct MainContainerView: View {
     var snippetStore: PromptSnippetStore
     var projectStore: ProjectStore
     var gitRepositoryStatus: GitRepositoryStatus
+    var subscriptionStatus: SubscriptionStatusModel
+    var systemStatus: SystemStatusModel
     var searchCommandCenter: SidebarSearchCommandCenter
     var onSelectProject: (Project) -> Void
     var onSelectUnscoped: () -> Void
@@ -21,6 +23,7 @@ struct MainContainerView: View {
     var onDocumentChanged: () -> Void
     var onConfigurationSaved: () -> Void
     var onDirectoryChanged: (URL) -> Void
+    var onOpenSettings: () -> Void
 
     @State private var projectSidebarController: ProjectSidebarController
     @State private var isShowingNewTabChooser = false
@@ -46,6 +49,8 @@ struct MainContainerView: View {
         snippetStore: PromptSnippetStore,
         projectStore: ProjectStore,
         gitRepositoryStatus: GitRepositoryStatus,
+        subscriptionStatus: SubscriptionStatusModel,
+        systemStatus: SystemStatusModel,
         searchCommandCenter: SidebarSearchCommandCenter,
         onSelectProject: @escaping (Project) -> Void,
         onSelectUnscoped: @escaping () -> Void = {},
@@ -54,7 +59,8 @@ struct MainContainerView: View {
         onOpenFile: @escaping () -> Void,
         onDocumentChanged: @escaping () -> Void,
         onConfigurationSaved: @escaping () -> Void = {},
-        onDirectoryChanged: @escaping (URL) -> Void = { _ in }
+        onDirectoryChanged: @escaping (URL) -> Void = { _ in },
+        onOpenSettings: @escaping () -> Void = {}
     ) {
         self.tabs = tabs
         self.scanner = scanner
@@ -62,6 +68,8 @@ struct MainContainerView: View {
         self.snippetStore = snippetStore
         self.projectStore = projectStore
         self.gitRepositoryStatus = gitRepositoryStatus
+        self.subscriptionStatus = subscriptionStatus
+        self.systemStatus = systemStatus
         self.searchCommandCenter = searchCommandCenter
         self.onSelectProject = onSelectProject
         self.onSelectUnscoped = onSelectUnscoped
@@ -71,6 +79,7 @@ struct MainContainerView: View {
         self.onDocumentChanged = onDocumentChanged
         self.onConfigurationSaved = onConfigurationSaved
         self.onDirectoryChanged = onDirectoryChanged
+        self.onOpenSettings = onOpenSettings
         _projectSidebarController = State(
             initialValue: ProjectSidebarController(
                 projectStore: projectStore,
@@ -83,16 +92,24 @@ struct MainContainerView: View {
     }
 
     var body: some View {
-        GeometryReader { geometry in
-            let allocation = ShellWidthAllocator.allocate(
-                containerWidth: geometry.size.width,
-                requestedLeftWidth: pendingLeftSidebarWidth ?? leftSidebarWidth,
-                requestedRightWidth: pendingRightSidebarWidth ?? rightSidebarWidth,
-                wantsLeft: isLeftSidebarVisible,
-                wantsRight: activeTabGroup?.rightUtilityRoute.isVisible ?? false
-            )
+        VStack(spacing: 0) {
+            GeometryReader { geometry in
+                let allocation = ShellWidthAllocator.allocate(
+                    containerWidth: geometry.size.width,
+                    requestedLeftWidth: pendingLeftSidebarWidth ?? leftSidebarWidth,
+                    requestedRightWidth: pendingRightSidebarWidth ?? rightSidebarWidth,
+                    wantsLeft: isLeftSidebarVisible,
+                    wantsRight: activeTabGroup?.rightUtilityRoute.isVisible ?? false
+                )
 
-            shell(allocation: allocation, size: geometry.size)
+                shell(allocation: allocation, size: geometry.size)
+            }
+
+            BottomStatusBar(
+                subscriptionStatus: subscriptionStatus,
+                systemStatus: systemStatus,
+                onOpenSettings: onOpenSettings
+            )
         }
         .sheet(isPresented: $isShowingNewTabChooser) {
             NewTabChooserView(
@@ -182,6 +199,7 @@ struct MainContainerView: View {
 
                     ActiveTabContentView(
                         tabs: tabs,
+                        subscriptionStatus: subscriptionStatus,
                         onOpenFile: onOpenFile,
                         onNewTab: { isShowingNewTabChooser = true },
                         onDocumentChanged: onDocumentChanged,

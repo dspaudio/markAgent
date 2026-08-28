@@ -8,6 +8,7 @@ enum TabContentMountPolicy {
 
 struct ActiveTabContentView: View {
     var tabs: TabCollection
+    var subscriptionStatus: SubscriptionStatusModel
     var onOpenFile: () -> Void
     var onNewTab: () -> Void
     var onDocumentChanged: () -> Void
@@ -76,7 +77,10 @@ struct ActiveTabContentView: View {
                 mentionedFileIDs: mentionedGitFileIDs
             )
         } else if tab is SettingsTab {
-            PreferencesView(onSaved: onConfigurationSaved)
+            PreferencesView(
+                subscriptionStatus: subscriptionStatus,
+                onSaved: onConfigurationSaved
+            )
         } else if tab is AboutTab {
             AboutView()
         } else {

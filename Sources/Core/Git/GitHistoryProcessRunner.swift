@@ -22,6 +22,24 @@ struct GitHistoryProcessRequest: Equatable, Sendable {
     let arguments: [String]
     let timeoutSeconds: Int
     let outputByteLimit: Int
+    let environment: [String]
+
+    init(
+        executableURL: URL,
+        arguments: [String],
+        timeoutSeconds: Int,
+        outputByteLimit: Int,
+        environment: [String] = [
+            "PATH=/usr/bin:/bin:/usr/sbin:/sbin",
+            "LC_ALL=en_US.UTF-8",
+        ]
+    ) {
+        self.executableURL = executableURL
+        self.arguments = arguments
+        self.timeoutSeconds = timeoutSeconds
+        self.outputByteLimit = outputByteLimit
+        self.environment = environment
+    }
 }
 
 typealias GitHistoryCommandRunner = @Sendable (GitHistoryProcessRequest) async throws -> GitHistoryRawOutput
@@ -377,10 +395,7 @@ struct GitHistoryProcessRunner: Sendable {
             }
         }
 
-        let environmentStrings = [
-            "PATH=/usr/bin:/bin:/usr/sbin:/sbin",
-            "LC_ALL=en_US.UTF-8",
-        ]
+        let environmentStrings = request.environment
         var environment: [UnsafeMutablePointer<CChar>?] = []
         environment.reserveCapacity(environmentStrings.count + 1)
         for value in environmentStrings {
@@ -428,6 +443,7 @@ struct GitHistoryProcessRunner: Sendable {
     private static nonisolated func launchFailure(_ errorNumber: Int32) -> GitHistoryRunnerFailure {
         .launchFailed(String(cString: strerror(errorNumber)))
     }
+
 }
 
 private final class OutputDescriptorToken: @unchecked Sendable {

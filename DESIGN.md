@@ -178,3 +178,110 @@ workspace content is accessibility-hidden; destructive deletion requires confirm
 explains that the folder remains while open tabs move to `미분류`; store rejection remains
 visible while the editable draft stays available; long paths truncate in the middle without
 removing their accessibility value.
+
+## Subscription and System Status
+
+### Reference and ownership
+
+The supplied Orca screenshots are a structure-and-information reference only. MarkAgent adopts
+the full-window bottom status bar, compact provider summaries, a usage-detail popover, and
+right-aligned Caffeinate/memory controls without copying Orca branding, icons, colors, or
+materials. Existing terminal-theme tokens remain authoritative.
+
+`MainContainerView` owns one fixed bottom bar below the three-column workspace shell. The bar
+spans the complete content width so provider summaries remain left-aligned while Caffeinate and
+memory remain anchored to the lower-right corner regardless of sidebar visibility. The
+workspace shell receives the remaining height and keeps its existing width-allocation and
+scroll-ownership rules.
+
+```text
+AppDelegate
+    |
+    +--> SubscriptionStatusModel --> provider CLI adapters
+    +--> SystemStatusModel -------> IOPM assertion + process memory sampler
+    |
+    v
+MainContainerView
+    |
+    +--> workspace shell
+    +--> StatusBarView
+            +--> UsagePopover
+            +--> Caffeinate control
+            +--> Memory label
+```
+
+### Bottom status bar
+
+- Height: `28pt`, plus a one-pixel top divider.
+- Horizontal padding: `10pt`; direct-item spacing follows the existing `4pt` rhythm.
+- Background: terminal `panel` token, falling back to `windowBackgroundColor`.
+- Provider summaries use the official Claude/OpenAI provider mark, provider name, compact
+  progress indicator, percentage, and relative reset time. They are plain buttons that open
+  one shared popover anchored to the left usage segment.
+- At widths that cannot display every provider, summaries collapse to one `Usage` button with
+  the enabled-provider count. Caffeinate and memory never disappear.
+- Caffeinate is a plain toggle button with `cup.and.saucer` and an explicit `On`/`Off` label.
+  Its popover/help text reports whether the app currently owns a sleep-prevention assertion.
+- Memory uses `memorychip` and the current MarkAgent resident-memory value in MB or GB.
+- Loading, unavailable, disabled, and stale provider states are expressed with text and symbols;
+  color is supplementary and never the only state signal.
+
+Machine-facing identifiers:
+
+- `status-bar`
+- `status-usage`
+- `status-usage-<provider>`
+- `status-usage-refresh`
+- `status-usage-settings`
+- `status-caffeinate`
+- `status-memory`
+
+### Usage detail popover
+
+The popover presents one row per enabled provider. Each row contains provider identity,
+refresh/error state, primary and secondary window progress where available, absolute/relative
+reset information, and no raw command output. A fixed header contains `Usage`, a refresh
+button, and refresh progress. A footer opens the existing Settings tab.
+
+The popover is keyboard reachable, keeps provider rows in source order, exposes progress values
+to accessibility, and uses native SwiftUI popover behavior rather than a custom floating
+window. Empty and unavailable states include one recovery action.
+
+### Settings registration
+
+The existing Settings form gains an `AI Subscriptions` section before Terminal settings.
+Claude and Codex each have an enable toggle, detected CLI path/version, authentication or
+availability state, and a refresh/test action. Registration stores only provider enablement and
+non-secret CLI metadata. Registration defaults to off so Keychain access occurs only after the
+user explicitly enables a provider.
+
+Codex authentication remains owned by the installed official CLI and is consumed through its
+read-only app-server protocol. Claude follows Orca's local-account pattern: MarkAgent reads the
+Claude Code-owned OAuth access token from the active Keychain item, falling back to
+`~/.claude/.credentials.json`, and sends it only to Anthropic's OAuth usage endpoint. The token
+exists in memory only for that request and is never copied into MarkAgent persistence, view
+state, logs, analytics, or error messages. Each refresh rereads Claude's credential source so
+Claude Code remains responsible for rotation.
+
+If a future provider requires a directly entered rotating key, that key is stored as a mutable
+Keychain item identified by stable service/account names and replaced with `SecItemUpdate`;
+`UserDefaults`, logs, and view state never persist the secret.
+
+### Interaction, lifecycle, and accessibility
+
+- Provider refresh starts immediately when the active window launches, after Settings
+  registration changes, and from the explicit refresh button. While the app is active and not
+  minimized, usage polls every 15 minutes. Focus/show/restore refreshes only data at least five
+  minutes old. Claude/Codex failures retry after 30 seconds with exponential backoff capped at
+  15 minutes. Manual refresh bypasses the age gate, while stale completions cannot replace a
+  newer result. Reset countdown labels update independently without refetching provider data.
+- Caffeinate creates at most one process-owned `PreventUserIdleSystemSleep` assertion and
+  releases it when toggled off or when the app terminates.
+- Memory sampling runs off the main actor at a bounded interval, publishes on the main actor,
+  and stops with the app-scoped model.
+- Provider subprocesses have bounded output, sanitized environments, deadlines, cancellation,
+  and complete child-process cleanup.
+- Every icon-only control has a localized accessibility label and help text. Progress bars
+  expose provider/window names, percentages, and reset descriptions.
+- Reduced-motion users receive no decorative animation; progress transitions communicate only
+  refresh or state changes.
