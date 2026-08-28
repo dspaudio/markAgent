@@ -54,14 +54,14 @@ final class SubscriptionStatusModelTests: XCTestCase {
         let primary = Self.window(name: "Five hour", percent: 37.5)
         let secondary = Self.window(name: "Seven day", percent: 81, resetOffset: 7_200)
         await loader.complete(call: 0, with: .success(SubscriptionUsage(primary: primary, secondary: secondary)))
-        await refresh.value
+        _ = await refresh.value
 
         XCTAssertEqual(model.state(for: .claude), .available(SubscriptionUsage(primary: primary, secondary: secondary)))
         XCTAssertEqual(SubscriptionUsage(primary: primary).windows, [primary])
         XCTAssertEqual(SubscriptionUsage(primary: primary, secondary: secondary).windows, [primary, secondary])
     }
 
-    func testNewerRefreshCompletionCannotBeOverwrittenByStaleCompletion() async throws {
+    func testSequentialRefreshPublishesNewestCompletion() async throws {
         let (defaults, suiteName) = try makeDefaults()
         defer { defaults.removePersistentDomain(forName: suiteName) }
         let firstStarted = expectation(description: "first loader started")
@@ -70,18 +70,54 @@ final class SubscriptionStatusModelTests: XCTestCase {
         let model = SubscriptionStatusModel(defaults: defaults, loaders: [.codex: { try await loader.load() }])
         model.setEnabled(true, for: .codex)
 
-        let stale = Task { @MainActor in await model.refresh(.codex) }
+        let firstRefresh = Task { @MainActor in await model.refresh(.codex) }
         await fulfillment(of: [firstStarted], timeout: 1)
-        let current = Task { @MainActor in await model.refresh(.codex) }
-        await fulfillment(of: [secondStarted], timeout: 1)
+        await loader.complete(
+            call: 0,
+            with: .success(SubscriptionUsage(primary: Self.window(percent: 99)))
+        )
+        _ = await firstRefresh.value
 
+        let secondRefresh = Task { @MainActor in await model.refresh(.codex) }
+        await fulfillment(of: [secondStarted], timeout: 1)
         let currentUsage = SubscriptionUsage(primary: Self.window(percent: 22))
         await loader.complete(call: 1, with: .success(currentUsage))
-        await current.value
-        await loader.complete(call: 0, with: .success(SubscriptionUsage(primary: Self.window(percent: 99))))
-        await stale.value
+        _ = await secondRefresh.value
 
         XCTAssertEqual(model.state(for: .codex), .available(currentUsage))
+    }
+
+    func testConcurrentRefreshDoesNotStartSecondProviderLoad() async throws {
+        let (defaults, suiteName) = try makeDefaults()
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let firstLoaderStarted = expectation(description: "first loader started")
+        let loader = ControlledUsageLoader(started: [firstLoaderStarted])
+        let model = SubscriptionStatusModel(
+            defaults: defaults,
+            loaders: [.claude: { try await loader.load() }]
+        )
+        model.setEnabled(true, for: .claude)
+
+        let firstRefresh = Task { @MainActor in
+            await model.refresh(.claude)
+        }
+        await fulfillment(of: [firstLoaderStarted], timeout: 1)
+
+        let didStartSecondRefresh = await model.refresh(.claude)
+
+        let callCount = await loader.currentCallCount()
+        XCTAssertFalse(didStartSecondRefresh)
+        XCTAssertEqual(
+            callCount,
+            1,
+            "Concurrent refreshes must not retain multiple provider loaders."
+        )
+
+        let usage = SubscriptionUsage(primary: Self.window(percent: 42))
+        await loader.completeAll(with: .success(usage))
+        _ = await firstRefresh.value
+
+        XCTAssertEqual(model.state(for: .claude), .available(usage))
     }
 
     func testDisablingDuringRefreshPreventsLateCompletionFromPublishing() async throws {
@@ -96,7 +132,7 @@ final class SubscriptionStatusModelTests: XCTestCase {
         await fulfillment(of: [started], timeout: 1)
         model.setEnabled(false, for: .claude)
         await loader.complete(call: 0, with: .success(SubscriptionUsage(primary: Self.window(percent: 75))))
-        await refresh.value
+        _ = await refresh.value
 
         XCTAssertEqual(model.state(for: .claude), .disabled)
     }
@@ -322,6 +358,33 @@ final class SubscriptionStatusModelTests: XCTestCase {
         await gate.tick()
     }
 
+    func testPollingWakeSignalRemainsSuspendedAfterEarlierTimerWins() async {
+        let signal = PollingWakeSignal()
+        await signal.wait(for: 0)
+
+        let secondWaitStarted = expectation(description: "second wait started")
+        let returnedBeforeSignal = expectation(description: "second wait returned before signal")
+        returnedBeforeSignal.isInverted = true
+        let secondWaitFinished = expectation(description: "second wait finished after signal")
+        let releaseGate = PollingReturnGate()
+        let secondWait = Task {
+            secondWaitStarted.fulfill()
+            await signal.wait(for: 60)
+            if await !releaseGate.isReleased {
+                returnedBeforeSignal.fulfill()
+            }
+            secondWaitFinished.fulfill()
+        }
+
+        await fulfillment(of: [secondWaitStarted], timeout: 1)
+        await fulfillment(of: [returnedBeforeSignal], timeout: 0.05)
+
+        await releaseGate.release()
+        signal.signal()
+        await fulfillment(of: [secondWaitFinished], timeout: 1)
+        await secondWait.value
+    }
+
     nonisolated private static func window(
         name: String = "Five hour",
         percent: Double,
@@ -350,6 +413,14 @@ private actor CallCounter {
     private var value = 0
     func increment() { value += 1 }
     func currentValue() -> Int { value }
+}
+
+private actor PollingReturnGate {
+    private(set) var isReleased = false
+
+    func release() {
+        isReleased = true
+    }
 }
 
 private final class TestNow: @unchecked Sendable {
@@ -485,10 +556,16 @@ private actor ControlledUsageLoader {
     func load() async throws -> SubscriptionUsage {
         let call = nextCall
         nextCall += 1
-        started[call].fulfill()
+        if started.indices.contains(call) {
+            started[call].fulfill()
+        }
         return try await withCheckedThrowingContinuation { continuation in
             continuations[call] = continuation
         }
+    }
+
+    func currentCallCount() -> Int {
+        nextCall
     }
 
     func complete(call: Int, with result: Result<SubscriptionUsage, Error>) {
@@ -497,5 +574,13 @@ private actor ControlledUsageLoader {
             return
         }
         continuation.resume(with: result)
+    }
+
+    func completeAll(with result: Result<SubscriptionUsage, Error>) {
+        let suspended = continuations.values
+        continuations.removeAll()
+        for continuation in suspended {
+            continuation.resume(with: result)
+        }
     }
 }

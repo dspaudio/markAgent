@@ -69,6 +69,7 @@ final class SubscriptionStatusModel {
     private var lastAttemptDates: [SubscriptionProvider: Date]
     private var failureStreaks: [SubscriptionProvider: Int]
     private var retryDates: [SubscriptionProvider: Date]
+    private var refreshTasks: [SubscriptionProvider: Task<SubscriptionUsage, Error>]
     private var pollingTask: Task<Void, Never>?
 
     init(
@@ -92,6 +93,7 @@ final class SubscriptionStatusModel {
         self.lastAttemptDates = [:]
         self.failureStreaks = [:]
         self.retryDates = [:]
+        self.refreshTasks = [:]
 
         let initialEnabledProviders: [SubscriptionProvider]
         if let storedProviders = defaults.stringArray(forKey: Self.enabledProvidersDefaultsKey) {
@@ -133,6 +135,7 @@ final class SubscriptionStatusModel {
             }
             states[provider] = .unavailable(message: "Not refreshed yet.")
         } else {
+            refreshTasks.removeValue(forKey: provider)?.cancel()
             enabledProviders.removeAll { $0 == provider }
             states[provider] = .disabled
         }
@@ -140,10 +143,15 @@ final class SubscriptionStatusModel {
         defaults.set(enabledProviders.map(\.rawValue), forKey: Self.enabledProvidersDefaultsKey)
     }
 
-    func refresh(_ provider: SubscriptionProvider) async {
+    @discardableResult
+    func refresh(_ provider: SubscriptionProvider) async -> Bool {
         guard enabledProviders.contains(provider) else {
             states[provider] = .disabled
-            return
+            return false
+        }
+
+        if refreshTasks[provider] != nil {
+            return false
         }
 
         refreshGenerations[provider, default: 0] += 1
@@ -151,17 +159,27 @@ final class SubscriptionStatusModel {
         states[provider] = .loading
 
         guard let loader = loaders[provider] else {
-            guard generation == refreshGenerations[provider] else { return }
+            guard generation == refreshGenerations[provider] else { return true }
             await recordFailure(for: provider)
             states[provider] = .unavailable(message: "Unable to load \(provider.displayName) usage.")
-            return
+            return true
+        }
+
+        let refreshTask = Task {
+            try await loader()
+        }
+        refreshTasks[provider] = refreshTask
+        defer {
+            if generation == refreshGenerations[provider] {
+                refreshTasks[provider] = nil
+            }
         }
 
         do {
-            let usage = try await loader()
+            let usage = try await refreshTask.value
             guard generation == refreshGenerations[provider],
                   enabledProviders.contains(provider) else {
-                return
+                return true
             }
             lastAttemptDates[provider] = now()
             failureStreaks[provider] = nil
@@ -170,7 +188,7 @@ final class SubscriptionStatusModel {
         } catch {
             guard generation == refreshGenerations[provider],
                   enabledProviders.contains(provider) else {
-                return
+                return true
             }
             await recordFailure(for: provider)
             let message: String
@@ -181,13 +199,14 @@ final class SubscriptionStatusModel {
             }
             states[provider] = .unavailable(message: message)
         }
+        return true
     }
 
     func refreshAll() async {
         await withTaskGroup(of: Void.self) { group in
             for provider in enabledProviders {
                 group.addTask { [weak self] in
-                    await self?.refresh(provider)
+                    _ = await self?.refresh(provider)
                 }
             }
         }
@@ -208,7 +227,7 @@ final class SubscriptionStatusModel {
         await withTaskGroup(of: Void.self) { group in
             for provider in dueProviders {
                 group.addTask { [weak self] in
-                    await self?.refresh(provider)
+                    _ = await self?.refresh(provider)
                 }
             }
         }
@@ -231,6 +250,10 @@ final class SubscriptionStatusModel {
     func stopPolling() {
         pollingTask?.cancel()
         pollingTask = nil
+        for refreshTask in refreshTasks.values {
+            refreshTask.cancel()
+        }
+        refreshTasks.removeAll()
         for provider in enabledProviders {
             refreshGenerations[provider, default: 0] += 1
         }
@@ -258,29 +281,72 @@ final class SubscriptionStatusModel {
     }
 }
 
-private final class PollingWakeSignal: @unchecked Sendable {
-    private let stream: AsyncStream<Void>
-    private let continuation: AsyncStream<Void>.Continuation
-
-    init() {
-        (stream, continuation) = AsyncStream.makeStream(bufferingPolicy: .bufferingNewest(1))
+final class PollingWakeSignal: @unchecked Sendable {
+    private struct Waiter {
+        let id: UUID
+        let continuation: CheckedContinuation<Void, Never>
+        let deadline: DispatchWorkItem
     }
 
+    private let lock = NSLock()
+    private var pendingSignal = false
+    private var waiter: Waiter?
+
     func signal() {
-        continuation.yield(())
+        let resumedWaiter: Waiter? = lock.withLock {
+            guard let waiter else {
+                pendingSignal = true
+                return nil
+            }
+            self.waiter = nil
+            return waiter
+        }
+        resumedWaiter?.deadline.cancel()
+        resumedWaiter?.continuation.resume()
     }
 
     func wait(for interval: TimeInterval) async {
-        await withTaskGroup(of: Void.self) { group in
-            group.addTask {
-                try? await Task.sleep(for: .seconds(interval))
+        let id = UUID()
+        await withTaskCancellationHandler {
+            await withCheckedContinuation { continuation in
+                let deadline = DispatchWorkItem { [weak self] in
+                    self?.resumeWaiter(id: id)
+                }
+                let shouldResumeImmediately = lock.withLock {
+                    guard !Task.isCancelled, !pendingSignal else {
+                        pendingSignal = false
+                        return true
+                    }
+                    waiter = Waiter(
+                        id: id,
+                        continuation: continuation,
+                        deadline: deadline
+                    )
+                    return false
+                }
+
+                if shouldResumeImmediately {
+                    continuation.resume()
+                } else {
+                    DispatchQueue.global().asyncAfter(
+                        deadline: .now() + interval,
+                        execute: deadline
+                    )
+                }
             }
-            group.addTask { [stream] in
-                var iterator = stream.makeAsyncIterator()
-                _ = await iterator.next()
-            }
-            _ = await group.next()
-            group.cancelAll()
+        } onCancel: { [weak self] in
+            self?.resumeWaiter(id: id)
         }
+    }
+
+    private func resumeWaiter(id: UUID) {
+        let resumedWaiter: Waiter? = lock.withLock {
+            guard waiter?.id == id else { return nil }
+            let resumedWaiter = waiter
+            waiter = nil
+            return resumedWaiter
+        }
+        resumedWaiter?.deadline.cancel()
+        resumedWaiter?.continuation.resume()
     }
 }
