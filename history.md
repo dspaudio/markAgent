@@ -3364,3 +3364,15 @@ Codex 50회와 Claude 요청·formatter·Keychain·URLSession 경로를 각각 �
 앱 short/build version을 `1.8.2`로 갱신하고 메모리 수정과 회귀 테스트를 기능 브랜치에서 준비한다. 전용 review worktree의 독립 검증을 통과한 뒤 dev PR과 main PR을 순차 병합하고, 최신 main merge commit을 기준으로 Developer ID 서명·Apple 공증·stapling을 완료한 `MarkAgent-v1.8.2.zip`을 `v1.8.2` GitHub Release 자산으로 게시한다.
 
 변경 파일: `Sources/App/Info.plist`, `history.md`
+
+---
+
+### 대화 3: PR 전 timer-first 회귀 테스트 결정성 보강
+
+**사용자:**
+> 릴리즈 및 dev pr 머지, main pr 머지해줘. 1.8.2로 업로드해야해.
+
+**응답:**
+PR 전 전용 review worktree의 5-way 검증에서 timer-first 회귀 테스트가 50ms inverted expectation에 의존해 scheduler timing으로 통과할 수 있다는 blocker를 확인했다. `PollingWakeSignal`의 deadline scheduler를 주입 가능하게 하고, 테스트가 첫 deadline work item을 직접 실행한 뒤 두 번째 waiter의 deadline 등록을 기다리고 signal로 완료하도록 변경해 고정 sleep과 부정 조건 대기를 제거했다. 빠른 stop/start에서 waiter가 교체되는 race는 waiter dictionary로 격리하고, 만료 retry와 in-flight refresh가 겹칠 때 delay 0 busy loop가 재발하지 않도록 해당 provider를 retry delay 계산에서 제외했다. 동일 enable 요청은 generation을 변경하기 전에 no-op 처리하며, 릴리즈 규칙에 맞춰 README의 영어 Features와 한국어 주요 기능에 AI 구독·시스템 상태를 반영했다.
+
+변경 파일: `Sources/Core/SubscriptionStatusModel.swift`, `Tests/MarkAgentTests/SubscriptionStatusModelTests.swift`, `README.md`, `history.md`
