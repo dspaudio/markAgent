@@ -120,6 +120,29 @@ final class SubscriptionStatusModelTests: XCTestCase {
         XCTAssertEqual(model.state(for: .claude), .available(usage))
     }
 
+    func testRedundantEnableDoesNotInvalidateInFlightRefresh() async throws {
+        let (defaults, suiteName) = try makeDefaults()
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let loaderStarted = expectation(description: "loader started")
+        let loader = ControlledUsageLoader(started: [loaderStarted])
+        let model = SubscriptionStatusModel(
+            defaults: defaults,
+            loaders: [.claude: { try await loader.load() }]
+        )
+        model.setEnabled(true, for: .claude)
+        let refresh = Task { @MainActor in
+            await model.refresh(.claude)
+        }
+        await fulfillment(of: [loaderStarted], timeout: 1)
+
+        model.setEnabled(true, for: .claude)
+
+        let usage = SubscriptionUsage(primary: Self.window(percent: 27))
+        await loader.completeAll(with: .success(usage))
+        _ = await refresh.value
+        XCTAssertEqual(model.state(for: .claude), .available(usage))
+    }
+
     func testDisablingDuringRefreshPreventsLateCompletionFromPublishing() async throws {
         let (defaults, suiteName) = try makeDefaults()
         defer { defaults.removePersistentDomain(forName: suiteName) }
@@ -302,6 +325,39 @@ final class SubscriptionStatusModelTests: XCTestCase {
         await gate.tick()
     }
 
+    func testPollingUsesCadenceDelayWhenExpiredRetryHasInFlightRefresh() async throws {
+        let (defaults, suiteName) = try makeDefaults()
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let clock = TestNow(Date(timeIntervalSince1970: 1_700_000_000))
+        let gate = PollGate()
+        let secondLoadStarted = expectation(description: "manual retry loader started")
+        let loader = RetryOverlapUsageLoader(secondLoadStarted: secondLoadStarted)
+        let model = SubscriptionStatusModel(
+            defaults: defaults,
+            loaders: [.claude: { try await loader.load() }],
+            now: clock.now,
+            pollWait: { delay in await gate.wait(delay: delay) }
+        )
+        model.setEnabled(true, for: .claude)
+        await model.refresh(.claude)
+
+        clock.advance(by: 29)
+        let manualRefresh = Task { @MainActor in
+            await model.refresh(.claude)
+        }
+        await fulfillment(of: [secondLoadStarted], timeout: 1)
+        clock.advance(by: 1)
+
+        model.startPolling()
+        let requestedDelay = await gate.nextRequestedDelay()
+        XCTAssertEqual(requestedDelay, SubscriptionStatusModel.pollInterval)
+
+        await loader.completeSecond(with: .success(SubscriptionUsage(primary: Self.window(percent: 8))))
+        _ = await manualRefresh.value
+        model.stopPolling()
+        await gate.tick()
+    }
+
     func testStoppingPollingCancelsInFlightProviderRefresh() async throws {
         let (defaults, suiteName) = try makeDefaults()
         defer { defaults.removePersistentDomain(forName: suiteName) }
@@ -358,31 +414,45 @@ final class SubscriptionStatusModelTests: XCTestCase {
         await gate.tick()
     }
 
-    func testPollingWakeSignalRemainsSuspendedAfterEarlierTimerWins() async {
-        let signal = PollingWakeSignal()
-        await signal.wait(for: 0)
-
-        let secondWaitStarted = expectation(description: "second wait started")
-        let returnedBeforeSignal = expectation(description: "second wait returned before signal")
-        returnedBeforeSignal.isInverted = true
-        let secondWaitFinished = expectation(description: "second wait finished after signal")
-        let releaseGate = PollingReturnGate()
-        let secondWait = Task {
-            secondWaitStarted.fulfill()
+    func testPollingWakeSignalRemainsReusableAfterEarlierDeadlineWins() async {
+        let deadlines = ControlledPollingDeadlines()
+        let signal = PollingWakeSignal(scheduleDeadline: deadlines.schedule)
+        let firstWait = Task {
             await signal.wait(for: 60)
-            if await !releaseGate.isReleased {
-                returnedBeforeSignal.fulfill()
-            }
-            secondWaitFinished.fulfill()
         }
 
-        await fulfillment(of: [secondWaitStarted], timeout: 1)
-        await fulfillment(of: [returnedBeforeSignal], timeout: 0.05)
+        let firstDeadline = await deadlines.next()
+        firstDeadline.fire()
+        await firstWait.value
 
-        await releaseGate.release()
+        let secondWait = Task {
+            await signal.wait(for: 60)
+        }
+        let secondDeadline = await deadlines.next()
         signal.signal()
-        await fulfillment(of: [secondWaitFinished], timeout: 1)
         await secondWait.value
+        secondDeadline.fire()
+    }
+
+    func testPollingWakeSignalKeepsOverlappingWaitersIndependent() async {
+        let deadlines = ControlledPollingDeadlines()
+        let signal = PollingWakeSignal(scheduleDeadline: deadlines.schedule)
+        let firstWait = Task {
+            await signal.wait(for: 60)
+        }
+        let firstDeadline = await deadlines.next()
+        let secondWait = Task {
+            await signal.wait(for: 60)
+        }
+        let secondDeadline = await deadlines.next()
+
+        firstWait.cancel()
+        await firstWait.value
+        signal.signal()
+        await secondWait.value
+
+        firstDeadline.fire()
+        secondDeadline.fire()
     }
 
     nonisolated private static func window(
@@ -415,11 +485,50 @@ private actor CallCounter {
     func currentValue() -> Int { value }
 }
 
-private actor PollingReturnGate {
-    private(set) var isReleased = false
+private final class ControlledPollingDeadlines: @unchecked Sendable {
+    final class Deadline: @unchecked Sendable {
+        private let workItem: DispatchWorkItem
 
-    func release() {
-        isReleased = true
+        init(_ workItem: DispatchWorkItem) {
+            self.workItem = workItem
+        }
+
+        func fire() {
+            workItem.perform()
+        }
+    }
+
+    private let lock = NSLock()
+    private var pending: [Deadline] = []
+    private var observers: [CheckedContinuation<Deadline, Never>] = []
+
+    var schedule: PollingWakeSignal.DeadlineScheduler {
+        { [self] _, deadline in
+            let controlledDeadline = Deadline(deadline)
+            let observer: CheckedContinuation<Deadline, Never>? = lock.withLock {
+                guard !observers.isEmpty else {
+                    pending.append(controlledDeadline)
+                    return nil
+                }
+                return observers.removeFirst()
+            }
+            observer?.resume(returning: controlledDeadline)
+        }
+    }
+
+    func next() async -> Deadline {
+        await withCheckedContinuation { continuation in
+            let deadline: Deadline? = lock.withLock {
+                guard !pending.isEmpty else {
+                    observers.append(continuation)
+                    return nil
+                }
+                return pending.removeFirst()
+            }
+            if let deadline {
+                continuation.resume(returning: deadline)
+            }
+        }
     }
 }
 
@@ -582,5 +691,36 @@ private actor ControlledUsageLoader {
         for continuation in suspended {
             continuation.resume(with: result)
         }
+    }
+}
+
+private actor RetryOverlapUsageLoader {
+    private let secondLoadStarted: XCTestExpectation
+    private var callCount = 0
+    private var secondContinuation: CheckedContinuation<SubscriptionUsage, Error>?
+
+    init(secondLoadStarted: XCTestExpectation) {
+        self.secondLoadStarted = secondLoadStarted
+    }
+
+    func load() async throws -> SubscriptionUsage {
+        callCount += 1
+        if callCount == 1 {
+            throw ProviderUsageClientError.httpStatus(503)
+        }
+
+        secondLoadStarted.fulfill()
+        return try await withCheckedThrowingContinuation { continuation in
+            secondContinuation = continuation
+        }
+    }
+
+    func completeSecond(with result: Result<SubscriptionUsage, Error>) {
+        guard let continuation = secondContinuation else {
+            XCTFail("No suspended second loader call")
+            return
+        }
+        secondContinuation = nil
+        continuation.resume(with: result)
     }
 }

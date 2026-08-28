@@ -123,13 +123,15 @@ final class SubscriptionStatusModel {
     }
 
     func setEnabled(_ isEnabled: Bool, for provider: SubscriptionProvider) {
+        let isAlreadyEnabled = enabledProviders.contains(provider)
+        guard isEnabled != isAlreadyEnabled else { return }
+
         refreshGenerations[provider, default: 0] += 1
         lastAttemptDates[provider] = nil
         failureStreaks[provider] = nil
         retryDates[provider] = nil
 
         if isEnabled {
-            guard !enabledProviders.contains(provider) else { return }
             enabledProviders = SubscriptionProvider.allCases.filter {
                 $0 == provider || enabledProviders.contains($0)
             }
@@ -261,8 +263,11 @@ final class SubscriptionStatusModel {
 
     private func nextPollingDelay() -> TimeInterval {
         let currentDate = now()
-        let retryDelay = retryDates.values
-            .map { max(0, $0.timeIntervalSince(currentDate)) }
+        let retryDelay = retryDates
+            .compactMap { provider, retryDate -> TimeInterval? in
+                guard refreshTasks[provider] == nil else { return nil }
+                return max(0, retryDate.timeIntervalSince(currentDate))
+            }
             .min()
         return min(Self.pollInterval, retryDelay ?? Self.pollInterval)
     }
@@ -282,6 +287,8 @@ final class SubscriptionStatusModel {
 }
 
 final class PollingWakeSignal: @unchecked Sendable {
+    typealias DeadlineScheduler = @Sendable (TimeInterval, DispatchWorkItem) -> Void
+
     private struct Waiter {
         let id: UUID
         let continuation: CheckedContinuation<Void, Never>
@@ -289,20 +296,35 @@ final class PollingWakeSignal: @unchecked Sendable {
     }
 
     private let lock = NSLock()
+    private let scheduleDeadline: DeadlineScheduler
     private var pendingSignal = false
-    private var waiter: Waiter?
+    private var waiters: [UUID: Waiter] = [:]
+
+    init(
+        scheduleDeadline: @escaping DeadlineScheduler = { interval, deadline in
+            DispatchQueue.global().asyncAfter(
+                deadline: .now() + interval,
+                execute: deadline
+            )
+        }
+    ) {
+        self.scheduleDeadline = scheduleDeadline
+    }
 
     func signal() {
-        let resumedWaiter: Waiter? = lock.withLock {
-            guard let waiter else {
+        let resumedWaiters: [Waiter] = lock.withLock {
+            guard !waiters.isEmpty else {
                 pendingSignal = true
-                return nil
+                return []
             }
-            self.waiter = nil
-            return waiter
+            let resumedWaiters = Array(waiters.values)
+            waiters.removeAll()
+            return resumedWaiters
         }
-        resumedWaiter?.deadline.cancel()
-        resumedWaiter?.continuation.resume()
+        for waiter in resumedWaiters {
+            waiter.deadline.cancel()
+            waiter.continuation.resume()
+        }
     }
 
     func wait(for interval: TimeInterval) async {
@@ -317,7 +339,7 @@ final class PollingWakeSignal: @unchecked Sendable {
                         pendingSignal = false
                         return true
                     }
-                    waiter = Waiter(
+                    waiters[id] = Waiter(
                         id: id,
                         continuation: continuation,
                         deadline: deadline
@@ -328,10 +350,7 @@ final class PollingWakeSignal: @unchecked Sendable {
                 if shouldResumeImmediately {
                     continuation.resume()
                 } else {
-                    DispatchQueue.global().asyncAfter(
-                        deadline: .now() + interval,
-                        execute: deadline
-                    )
+                    scheduleDeadline(interval, deadline)
                 }
             }
         } onCancel: { [weak self] in
@@ -341,10 +360,7 @@ final class PollingWakeSignal: @unchecked Sendable {
 
     private func resumeWaiter(id: UUID) {
         let resumedWaiter: Waiter? = lock.withLock {
-            guard waiter?.id == id else { return nil }
-            let resumedWaiter = waiter
-            waiter = nil
-            return resumedWaiter
+            waiters.removeValue(forKey: id)
         }
         resumedWaiter?.deadline.cancel()
         resumedWaiter?.continuation.resume()
