@@ -11,6 +11,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     let sidebarSearchCommands: SidebarSearchCommandCenter
     let directoryScanner: DirectoryScanner
     let gitRepositoryStatus: GitRepositoryStatus
+    let subscriptionStatus: SubscriptionStatusModel
+    let systemStatus: SystemStatusModel
     let dirtyPrompter: AppDirtyDocumentPrompter
     var isAlwaysOnTop: Bool
     var window: NSWindow?
@@ -25,7 +27,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         self.init(projectStore: ProjectStore())
     }
 
-    init(projectStore: ProjectStore) {
+    init(
+        projectStore: ProjectStore,
+        subscriptionStatus: SubscriptionStatusModel? = nil,
+        systemStatus: SystemStatusModel = SystemStatusModel()
+    ) {
         let homeURL = URL(fileURLWithPath: NSHomeDirectory())
         self.tabs = TabCollection(unscopedRootDirectory: homeURL)
         self.recentStore = RecentDocumentStore()
@@ -34,6 +40,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         self.sidebarSearchCommands = SidebarSearchCommandCenter()
         self.directoryScanner = DirectoryScanner(currentDirectory: homeURL)
         self.gitRepositoryStatus = GitRepositoryStatus(currentDirectory: homeURL)
+        self.subscriptionStatus = subscriptionStatus ?? SubscriptionStatusModel(
+            loaders: ProviderUsageClients.liveLoaders()
+        )
+        self.systemStatus = systemStatus
         self.dirtyPrompter = AppDirtyDocumentPrompter(window: nil)
         self.isAlwaysOnTop = false
         self.window = nil
@@ -50,6 +60,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSWindow.allowsAutomaticWindowTabbing = false
         setupMenu()
         setupWindow()
+        systemStatus.startSampling()
+        subscriptionStatus.startPolling()
         removeSystemTabBarMenuItems()
         tabs.createTerminalTab(workingDirectory: URL(fileURLWithPath: NSHomeDirectory()))
         openLaunchTargetIfNeeded()
@@ -62,10 +74,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         true
     }
 
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        subscriptionStatus.stopPolling()
+        Task {
+            await systemStatus.stop()
+            sender.reply(toApplicationShouldTerminate: true)
+        }
+        return .terminateLater
+    }
+
     func applicationWillTerminate(_ notification: Notification) {
+        subscriptionStatus.stopPolling()
+        systemStatus.stopSampling()
         if let searchKeyMonitor {
             NSEvent.removeMonitor(searchKeyMonitor)
         }
+    }
+
+    func applicationDidBecomeActive(_ notification: Notification) {
+        systemStatus.startSampling()
+        subscriptionStatus.startPolling()
+    }
+
+    func applicationWillResignActive(_ notification: Notification) {
+        systemStatus.stopSampling()
+        subscriptionStatus.stopPolling()
     }
 
     private func setupWindow() {
@@ -114,6 +147,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             snippetStore: snippetStore,
             projectStore: projectStore,
             gitRepositoryStatus: gitRepositoryStatus,
+            subscriptionStatus: subscriptionStatus,
+            systemStatus: systemStatus,
             searchCommandCenter: sidebarSearchCommands,
             onSelectProject: { [weak self] project in
                 guard let self else { return }
@@ -141,6 +176,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             },
             onDirectoryChanged: { [weak self] directory in
                 self?.gitRepositoryStatus.refresh(for: directory)
+            },
+            onOpenSettings: { [weak self] in
+                self?.showPreferences()
             }
         )
         .environment(\.terminalAppTheme, appTheme)
@@ -948,6 +986,17 @@ extension AppDelegate: NSWindowDelegate {
 
     func windowDidResize(_ notification: Notification) {
         saveWindowFrame(notification.object as? NSWindow)
+    }
+
+    func windowDidMiniaturize(_ notification: Notification) {
+        systemStatus.stopSampling()
+        subscriptionStatus.stopPolling()
+    }
+
+    func windowDidDeminiaturize(_ notification: Notification) {
+        guard NSApp.isActive else { return }
+        systemStatus.startSampling()
+        subscriptionStatus.startPolling()
     }
 
     func windowWillEnterFullScreen(_ notification: Notification) {

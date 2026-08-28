@@ -68,6 +68,7 @@
 68. [세션 64: Git 브랜치 동기화 및 v1.7.7 릴리즈](#세션-64-git-브랜치-동기화-및-v177-릴리즈)
 69. [세션 65: HTML 메모리 감사, Ghostty upstream 전환 및 v1.7.8 릴리즈](#세션-65-html-메모리-감사-ghostty-upstream-전환-및-v178-릴리즈)
 70. [세션 66: 프로젝트 워크스페이스와 Git 유틸리티 및 v1.8.0 릴리즈](#세션-66-프로젝트-워크스페이스와-git-유틸리티-및-v180-릴리즈)
+71. [세션 67: AI 구독 상태와 시스템 상태 바 및 v1.8.1 릴리즈](#세션-67-ai-구독-상태와-시스템-상태-바-및-v181-릴리즈)
 
 ---
 
@@ -158,6 +159,7 @@
 | 81 | Git 브랜치 동기화 및 v1.7.7 릴리즈 | 외부 checkout 즉시 반영과 Remote 새로고침을 문서화하고 앱 번들 버전 1.7.7 갱신 |
 | 82 | HTML 메모리 감사, Ghostty upstream 전환 및 v1.7.8 릴리즈 | HTML·라인 번호·터미널 메모리 경로를 실제 프로세스로 감사하고 PR #23이 포함된 libghostty-spm 1.4.0으로 전환한 뒤 앱 번들 버전 1.7.8 갱신 |
 | 83 | 프로젝트 워크스페이스와 Git 유틸리티 및 v1.8.0 릴리즈 | 프로젝트별 탭·터미널 상태를 격리하고 3열 워크스페이스, Git History/Changes, 반응형 사이드바, 테마·탭 chrome 회귀 수정을 통합해 앱 번들 버전 1.8.0 갱신 |
+| 84 | AI 구독 상태와 시스템 상태 바 및 v1.8.1 릴리즈 | Claude·Codex 사용량과 리셋 시간, Caffeinate·메모리 상태를 하단 상태 바에 통합하고 앱 번들 버전 1.8.1 갱신 |
 
 ---
 
@@ -3296,3 +3298,34 @@ LOCAL/REMOTE 섹션 제목을 수평 압축 대상에서 제외해 Remote 개수
 PR 전 frozen-tree 5-way review에서 발견한 release blocker를 push 전에 수정했다. Git History는 `/usr/bin/git` 절대 경로와 최소 환경만 사용하고 `POSIX_SPAWN_CLOEXEC_DEFAULT`로 외부 file descriptor 상속을 차단한다. direct child가 먼저 종료하거나 nonzero로 끝나도 descendant가 pipe를 보유하면 process group을 정리하고, read failure도 해당 stream의 terminal 상태로 처리한다. nonzero 경로는 parent read descriptor를 collector만 닫도록 소유권을 분리해 1MiB stderr를 끝까지 보존한 뒤 structured exit error를 반환한다. SHA-1과 SHA-256 object ID를 모두 파싱하며 최대 4MiB decode 작업을 main actor 밖에서 수행한다. 비활성 프로젝트 삭제 후 미분류 workspace의 active tab을 복원하고, 비터미널 inactive view를 unmount해 Settings focus가 남지 않게 했다. 선택 workspace 접근성 trait, right utility 단일 source of truth, 누락 localization도 보강했다. custom terminal representable에는 explicit dismantle hook을 추가해 닫힌 tab의 Ghostty surface와 PTY child가 즉시 해제되도록 했으며, 실제 bundle에서 child 종료와 product-owned leak root 부재를 확인했다. 전체 테스트 237개 통과를 확인했다.
 
 변경 파일: `Sources/Core/Git/GitHistoryProcessRunner.swift`, `Sources/Core/Git/GitHistoryStore.swift`, `Sources/Core/GitDiffState.swift`, `Sources/Core/Tabs/TabCollection.swift`, `Sources/Core/Tabs/TabGroupState.swift`, `Sources/Views/Main/ActiveTabContentView.swift`, `Sources/Views/Sidebar/ProjectSidebar.swift`, `Sources/Views/Tabs/TerminalTabView.swift`, `Sources/App/Resources/en.lproj/Localizable.strings`, `Sources/App/Resources/ko.lproj/Localizable.strings`, `Tests/MarkAgentTests/GitHistoryProcessRunnerTests.swift`, `Tests/MarkAgentTests/GitHistoryStoreTests.swift`, `Tests/MarkAgentTests/GitDiffStateTests.swift`, `Tests/MarkAgentTests/ProjectSidebarControllerTests.swift`, `Tests/MarkAgentTests/TabCollectionWorkspaceTests.swift`, `Tests/MarkAgentTests/TerminalSnippetSelectionSaverTests.swift`, `Tests/MarkAgentTests/TerminalTabStateTests.swift`, `DESIGN.md`, `history.md`
+
+---
+
+## 세션 67: AI 구독 상태와 시스템 상태 바 및 v1.8.1 릴리즈
+
+> 날짜: 2026-08-28
+> 경로: ~/workspace/markAgent
+
+Orca의 정보 구조를 참고해 Claude·Codex 구독 사용량과 리셋 시간을 환경설정 및 하단 상태 바에 통합하고, 오른쪽에는 Caffeinate 토글과 현재 프로세스 메모리를 추가했다. 실제 macOS 앱에서 provider 등록·갱신·오류 복구·sleep assertion·메모리·누수를 검증한 결과를 v1.8.1로 배포한다.
+
+### 대화 1: AI 구독 사용량과 시스템 상태 구현 및 검증
+
+**사용자:**
+> Claude와 Codex 구독 사용량·리셋 시간을 환경설정에서 등록하고 상태 바 왼쪽에서 상세 보기로 제공하며, 공식 아이콘과 Orca 수준의 갱신 주기를 적용해줘. 상태 바 오른쪽에는 Caffeinate on/off와 현재 메모리 사용량을 표시하고 실제 앱에서 검증해줘.
+
+**응답:**
+Claude Code가 소유한 OAuth 자격 증명과 Anthropic usage endpoint를 사용하고, Codex는 제한된 app-server handshake로 구독 사용량을 읽도록 구현했다. provider 등록은 기본 비활성화하며 CLI 경로·버전을 환경설정에 표시한다. 사용량은 활성 상태에서 15분마다 갱신하고, 앱 활성화 시 5분 staleness gate와 30초부터 최대 15분까지의 지수 backoff를 적용했다. 공식 Claude·OpenAI SVG mark, 왼쪽 usage popover, 직렬화된 Caffeinate assertion 소유권, `ps`와 일치하는 메모리 표시를 실제 번들에서 검증했다. 전체 테스트 263개, release build, 독립 코드·보안·시각·접근성 리뷰를 통과했으며 사용자 소유 앱 프로세스는 종료하지 않았다.
+
+변경 파일: `DESIGN.md`, `Sources/App/AppDelegate.swift`, `Sources/App/PreferencesView.swift`, `Sources/Core/ClaudeOAuthUsageClient.swift`, `Sources/Core/ProviderUsageClients.swift`, `Sources/Core/SubscriptionStatusModel.swift`, `Sources/Core/SystemStatusModel.swift`, `Sources/Core/Git/GitHistoryProcessRunner.swift`, `Sources/Views/Main/ActiveTabContentView.swift`, `Sources/Views/Main/BottomStatusBar.swift`, `Sources/Views/Main/MainContainerView.swift`, `Sources/Views/Main/ProviderBrandIcon.swift`, `Tests/MarkAgentTests/ProviderBrandIconTests.swift`, `Tests/MarkAgentTests/ProviderUsageClientTests.swift`, `Tests/MarkAgentTests/SubscriptionStatusModelTests.swift`, `Tests/MarkAgentTests/SystemStatusModelTests.swift`, `history.md`
+
+---
+
+### 대화 2: v1.8.1 dev·main 승격 및 GitHub Release
+
+**사용자:**
+> dev pr 머지, main pr 머지하고 1.8.1로 릴리즈해줘.
+
+**응답:**
+앱 short/build version을 `1.8.1`로 갱신하고 공증된 release ZIP을 준비한다. 기능 브랜치를 dev PR로 병합하고, 이어 dev를 main PR로 승격한 뒤 최신 main merge commit에 `v1.8.1` 태그를 생성해 `MarkAgent-v1.8.1.zip`을 GitHub Release 자산으로 게시한다.
+
+변경 파일: `Sources/App/Info.plist`, `history.md`
