@@ -71,6 +71,7 @@
 71. [세션 67: AI 구독 상태와 시스템 상태 바 및 v1.8.1 릴리즈](#세션-67-ai-구독-상태와-시스템-상태-바-및-v181-릴리즈)
 72. [세션 68: 사용량 폴링 메모리 폭주 수정 및 v1.8.2 릴리즈](#세션-68-사용량-폴링-메모리-폭주-수정-및-v182-릴리즈)
 73. [세션 69: Keychain Always Allow 서명 안정화 및 v1.8.3 릴리즈](#세션-69-keychain-always-allow-서명-안정화-및-v183-릴리즈)
+74. [세션 70: SwiftPM 리소스 패키징 크래시 수정 및 v1.8.4 릴리즈](#세션-70-swiftpm-리소스-패키징-크래시-수정-및-v184-릴리즈)
 
 ---
 
@@ -164,6 +165,7 @@
 | 84 | AI 구독 상태와 시스템 상태 바 및 v1.8.1 릴리즈 | Claude·Codex 사용량과 리셋 시간, Caffeinate·메모리 상태를 하단 상태 바에 통합하고 앱 번들 버전 1.8.1 갱신 |
 | 85 | 사용량 폴링 메모리 폭주 수정 및 v1.8.2 릴리즈 | 첫 15분 polling tick 뒤 대기 루프가 busy loop로 전환되던 문제와 provider 중복 refresh를 수정하고 앱 번들 버전 1.8.2 갱신 |
 | 86 | Keychain Always Allow 서명 안정화 및 v1.8.3 릴리즈 | debug 번들의 Developer ID 서명을 활성화해 Claude 자격 증명 Always Allow 승인을 재빌드 후에도 유지하고 앱 번들 버전 1.8.3 갱신 |
+| 87 | SwiftPM 리소스 패키징 크래시 수정 및 v1.8.4 릴리즈 | Ghostty와 HighlightSwift 리소스 번들을 서명 가능한 앱 경로에 포함하고 패키지 리소스 우선 해석을 보강해 앱 기동 크래시를 수정한 뒤 앱 번들 버전 1.8.4 갱신 |
 
 ---
 
@@ -3409,5 +3411,36 @@ securityd 로그와 code requirement를 대조해 ad-hoc debug bundle이 재빌�
 
 **응답:**
 앱 short/build version을 `1.8.3`으로 갱신하고 stable debug signing 수정을 전용 release 브랜치에서 준비한다. frozen review worktree의 독립 검증을 통과한 뒤 dev PR과 main PR을 순차 병합하고, 최신 main merge commit을 기준으로 Developer ID 서명·Apple 공증·stapling을 완료한 `MarkAgent-v1.8.3.zip`을 `v1.8.3` GitHub Release 자산으로 게시한다.
+
+변경 파일: `Sources/App/Info.plist`, `history.md`
+
+---
+
+## 세션 70: SwiftPM 리소스 패키징 크래시 수정 및 v1.8.4 릴리즈
+
+> 날짜: 2026-09-07
+> 경로: ~/workspace/markAgent
+
+v1.8.3 배포 앱이 첫 터미널을 생성할 때 SwiftPM 리소스 번들을 찾지 못해 `NSBundle.module`에서 종료되는 문제를 크래시 보고서로 확인했다. Ghostty와 HighlightSwift 리소스를 서명 가능한 앱 경로에 패키징하고 실제 배포 조건에서 기동·코드 서명·메모리 상태를 검증한 뒤 v1.8.4로 배포한다.
+
+### 대화 1: 앱 실행 직후 종료 크래시 수정
+
+**사용자:**
+> 앱이 실행하다가 종료되는데?
+
+**응답:**
+`/Applications/MarkAgent.app` 크래시 보고서에서 첫 터미널 생성 중 `Bundle.module` 리소스 조회가 `SIGTRAP`으로 종료되는 원인을 확인했다. SwiftPM의 `GhosttyKit_GhosttyTerminal.bundle`과 `HighlightSwift_HighlightSwift.bundle`을 `Contents/Resources`에 복사하고, Ghostty 1.4.0 고정 revision에는 패키지 리소스를 먼저 찾는 버전 가드 오버레이를 적용했으며 HighlightSwift도 같은 조회 순서를 사용하도록 수정했다. 회귀 테스트를 먼저 실패시킨 뒤 수정 후 전체 테스트 272개, Developer ID strict codesign, 빌드 경로 접근 차단 상태의 실제 에디터 실행, 창 생성, `leaks` 0건과 독립 테스터 게이트를 통과했다.
+
+변경 파일: `scripts/bundle.sh`, `scripts/copy-swiftpm-resource-bundles.sh`, `scripts/patch-libghostty-resource-bundle.sh`, `scripts/patches/GhosttyRuntimeResources.swift`, `Vendor/highlightswift/Sources/HighlightSwift/HLJS/HLJS.swift`, `Tests/MarkAgentTests/BundleResourcePackagingTests.swift`
+
+---
+
+### 대화 2: v1.8.4 dev·main 승격 및 GitHub Release
+
+**사용자:**
+> 새로 릴리즈 & dev pr 머지, main pr 머지까지 진행해야해
+
+**응답:**
+앱 short/build version을 `1.8.4`로 갱신하고 SwiftPM 리소스 패키징 수정과 회귀 테스트를 전용 릴리즈 브랜치에서 준비한다. 독립 review gate를 통과한 뒤 dev PR과 main PR을 merge commit 방식으로 순차 병합하고, 최신 main merge commit을 기준으로 Developer ID 서명·Apple 공증·stapling을 완료한 `MarkAgent-v1.8.4.zip`을 `v1.8.4` GitHub Release 자산으로 게시한다.
 
 변경 파일: `Sources/App/Info.plist`, `history.md`
