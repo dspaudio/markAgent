@@ -210,6 +210,9 @@ enum CodexUsageClient {
     }
 
     private static func preferredSnapshot(from result: [String: Any]) -> [String: Any]? {
+        if let snapshot = result["rateLimits"] as? [String: Any] {
+            return snapshot
+        }
         if let snapshots = result["rateLimitsByLimitId"] as? [String: Any] {
             for key in snapshots.keys.sorted() {
                 if let snapshot = snapshots[key] as? [String: Any],
@@ -218,7 +221,7 @@ enum CodexUsageClient {
                 }
             }
         }
-        return result["rateLimits"] as? [String: Any]
+        return nil
     }
 
     private static func usage(from snapshot: [String: Any]) throws -> SubscriptionUsage {
