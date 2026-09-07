@@ -54,6 +54,23 @@ final class ProviderUsageClientTests: XCTestCase {
         XCTAssertEqual(usage.secondary?.usedPercent, 3)
     }
 
+    func testCodexPrefersAuthoritativeRateLimitsOverModelSpecificSnapshots() throws {
+        let response = """
+        {"id":2,"result":{"rateLimits":{"limitId":"codex","primary":{"usedPercent":43,"windowDurationMins":10080,"resetsAt":1789103202},"secondary":null},"rateLimitsByLimitId":{"base_model_inference":{"limitId":"base_model_inference","limitName":"gpt-reserve","primary":{"usedPercent":0,"windowDurationMins":10080,"resetsAt":1789367878},"secondary":null},"codex":{"limitId":"codex","primary":{"usedPercent":43,"windowDurationMins":10080,"resetsAt":1789103202},"secondary":null},"codex_bengalfox":{"limitId":"codex_bengalfox","limitName":"GPT-5.3-Codex-Spark","primary":{"usedPercent":0,"windowDurationMins":300,"resetsAt":1788781012},"secondary":{"usedPercent":0,"windowDurationMins":10080,"resetsAt":1789367812}}}}}
+        """
+
+        let usage = try CodexUsageClient.parse(Data(response.utf8))
+
+        XCTAssertEqual(usage.primary.name, "7 days")
+        XCTAssertEqual(
+            usage.primary.usedPercent,
+            43,
+            "Codex aggregate usage must not be replaced by the first model-specific snapshot"
+        )
+        XCTAssertEqual(usage.primary.resetsAt, Date(timeIntervalSince1970: 1_789_103_202))
+        XCTAssertNil(usage.secondary)
+    }
+
     func testCodexRejectsMissingMatchingResponseAndInvalidPercent() {
         let missing = Data(#"{"id":1,"result":{}}"#.utf8)
         let invalid = Data(
