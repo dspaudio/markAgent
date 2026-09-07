@@ -10,7 +10,14 @@ final actor HLJS {
         guard let context = JSContext() else {
             throw HLJSError.contextIsNil
         }
-        let highlightPath = Bundle.module.path(forResource: "highlight.min", ofType: "js")
+        let resourceBundle = Bundle.main
+            .url(
+                forResource: "HighlightSwift_HighlightSwift",
+                withExtension: "bundle"
+            )
+            .flatMap { Bundle(url: $0) }
+            ?? .module
+        let highlightPath = resourceBundle.path(forResource: "highlight.min", ofType: "js")
         guard let highlightPath else {
             throw HLJSError.fileNotFound
         }
