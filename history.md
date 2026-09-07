@@ -72,6 +72,7 @@
 72. [세션 68: 사용량 폴링 메모리 폭주 수정 및 v1.8.2 릴리즈](#세션-68-사용량-폴링-메모리-폭주-수정-및-v182-릴리즈)
 73. [세션 69: Keychain Always Allow 서명 안정화 및 v1.8.3 릴리즈](#세션-69-keychain-always-allow-서명-안정화-및-v183-릴리즈)
 74. [세션 70: SwiftPM 리소스 패키징 크래시 수정 및 v1.8.4 릴리즈](#세션-70-swiftpm-리소스-패키징-크래시-수정-및-v184-릴리즈)
+75. [세션 71: Codex 사용량 스냅샷 선택 수정 및 v1.8.5 릴리즈](#세션-71-codex-사용량-스냅샷-선택-수정-및-v185-릴리즈)
 
 ---
 
@@ -166,6 +167,7 @@
 | 85 | 사용량 폴링 메모리 폭주 수정 및 v1.8.2 릴리즈 | 첫 15분 polling tick 뒤 대기 루프가 busy loop로 전환되던 문제와 provider 중복 refresh를 수정하고 앱 번들 버전 1.8.2 갱신 |
 | 86 | Keychain Always Allow 서명 안정화 및 v1.8.3 릴리즈 | debug 번들의 Developer ID 서명을 활성화해 Claude 자격 증명 Always Allow 승인을 재빌드 후에도 유지하고 앱 번들 버전 1.8.3 갱신 |
 | 87 | SwiftPM 리소스 패키징 크래시 수정 및 v1.8.4 릴리즈 | Ghostty와 HighlightSwift 리소스 번들을 서명 가능한 앱 경로에 포함하고 패키지 리소스 우선 해석을 보강해 앱 기동 크래시를 수정한 뒤 앱 번들 버전 1.8.4 갱신 |
+| 88 | Codex 사용량 스냅샷 선택 수정 및 v1.8.5 릴리즈 | 최상위 Codex rateLimits를 우선하도록 파서를 수정하고 회귀 테스트와 실제 앱 검증 후 앱 번들 버전 1.8.5로 승격 |
 
 ---
 
@@ -3444,3 +3446,34 @@ v1.8.3 배포 앱이 첫 터미널을 생성할 때 SwiftPM 리소스 번들을 
 앱 short/build version을 `1.8.4`로 갱신하고 SwiftPM 리소스 패키징 수정과 회귀 테스트를 전용 릴리즈 브랜치에서 준비한다. 독립 review gate를 통과한 뒤 dev PR과 main PR을 merge commit 방식으로 순차 병합하고, 최신 main merge commit을 기준으로 Developer ID 서명·Apple 공증·stapling을 완료한 `MarkAgent-v1.8.4.zip`을 `v1.8.4` GitHub Release 자산으로 게시한다.
 
 변경 파일: `Sources/App/Info.plist`, `history.md`
+
+---
+
+## 세션 71: Codex 사용량 스냅샷 선택 수정 및 v1.8.5 릴리즈
+
+> 날짜: 2026-09-07
+> 경로: ~/workspace/markAgent
+
+Codex 0.153.0 응답에서 모델별 제한이 기본 구독 사용량보다 먼저 선택되어 잘못된 퍼센트가 표시되는 문제를 수정했다. 실제 app-server 응답과 macOS 앱 표면에서 수정 결과를 검증하고, 전용 브랜치에서 dev와 main을 순차 승격한 뒤 v1.8.5로 배포한다.
+
+### 대화 1: Codex 사용량 스냅샷 선택 수정
+
+**사용자:**
+> codex 사용량을 제대로 못받아오는데?
+
+**응답:**
+Codex 0.153.0의 `account/rateLimits/read` 응답에 `base_model_inference`, `codex`, `codex_bengalfox`가 함께 포함되면서 사전순 첫 항목인 `base_model_inference` 0%가 최상위 Codex 사용량 43%를 덮는 원인을 확인했다. 최상위 `rateLimits`를 우선하고 없을 때만 모델별 스냅샷으로 폴백하도록 수정했으며, 실제 응답 형태의 회귀 테스트를 red→green으로 고정했다. 전체 테스트 273개와 debug build를 통과했고, 실제 번들의 상태바와 Usage 팝오버에서 Codex 43% 표시를 확인했다. `leaks`에서는 MarkAgent 사용량 코드가 아닌 macOS `linkd` 시스템 XPC cycle만 관찰됐으며 독립 테스터 게이트도 PASS했다.
+
+변경 파일: `Sources/Core/ProviderUsageClients.swift`, `Tests/MarkAgentTests/ProviderUsageClientTests.swift`
+
+---
+
+### 대화 2: v1.8.5 dev·main 승격 및 GitHub Release
+
+**사용자:**
+> 별도의 브랜치에서 dev pr 머지, main pr 머지를 하고 릴리즈도 해줘
+
+**응답:**
+앱 short/build version을 `1.8.5`로 갱신하고 Codex 사용량 선택 수정과 회귀 테스트를 `codex/v1.8.5-codex-usage-selection` 브랜치에서 준비한다. 독립 review gate를 통과한 뒤 dev PR과 main PR을 merge commit 방식으로 순차 병합하고, 최신 main merge commit을 기준으로 Developer ID 서명·Apple 공증·stapling을 완료한 `MarkAgent-v1.8.5.zip`을 `v1.8.5` GitHub Release 자산으로 게시한다.
+
+변경 파일: `Sources/Core/ProviderUsageClients.swift`, `Tests/MarkAgentTests/ProviderUsageClientTests.swift`, `Sources/App/Info.plist`, `history.md`
