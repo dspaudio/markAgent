@@ -41,6 +41,9 @@ release_zip_path() {
 
 # 빌드
 echo "Building ($CONFIG)..."
+swift package --package-path "$PROJECT_DIR" resolve
+/bin/bash "$SCRIPT_DIR/patch-libghostty-resource-bundle.sh" \
+    "$PROJECT_DIR/.build/checkouts/libghostty-spm"
 swift build -c "$CONFIG" --package-path "$PROJECT_DIR"
 
 # 기존 번들 제거 후 구조 생성
@@ -55,6 +58,9 @@ cp "$PROJECT_DIR/README.md" "$CONTENTS_DIR/Resources/README.md"
 if [ -d "$PROJECT_DIR/Sources/App/Resources" ]; then
     cp -R "$PROJECT_DIR/Sources/App/Resources/." "$CONTENTS_DIR/Resources/"
 fi
+/bin/bash "$SCRIPT_DIR/copy-swiftpm-resource-bundles.sh" \
+    "$PROJECT_DIR/.build/$CONFIG" \
+    "$BUNDLE_DIR"
 
 should_codesign() {
     [ "$ACTION" = "debug" ] || [ "$ACTION" = "release" ] || [ "$ACTION" = "install" ]
