@@ -2,7 +2,7 @@
 # MarkAgent.app 번들 생성 스크립트
 #
 # 사용법:
-#   scripts/bundle.sh              # debug 빌드 + 번들 생성
+#   scripts/bundle.sh              # debug 빌드 + 가능한 경우 Developer ID 서명 + 번들 생성
 #   scripts/bundle.sh release      # release 빌드 + Developer ID 서명 + ZIP 생성/검증
 #   scripts/bundle.sh install      # release 빌드 + 서명 + ~/Applications 설치 + CLI 심볼릭 링크
 #
@@ -57,7 +57,7 @@ if [ -d "$PROJECT_DIR/Sources/App/Resources" ]; then
 fi
 
 should_codesign() {
-    [ "$ACTION" = "release" ] || [ "$ACTION" = "install" ]
+    [ "$ACTION" = "debug" ] || [ "$ACTION" = "release" ] || [ "$ACTION" = "install" ]
 }
 
 requires_codesign() {
