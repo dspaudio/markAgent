@@ -70,6 +70,7 @@
 70. [세션 66: 프로젝트 워크스페이스와 Git 유틸리티 및 v1.8.0 릴리즈](#세션-66-프로젝트-워크스페이스와-git-유틸리티-및-v180-릴리즈)
 71. [세션 67: AI 구독 상태와 시스템 상태 바 및 v1.8.1 릴리즈](#세션-67-ai-구독-상태와-시스템-상태-바-및-v181-릴리즈)
 72. [세션 68: 사용량 폴링 메모리 폭주 수정 및 v1.8.2 릴리즈](#세션-68-사용량-폴링-메모리-폭주-수정-및-v182-릴리즈)
+73. [세션 69: Keychain Always Allow 서명 안정화 및 v1.8.3 릴리즈](#세션-69-keychain-always-allow-서명-안정화-및-v183-릴리즈)
 
 ---
 
@@ -162,6 +163,7 @@
 | 83 | 프로젝트 워크스페이스와 Git 유틸리티 및 v1.8.0 릴리즈 | 프로젝트별 탭·터미널 상태를 격리하고 3열 워크스페이스, Git History/Changes, 반응형 사이드바, 테마·탭 chrome 회귀 수정을 통합해 앱 번들 버전 1.8.0 갱신 |
 | 84 | AI 구독 상태와 시스템 상태 바 및 v1.8.1 릴리즈 | Claude·Codex 사용량과 리셋 시간, Caffeinate·메모리 상태를 하단 상태 바에 통합하고 앱 번들 버전 1.8.1 갱신 |
 | 85 | 사용량 폴링 메모리 폭주 수정 및 v1.8.2 릴리즈 | 첫 15분 polling tick 뒤 대기 루프가 busy loop로 전환되던 문제와 provider 중복 refresh를 수정하고 앱 번들 버전 1.8.2 갱신 |
+| 86 | Keychain Always Allow 서명 안정화 및 v1.8.3 릴리즈 | debug 번들의 Developer ID 서명을 활성화해 Claude 자격 증명 Always Allow 승인을 재빌드 후에도 유지하고 앱 번들 버전 1.8.3 갱신 |
 
 ---
 
@@ -3376,3 +3378,36 @@ Codex 50회와 Claude 요청·formatter·Keychain·URLSession 경로를 각각 �
 PR 전 전용 review worktree의 5-way 검증에서 timer-first 회귀 테스트가 50ms inverted expectation에 의존해 scheduler timing으로 통과할 수 있다는 blocker를 확인했다. `PollingWakeSignal`의 deadline scheduler를 주입 가능하게 하고, 테스트가 첫 deadline work item을 직접 실행한 뒤 두 번째 waiter의 deadline 등록을 기다리고 signal로 완료하도록 변경해 고정 sleep과 부정 조건 대기를 제거했다. 빠른 stop/start에서 waiter가 교체되는 race는 waiter dictionary로 격리하고, 만료 retry와 in-flight refresh가 겹칠 때 delay 0 busy loop가 재발하지 않도록 해당 provider를 retry delay 계산에서 제외했다. 동일 enable 요청은 generation을 변경하기 전에 no-op 처리하며, 릴리즈 규칙에 맞춰 README의 영어 Features와 한국어 주요 기능에 AI 구독·시스템 상태를 반영했다.
 
 변경 파일: `Sources/Core/SubscriptionStatusModel.swift`, `Tests/MarkAgentTests/SubscriptionStatusModelTests.swift`, `README.md`, `history.md`
+
+---
+
+## 세션 69: Keychain Always Allow 서명 안정화 및 v1.8.3 릴리즈
+
+> 날짜: 2026-09-07
+> 경로: ~/workspace/markAgent
+
+debug 번들을 다시 만들 때마다 ad-hoc CDHash가 바뀌어 Claude Code Keychain 항목의 Always Allow 승인이 무효화되던 문제를 진단했다. debug 앱도 사용 가능한 Developer ID로 서명해 빌드가 달라져도 동일한 designated requirement를 유지하도록 수정하고 v1.8.3으로 배포한다.
+
+### 대화 1: Keychain Always Allow 반복 프롬프트 수정
+
+**사용자:**
+> markAgent를 실행할 때 마다 keychain에 연결하기 위해 password를 물어보는데, 이건 문제가 있어. 수정해야해.
+>
+> 처음엔 물어볼 수 있어. 근데, 항상허용 버튼을 클릭했는데도 실행할때 마다 다시 물어보는게 이상했던 지점이야
+
+**응답:**
+securityd 로그와 code requirement를 대조해 ad-hoc debug bundle이 재빌드마다 새로운 CDHash로 식별되고, Keychain ACL에는 이전 build별 CDHash가 누적되는 원인을 확인했다. `scripts/bundle.sh`의 debug action도 기존 Developer ID 서명 경로를 사용하도록 변경했다. 서로 다른 두 debug bundle의 CDHash가 달라도 `com.markagent.ma`와 Team ID `8PH7LHLS2F`에 묶인 designated requirement가 동일함을 검증했고, 최종 재실행에서 추가 Keychain prompt 없이 Claude 사용량 `0%`, 남은 시간 `3시간 9분`이 표시됐다. 전체 Swift 테스트 271개, Bash 문법, strict codesign, 실제 앱 누수 점검과 독립 QA 게이트를 통과했다.
+
+변경 파일: `scripts/bundle.sh`, `history.md`
+
+---
+
+### 대화 2: v1.8.3 dev·main 승격 및 GitHub Release
+
+**사용자:**
+> 1.8.3으로 릴리즈하고 dev pr 머지, main pr 머지까지 진행해줘
+
+**응답:**
+앱 short/build version을 `1.8.3`으로 갱신하고 stable debug signing 수정을 전용 release 브랜치에서 준비한다. frozen review worktree의 독립 검증을 통과한 뒤 dev PR과 main PR을 순차 병합하고, 최신 main merge commit을 기준으로 Developer ID 서명·Apple 공증·stapling을 완료한 `MarkAgent-v1.8.3.zip`을 `v1.8.3` GitHub Release 자산으로 게시한다.
+
+변경 파일: `Sources/App/Info.plist`, `history.md`
