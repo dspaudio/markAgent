@@ -73,6 +73,7 @@
 73. [세션 69: Keychain Always Allow 서명 안정화 및 v1.8.3 릴리즈](#세션-69-keychain-always-allow-서명-안정화-및-v183-릴리즈)
 74. [세션 70: SwiftPM 리소스 패키징 크래시 수정 및 v1.8.4 릴리즈](#세션-70-swiftpm-리소스-패키징-크래시-수정-및-v184-릴리즈)
 75. [세션 71: Codex 사용량 스냅샷 선택 수정 및 v1.8.5 릴리즈](#세션-71-codex-사용량-스냅샷-선택-수정-및-v185-릴리즈)
+76. [세션 72: Claude 상태줄 연동과 프로젝트 탐색 개선 및 v1.8.6 릴리즈](#세션-72-claude-상태줄-연동과-프로젝트-탐색-개선-및-v186-릴리즈)
 
 ---
 
@@ -168,6 +169,7 @@
 | 86 | Keychain Always Allow 서명 안정화 및 v1.8.3 릴리즈 | debug 번들의 Developer ID 서명을 활성화해 Claude 자격 증명 Always Allow 승인을 재빌드 후에도 유지하고 앱 번들 버전 1.8.3 갱신 |
 | 87 | SwiftPM 리소스 패키징 크래시 수정 및 v1.8.4 릴리즈 | Ghostty와 HighlightSwift 리소스 번들을 서명 가능한 앱 경로에 포함하고 패키지 리소스 우선 해석을 보강해 앱 기동 크래시를 수정한 뒤 앱 번들 버전 1.8.4 갱신 |
 | 88 | Codex 사용량 스냅샷 선택 수정 및 v1.8.5 릴리즈 | 최상위 Codex rateLimits를 우선하도록 파서를 수정하고 회귀 테스트와 실제 앱 검증 후 앱 번들 버전 1.8.5로 승격 |
+| 89 | Claude 상태줄 연동과 프로젝트 탐색 개선 및 v1.8.6 릴리즈 | Claude 자격 증명 조회를 공식 상태줄 수신으로 대체하고 프로젝트·탭 단축키, 기본 이름, 행 정렬과 드래그 순서 저장을 개선해 v1.8.6 배포 준비 |
 
 ---
 
@@ -3477,3 +3479,59 @@ Codex 0.153.0의 `account/rateLimits/read` 응답에 `base_model_inference`, `co
 앱 short/build version을 `1.8.5`로 갱신하고 Codex 사용량 선택 수정과 회귀 테스트를 `codex/v1.8.5-codex-usage-selection` 브랜치에서 준비한다. 독립 review gate를 통과한 뒤 dev PR과 main PR을 merge commit 방식으로 순차 병합하고, 최신 main merge commit을 기준으로 Developer ID 서명·Apple 공증·stapling을 완료한 `MarkAgent-v1.8.5.zip`을 `v1.8.5` GitHub Release 자산으로 게시한다.
 
 변경 파일: `Sources/Core/ProviderUsageClients.swift`, `Tests/MarkAgentTests/ProviderUsageClientTests.swift`, `Sources/App/Info.plist`, `history.md`
+
+
+---
+
+## 세션 72: Claude 상태줄 연동과 프로젝트 탐색 개선 및 v1.8.6 릴리즈
+
+> 날짜: 2026-09-10
+> 경로: ~/workspace/markAgent
+
+Claude 사용량 조회에서 반복되던 Keychain 암호 요청을 없애기 위해 인증정보 조회 경로를 제거하고 공식 상태줄 수신으로 전환했다. 프로젝트 탐색 단축키와 사이드바 이름·정렬·드래그 동작을 함께 개선하고 v1.8.6 릴리즈를 준비한다.
+
+### 대화 1: Claude 공식 상태줄 연동으로 전환
+
+**사용자:**
+> 항상 허용을 선택해도 주기적으로 키체인 암호를 묻는 문제를 없애야 한다. 애초에 키체인으로 접근하는 방법을 바꾸고 공식 상태줄 연동으로 전환한다.
+
+**응답:**
+Claude OAuth 클라이언트와 Keychain 토큰 읽기를 삭제하고, 공식 statusLine 입력에서 5시간·7일 사용량과 리셋 시각만 정제해 로컬 캐시에 저장하도록 변경했다. 토큰·세션 정보는 저장하지 않으며 캐시 크기, 파일 권한, 원자적 쓰기, 심볼릭 링크, 만료를 검증한다. Settings에서 상태줄을 연결·해제하고 기존 상태줄 명령의 입력·출력·종료 코드를 보존하며 최소한의 원본 설정만 백업한다. Claude 응답 후 수신 시각과 사용량을 갱신하고 1시간이 지나거나 사용 구간이 리셋되면 만료 처리한다. 사용자가 실제 설정에서 연결을 확인했고, 앱에서 5시간 1%·7일 34%와 마지막 수신 시각 표시를 확인했다.
+
+변경 파일: `Sources/Core/ClaudeStatuslineIntegration.swift`, `Sources/Core/ClaudeStatuslineUsageStore.swift`, `Sources/Core/ClaudeOAuthUsageClient.swift`(삭제), `Sources/Core/ProviderUsageClients.swift`, `Sources/Core/SubscriptionStatusModel.swift`, `Sources/App/main.swift`, `Sources/App/AppDelegate.swift`, `Sources/App/PreferencesView.swift`, `Sources/Views/Main/BottomStatusBar.swift`, 관련 테스트·번역
+
+### 대화 2: 프로젝트·탭 단축키와 기본 작업 공간 정렬
+
+**사용자:**
+> 탭 단축키는 Cmd+Shift+숫자로 변경하고 Cmd+숫자는 미분류와 프로젝트 순서에 할당한다. 미분류 이름도 적절하게 바꾸고 프로젝트 이름과 같은 위치에 정렬한다.
+
+**응답:**
+Cmd+1은 기본 작업 공간, Cmd+2부터 Cmd+0은 사이드바 순서의 첫 아홉 프로젝트를 선택하도록 변경했다. Cmd+Shift+1부터 Cmd+Shift+9는 기존 탭 그룹 선택·순환을 유지하고 Cmd+Shift+0은 열 번째 탭을 선택한다. 메뉴·탭 배지·키 이벤트를 일치시키고 숫자 패드와 Shift 기호 입력도 처리한다. 기존 미분류 표시를 기본/Default로 변경하고 기본 행과 프로젝트 행의 아이콘·텍스트 시작 위치를 맞췄다. 실제 QA 앱에서 단축키와 정렬을 확인했으며 libghostty-spm PR #23의 선택 복사 수정이 사용하는 v1.4.0 revision `356f730bec03281fc7b83666a129b0246137ea26`에 포함됨을 확인했다. 의존성은 변경하지 않았다.
+
+변경 파일: `Sources/App/MarkAgentWindow.swift`, `Sources/App/AppDelegate.swift`, `Sources/Views/Main/TabBarView.swift`, `Sources/Views/Main/TabItemView.swift`, `Sources/Views/Sidebar/ProjectSidebar.swift`, `Tests/MarkAgentTests/NumberNavigationShortcutTests.swift`, 한국어·영어 번역, `README.md`
+
+### 대화 3: 프로젝트 드래그 순서 변경 복구와 메모리 점검
+
+**사용자:**
+> 프로젝트 목록에서 드래그해 순서를 바꾸는 기능이 아직 적용되지 않은 것 같다.
+>
+> 별도 QA 창에서 드래그했을 때 순서가 바뀜.
+>
+> 이전에도 관측된 계열의 누수는 어떤 것인가?
+
+**응답:**
+기존 List.onMove 대신 프로젝트 UUID를 전달하는 전용 드래그 타입과 행별 드롭 처리를 연결했다. 드롭 완료 시 최신 프로젝트 목록에서 위치를 계산해 순서를 저장하며, 같은 ID·삭제된 ID는 무시한다. 선택·편집·삭제 버튼을 유지하고 기본 행과 정렬을 맞췄다. 회귀 테스트의 실패를 먼저 확인한 뒤 양방향 이동, 저장 후 복원, 선택 콜백 미호출을 검증했고 관련 테스트 50개가 통과했다. 자동화 입력에서는 드래그 시작 뒤 드롭이 전달되지 않아 사용자가 직접 순서 변경을 확인했다. 수동 변경 순서의 재실행 복원은 별도로 관측하지 않았으며 저장 동작은 자동화 테스트로 확인했다.
+
+실제 QA 프로세스의 `leaks`에서는 340개 객체, 15,904바이트가 보고됐다. XPC 연결 순환과 AXObserverCookie·NSArray는 이전 로그에도 나타나는 유형이지만 원인과 소유권은 확정하지 않았고 장시간 누적 여부도 측정하지 않았다. 누수 0건으로 판정하지 않았으며 이 한계를 사용자에게 설명했다. 근거는 `.omo/evidence/project-reorder-20260910/verification.md`와 `leaks.log`에 남겼다.
+
+변경 파일: `Sources/Views/Sidebar/ProjectSidebar.swift`, `Sources/Views/Sidebar/ProjectSidebarController.swift`, `Sources/App/Info.plist`, `Tests/MarkAgentTests/ProjectSidebarControllerTests.swift`
+
+### 대화 4: v1.8.6 dev·main 승격 및 GitHub Release
+
+**사용자:**
+> 1.8.6 릴리즈를 해줘. dev pr 머지, main pr 머지도 해야해.
+
+**응답:**
+앱 short/build version을 `1.8.6`으로 갱신하고 이번 기능·회귀 테스트·문서를 `codex/v1.8.6-statusline-workspaces` 브랜치에서 준비한다. 최종 전체 테스트 307개가 통과했으며, Developer ID 서명·Apple 공증·stapling·압축 해제 후 codesign/Gatekeeper 검증을 수행한 뒤 dev PR과 main PR을 merge commit 방식으로 순차 병합한다. 최종 main merge commit에 `v1.8.6` 태그를 연결하고 검증한 `MarkAgent-v1.8.6.zip`을 GitHub Release 자산으로 게시한다. 기존 미추적 개인 파일과 과거 릴리즈 ZIP은 커밋에서 제외한다.
+
+변경 파일: `Sources/App/Info.plist`, `README.md`, `history.md`

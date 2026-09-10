@@ -150,10 +150,10 @@ struct TabItemView: View {
     private var trailingActionSlot: some View {
         ZStack(alignment: .trailing) {
             if let groupShortcutNumber {
-                Text("⌘\(groupShortcutNumber)")
+                Text("⌘⇧\(groupShortcutNumber)")
                     .font(.system(size: 10, weight: .semibold, design: .rounded))
                     .foregroundStyle(isActive ? activeGroupTextColor : groupTextColor)
-                    .frame(width: 28, height: 16)
+                    .frame(width: 36, height: 16)
                     .background(
                         Capsule()
                             .fill(isActive ? activeGroupBadgeColor : groupBadgeColor)
@@ -172,6 +172,6 @@ struct TabItemView: View {
                 .opacity(isHovering ? 1.0 : 0.0)
             }
         }
-        .frame(width: 28, height: 16, alignment: .trailing)
+        .frame(width: 36, height: 16, alignment: .trailing)
     }
 }

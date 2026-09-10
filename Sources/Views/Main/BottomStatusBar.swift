@@ -218,6 +218,14 @@ struct UsagePopover: View {
 
             switch subscriptionStatus.state(for: provider) {
             case .available(let usage):
+                if let observedAt = usage.observedAt {
+                    Text(String(
+                        format: String(localized: "Claude에서 마지막 수신: %@"),
+                        observedAt.formatted(date: .omitted, time: .shortened)
+                    ))
+                    .font(.caption)
+                    .foregroundStyle(secondaryTextColor)
+                }
                 ForEach(Array(usage.windows.enumerated()), id: \.offset) { _, window in
                     VStack(alignment: .leading, spacing: 5) {
                         HStack {

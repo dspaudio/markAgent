@@ -27,10 +27,16 @@ struct SubscriptionUsageWindow: Equatable, Sendable {
 struct SubscriptionUsage: Equatable, Sendable {
     let primary: SubscriptionUsageWindow
     let secondary: SubscriptionUsageWindow?
+    let observedAt: Date?
 
-    init(primary: SubscriptionUsageWindow, secondary: SubscriptionUsageWindow? = nil) {
+    init(
+        primary: SubscriptionUsageWindow,
+        secondary: SubscriptionUsageWindow? = nil,
+        observedAt: Date? = nil
+    ) {
         self.primary = primary
         self.secondary = secondary
+        self.observedAt = observedAt
     }
 
     var windows: [SubscriptionUsageWindow] {
@@ -194,7 +200,16 @@ final class SubscriptionStatusModel {
             }
             await recordFailure(for: provider)
             let message: String
-            if error as? ProviderUsageClientError == .unsupportedResponse {
+            if let statuslineError = error as? ClaudeStatuslineUsageError {
+                switch statuslineError {
+                case .noData:
+                    message = String(localized: "Claude 상태줄을 연결한 뒤 Claude에서 응답을 받으면 사용량이 표시됩니다.")
+                case .staleData:
+                    message = String(localized: "Claude 사용량 정보가 만료되었습니다. Claude에서 다음 응답을 받으면 갱신됩니다.")
+                case .malformedData:
+                    message = String(localized: "Claude 상태줄 사용량 정보를 읽을 수 없습니다.")
+                }
+            } else if error as? ProviderUsageClientError == .unsupportedResponse {
                 message = "\(provider.displayName) CLI가 구독 사용량을 제공하지 않습니다."
             } else {
                 message = "Unable to load \(provider.displayName) usage."
