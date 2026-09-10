@@ -135,7 +135,7 @@ struct TabBarView: View {
                 } label: {
                     EmptyView()
                 }
-                .keyboardShortcut(KeyEquivalent(Character("\(shortcutNumber)")), modifiers: .command)
+                .keyboardShortcut(KeyEquivalent(Character("\(shortcutNumber)")), modifiers: [.command, .shift])
                 .frame(width: 0, height: 0)
                 .opacity(0)
                 .accessibilityHidden(true)

@@ -140,6 +140,19 @@ final class ProjectSidebarController {
         )
     }
 
+    @discardableResult
+    func moveProject(id: UUID, to targetID: UUID) -> Bool {
+        guard id != targetID,
+              let sourceIndex = projectStore.projects.firstIndex(where: { $0.id == id }),
+              let targetIndex = projectStore.projects.firstIndex(where: { $0.id == targetID })
+        else { return false }
+
+        return moveProjects(
+            fromOffsets: IndexSet(integer: sourceIndex),
+            toOffset: targetIndex > sourceIndex ? targetIndex + 1 : targetIndex
+        )
+    }
+
     func requestDelete(_ project: Project) {
         deleteRequest = project
     }

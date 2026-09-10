@@ -298,6 +298,84 @@ final class ProjectSidebarControllerTests: XCTestCase {
     }
 
     @MainActor
+    func testMoveProjectByIDMovesDownwardAndPersistsWithoutSelectionCallbacks() throws {
+        try withIsolatedStore { store, root, defaults in
+            let aDirectory = try createDirectory(named: "a", in: root)
+            let bDirectory = try createDirectory(named: "b", in: root)
+            let cDirectory = try createDirectory(named: "c", in: root)
+            let a = try XCTUnwrap(store.add(name: "A", directoryURL: aDirectory))
+            let b = try XCTUnwrap(store.add(name: "B", directoryURL: bDirectory))
+            let c = try XCTUnwrap(store.add(name: "C", directoryURL: cDirectory))
+            var selectedProjects: [Project] = []
+            var unscopedSelectionCount = 0
+            let controller = ProjectSidebarController(
+                projectStore: store,
+                onSelectProject: { selectedProjects.append($0) },
+                onSelectUnscoped: { unscopedSelectionCount += 1 }
+            )
+
+            XCTAssertTrue(controller.moveProject(id: a.id, to: c.id))
+
+            XCTAssertEqual(store.projects, [b, c, a])
+            XCTAssertEqual(ProjectStore(defaults: defaults).projects, [b, c, a])
+            XCTAssertTrue(selectedProjects.isEmpty)
+            XCTAssertEqual(unscopedSelectionCount, 0)
+        }
+    }
+
+    @MainActor
+    func testMoveProjectByIDResolvesUpwardMoveFromCurrentOrder() throws {
+        try withIsolatedStore { store, root, defaults in
+            let aDirectory = try createDirectory(named: "a", in: root)
+            let bDirectory = try createDirectory(named: "b", in: root)
+            let cDirectory = try createDirectory(named: "c", in: root)
+            let a = try XCTUnwrap(store.add(name: "A", directoryURL: aDirectory))
+            let b = try XCTUnwrap(store.add(name: "B", directoryURL: bDirectory))
+            let c = try XCTUnwrap(store.add(name: "C", directoryURL: cDirectory))
+            let controller = ProjectSidebarController(projectStore: store, onSelectProject: { _ in })
+            XCTAssertTrue(store.moveProjects(fromOffsets: IndexSet(integer: 0), toOffset: 3))
+            XCTAssertEqual(store.projects, [b, c, a])
+
+            XCTAssertTrue(controller.moveProject(id: a.id, to: b.id))
+
+            XCTAssertEqual(store.projects, [a, b, c])
+            XCTAssertEqual(ProjectStore(defaults: defaults).projects, [a, b, c])
+        }
+    }
+
+    @MainActor
+    func testMoveProjectByIDRejectsSameMissingAndDeletedIDsWithoutMutation() throws {
+        try withIsolatedStore { store, root, defaults in
+            let aDirectory = try createDirectory(named: "a", in: root)
+            let bDirectory = try createDirectory(named: "b", in: root)
+            let deletedDirectory = try createDirectory(named: "deleted", in: root)
+            let a = try XCTUnwrap(store.add(name: "A", directoryURL: aDirectory))
+            let b = try XCTUnwrap(store.add(name: "B", directoryURL: bDirectory))
+            let deleted = try XCTUnwrap(store.add(name: "Deleted", directoryURL: deletedDirectory))
+            var selectedProjects: [Project] = []
+            var unscopedSelectionCount = 0
+            let controller = ProjectSidebarController(
+                projectStore: store,
+                onSelectProject: { selectedProjects.append($0) },
+                onSelectUnscoped: { unscopedSelectionCount += 1 }
+            )
+            store.delete(deleted)
+            let expectedPersistedData = defaults.data(forKey: projectsDefaultsKey)
+
+            XCTAssertFalse(controller.moveProject(id: a.id, to: a.id))
+            XCTAssertFalse(controller.moveProject(id: UUID(), to: b.id))
+            XCTAssertFalse(controller.moveProject(id: a.id, to: UUID()))
+            XCTAssertFalse(controller.moveProject(id: deleted.id, to: b.id))
+            XCTAssertFalse(controller.moveProject(id: a.id, to: deleted.id))
+
+            XCTAssertEqual(store.projects, [a, b])
+            XCTAssertEqual(defaults.data(forKey: projectsDefaultsKey), expectedPersistedData)
+            XCTAssertTrue(selectedProjects.isEmpty)
+            XCTAssertEqual(unscopedSelectionCount, 0)
+        }
+    }
+
+    @MainActor
     func testCancelEditorClearsDraftWithoutMutatingStore() throws {
         try withIsolatedStore { store, root, defaults in
             let directory = try createDirectory(named: "workspace", in: root)
