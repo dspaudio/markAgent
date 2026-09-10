@@ -361,6 +361,8 @@ struct PreferencesView: View {
 struct AISubscriptionsSettingsRows: View {
     var subscriptionStatus: SubscriptionStatusModel
     @State private var cliVersions: [SubscriptionProvider: String] = [:]
+    @State private var isClaudeStatuslineConnected = false
+    @State private var claudeStatuslineError: String?
 
     init(
         subscriptionStatus: SubscriptionStatusModel,
@@ -375,6 +377,7 @@ struct AISubscriptionsSettingsRows: View {
             providerRegistrationRow(provider)
         }
         .task {
+            isClaudeStatuslineConnected = ClaudeStatuslineIntegration.isInstalled()
             await loadCLIVersions()
         }
     }
@@ -393,10 +396,7 @@ struct AISubscriptionsSettingsRows: View {
                     isOn: Binding(
                         get: { subscriptionStatus.enabledProviders.contains(provider) },
                         set: { isEnabled in
-                            subscriptionStatus.setEnabled(isEnabled, for: provider)
-                            if isEnabled {
-                                Task { await subscriptionStatus.refresh(provider) }
-                            }
+                            setProviderEnabled(isEnabled, provider: provider)
                         }
                     )
                 )
@@ -424,6 +424,27 @@ struct AISubscriptionsSettingsRows: View {
             .font(.system(size: 10, design: .monospaced))
             .foregroundStyle(.secondary)
 
+            if provider == .claude {
+                Text("Claude 응답 후 5시간·7일 사용량을 받습니다. 기존 상태줄은 유지됩니다.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                if subscriptionStatus.enabledProviders.contains(.claude), !isClaudeStatuslineConnected {
+                    Button("Claude 상태줄 연결") {
+                        setProviderEnabled(true, provider: .claude)
+                    }
+                    .accessibilityIdentifier("settings-claude-statusline-connect")
+                }
+
+                if let claudeStatuslineError {
+                    Text(claudeStatuslineError)
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+
             HStack {
                 Text(providerStateText(subscriptionStatus.state(for: provider)))
                     .font(.caption)
@@ -442,12 +463,33 @@ struct AISubscriptionsSettingsRows: View {
         .padding(.vertical, 4)
     }
 
+    private func setProviderEnabled(_ isEnabled: Bool, provider: SubscriptionProvider) {
+        if provider == .claude {
+            do {
+                if isEnabled, let executableURL = Bundle.main.executableURL {
+                    try ClaudeStatuslineIntegration.install(executableURL: executableURL)
+                } else if !isEnabled {
+                    try ClaudeStatuslineIntegration.uninstall()
+                }
+                isClaudeStatuslineConnected = ClaudeStatuslineIntegration.isInstalled()
+                claudeStatuslineError = nil
+            } catch {
+                claudeStatuslineError = error.localizedDescription
+                return
+            }
+        }
+        subscriptionStatus.setEnabled(isEnabled, for: provider)
+        if isEnabled {
+            Task { await subscriptionStatus.refresh(provider) }
+        }
+    }
+
     private func providerStateText(_ state: SubscriptionProviderState) -> String {
         switch state {
         case .disabled:
             return String(localized: "미등록")
         case .loading:
-            return String(localized: "인증 및 사용량 확인 중…")
+            return String(localized: "사용량 확인 중…")
         case .available(let usage):
             return String(
                 format: String(localized: "연결됨 · %.0f%% 사용 · reset %@"),

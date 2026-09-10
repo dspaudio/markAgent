@@ -2,7 +2,6 @@ import Foundation
 
 enum ProviderUsageClientError: Error, Equatable, Sendable {
     case executableMissing
-    case credentialsMissing
     case httpStatus(Int)
     case malformedResponse
     case unsupportedResponse
@@ -16,10 +15,7 @@ enum ProviderUsageClients {
     ) -> [SubscriptionProvider: SubscriptionStatusModel.Loader] {
         var loaders: [SubscriptionProvider: SubscriptionStatusModel.Loader] = [
             .claude: {
-                let accessToken = try ClaudeOAuthCredentialReader.readAccessToken(
-                    homeDirectory: homeDirectory
-                )
-                return try await ClaudeOAuthUsageClient.fetch(accessToken: accessToken)
+                try ClaudeStatuslineUsageStore.load(homeDirectory: homeDirectory)
             },
         ]
 
@@ -73,80 +69,6 @@ enum ProviderExecutableLocator {
             return nil
         }
         return text.split(whereSeparator: \.isNewline).first.map(String.init)
-    }
-}
-
-enum ClaudeUsageClient {
-    static func request(executableURL: URL, homeDirectory: URL) -> GitHistoryProcessRequest {
-        GitHistoryProcessRequest(
-            executableURL: executableURL,
-            arguments: ["-p", "/usage", "--output-format", "json", "--no-session-persistence"],
-            timeoutSeconds: 10,
-            outputByteLimit: 1_048_576,
-            environment: providerEnvironment(homeDirectory: homeDirectory) + [
-                "TZ=UTC",
-                "NO_COLOR=1",
-                "CLAUDE_CODE_SKIP_PROMPT_HISTORY=1",
-            ]
-        )
-    }
-
-    static func parse(_ data: Data, now: Date = Date()) throws -> SubscriptionUsage {
-        let object = try JSONSerialization.jsonObject(with: data)
-        guard let response = object as? [String: Any],
-              response["is_error"] as? Bool == false,
-              (response["duration_api_ms"] as? NSNumber)?.doubleValue == 0,
-              (response["num_turns"] as? NSNumber)?.intValue == 0,
-              (response["total_cost_usd"] as? NSNumber)?.doubleValue == 0,
-              let result = response["result"] as? String else {
-            throw ProviderUsageClientError.unsupportedResponse
-        }
-
-        let pattern = #"^(Current session|Current week[^:]*):\s+(\d+(?:\.\d+)?)% used\s+·\s+resets\s+(.+?)\s+\(UTC\)$"#
-        let expression = try NSRegularExpression(pattern: pattern)
-        var windows: [SubscriptionUsageWindow] = []
-
-        for line in result.split(whereSeparator: \.isNewline).map(String.init) {
-            let range = NSRange(line.startIndex..., in: line)
-            guard let match = expression.firstMatch(in: line, range: range),
-                  match.numberOfRanges == 4,
-                  let nameRange = Range(match.range(at: 1), in: line),
-                  let percentRange = Range(match.range(at: 2), in: line),
-                  let resetRange = Range(match.range(at: 3), in: line),
-                  let percent = Double(line[percentRange]),
-                  (0...100).contains(percent),
-                  let resetDate = parseClaudeReset(String(line[resetRange]), now: now) else {
-                continue
-            }
-            windows.append(
-                SubscriptionUsageWindow(
-                    name: String(line[nameRange]),
-                    usedPercent: percent,
-                    resetsAt: resetDate
-                )
-            )
-        }
-
-        guard let primary = windows.first else {
-            throw ProviderUsageClientError.unsupportedResponse
-        }
-        return SubscriptionUsage(primary: primary, secondary: windows.dropFirst().first)
-    }
-
-    private static func parseClaudeReset(_ value: String, now: Date) -> Date? {
-        let calendar = Calendar(identifier: .gregorian)
-        let year = calendar.component(.year, from: now)
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.timeZone = TimeZone(secondsFromGMT: 0)
-        formatter.dateFormat = "MMM d 'at' ha yyyy"
-
-        guard var date = formatter.date(from: "\(value) \(year)") else { return nil }
-        if date < now.addingTimeInterval(-300),
-           let nextYear = calendar.date(byAdding: .year, value: 1, to: date) {
-            date = nextYear
-        }
-        return date
     }
 }
 
