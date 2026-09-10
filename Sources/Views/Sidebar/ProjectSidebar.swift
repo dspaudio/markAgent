@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import UniformTypeIdentifiers
 
 enum ProjectWorkspaceAccessibility {
     static func traits(isSelected: Bool) -> AccessibilityTraits {
@@ -17,6 +18,9 @@ struct ProjectSidebar: View {
 
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.terminalAppTheme) private var terminalAppTheme
+    @State private var dropTargetID: UUID?
+
+    private static let projectDragType = UTType(exportedAs: "com.markagent.project-reorder", conformingTo: .data)
 
     var body: some View {
         VStack(spacing: 0) {
@@ -97,19 +101,13 @@ struct ProjectSidebar: View {
                 }
                 .accessibilityIdentifier("project-sidebar-empty")
             } else {
-                List {
-                    ForEach(projectStore.projects) { project in
-                        projectRow(project)
-                            .listRowInsets(EdgeInsets())
-                            .listRowSeparator(.hidden)
-                            .listRowBackground(Color.clear)
-                    }
-                    .onMove { source, destination in
-                        _ = controller.moveProjects(fromOffsets: source, toOffset: destination)
+                ScrollView {
+                    LazyVStack(spacing: 0) {
+                        ForEach(projectStore.projects) { project in
+                            projectRow(project)
+                        }
                     }
                 }
-                .listStyle(.sidebar)
-                .scrollContentBackground(.hidden)
                 .background(appColors?.panel ?? Color(nsColor: .controlBackgroundColor))
             }
         }
@@ -170,6 +168,12 @@ struct ProjectSidebar: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+            .onDrag {
+                NSItemProvider(
+                    item: Data(project.id.uuidString.utf8) as NSData,
+                    typeIdentifier: Self.projectDragType.identifier
+                )
+            }
             .accessibilityIdentifier("project-sidebar-row-\(project.id.uuidString)")
             .accessibilityAddTraits(
                 ProjectWorkspaceAccessibility.traits(
@@ -201,9 +205,40 @@ struct ProjectSidebar: View {
             .help(String(localized: "프로젝트 삭제"))
             .accessibilityIdentifier("project-sidebar-delete-\(project.id.uuidString)")
         }
-        .padding(.horizontal, 8)
+        .padding(.horizontal, 16)
         .padding(.vertical, 6)
         .background(selectionBackground(for: .project(project.id)))
+        .overlay {
+            if dropTargetID == project.id {
+                Rectangle()
+                    .stroke(appColors?.accent ?? Color.accentColor, lineWidth: 1)
+                    .allowsHitTesting(false)
+            }
+        }
+        .onDrop(
+            of: [Self.projectDragType],
+            isTargeted: Binding(
+                get: { dropTargetID == project.id },
+                set: { isTargeted in
+                    if isTargeted {
+                        dropTargetID = project.id
+                    } else if dropTargetID == project.id {
+                        dropTargetID = nil
+                    }
+                }
+            )
+        ) { providers in
+            guard providers.count == 1, let provider = providers.first else { return false }
+            provider.loadDataRepresentation(forTypeIdentifier: Self.projectDragType.identifier) { data, _ in
+                guard let data,
+                      let value = String(data: data, encoding: .utf8),
+                      let projectID = UUID(uuidString: value) else { return }
+                Task { @MainActor in
+                    controller.moveProject(id: projectID, to: project.id)
+                }
+            }
+            return true
+        }
         .contextMenu {
             Button(String(localized: "프로젝트 편집")) {
                 controller.beginEdit(project)

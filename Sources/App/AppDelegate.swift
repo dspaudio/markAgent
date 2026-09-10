@@ -136,8 +136,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         window.tabbingMode = .disallowed
         window.level = .normal
         window.delegate = self
-        window.tabGroupKeybindHandler = { [weak self] event in
-            self?.handleTabGroupKeybind(event) ?? false
+        window.navigationKeybindHandler = { [weak self] event in
+            self?.handleNavigationKeybind(event) ?? false
         }
         window.terminalKeybindHandler = { [weak self] event in
             self?.handleTerminalTextKeybind(event) ?? false
@@ -370,6 +370,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let viewMenu = NSMenu(title: String(localized: "View"))
         viewMenuItem.submenu = viewMenu
 
+        for number in 1...10 {
+            let menuItem = NSMenuItem(
+                title: workspaceShortcutTitle(number: number),
+                action: #selector(gotoWorkspace(_:)),
+                keyEquivalent: String(number % 10)
+            )
+            menuItem.tag = number
+            menuItem.keyEquivalentModifierMask = .command
+            menuItem.target = self
+            viewMenu.addItem(menuItem)
+        }
+        viewMenu.addItem(.separator())
+
         let gotoTabItems: [(title: String, selector: Selector, key: String)] = [
             (String(format: String(localized: "Select Tab %@"), "1"), #selector(gotoTab1), "1"),
             (String(format: String(localized: "Select Tab %@"), "2"), #selector(gotoTab2), "2"),
@@ -384,6 +397,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         ]
         for item in gotoTabItems {
             let menuItem = NSMenuItem(title: item.title, action: item.selector, keyEquivalent: item.key)
+            menuItem.keyEquivalentModifierMask = [.command, .shift]
             menuItem.target = self
             viewMenu.addItem(menuItem)
         }
@@ -526,53 +540,76 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func gotoTab1() {
-        tabs.selectTab(at: 0)
-        updateWindowTitle()
+        selectTabShortcut(number: 1)
     }
 
     @objc private func gotoTab2() {
-        tabs.selectTab(at: 1)
-        updateWindowTitle()
+        selectTabShortcut(number: 2)
     }
 
     @objc private func gotoTab3() {
-        tabs.selectTab(at: 2)
-        updateWindowTitle()
+        selectTabShortcut(number: 3)
     }
 
     @objc private func gotoTab4() {
-        tabs.selectTab(at: 3)
-        updateWindowTitle()
+        selectTabShortcut(number: 4)
     }
 
     @objc private func gotoTab5() {
-        tabs.selectTab(at: 4)
-        updateWindowTitle()
+        selectTabShortcut(number: 5)
     }
 
     @objc private func gotoTab6() {
-        tabs.selectTab(at: 5)
-        updateWindowTitle()
+        selectTabShortcut(number: 6)
     }
 
     @objc private func gotoTab7() {
-        tabs.selectTab(at: 6)
-        updateWindowTitle()
+        selectTabShortcut(number: 7)
     }
 
     @objc private func gotoTab8() {
-        tabs.selectTab(at: 7)
-        updateWindowTitle()
+        selectTabShortcut(number: 8)
     }
 
     @objc private func gotoTab9() {
-        tabs.selectTab(at: 8)
-        updateWindowTitle()
+        selectTabShortcut(number: 9)
     }
 
     @objc private func gotoTab10() {
-        tabs.selectTab(at: 9)
+        selectTabShortcut(number: 10)
+    }
+
+    private func selectTabShortcut(number: Int) {
+        if !tabs.selectGroup(shortcutNumber: number) {
+            tabs.selectTab(at: number - 1)
+        }
         updateWindowTitle()
+    }
+
+    @objc private func gotoWorkspace(_ sender: NSMenuItem) {
+        selectWorkspaceShortcut(number: sender.tag)
+    }
+
+    private func selectWorkspaceShortcut(number: Int) {
+        if number == 1 {
+            selectUnscopedWorkspace()
+            return
+        }
+
+        let projectIndex = number - 2
+        guard projectStore.projects.indices.contains(projectIndex) else { return }
+        if !openProject(projectStore.projects[projectIndex]) {
+            showUnavailableProjectAlert()
+        }
+    }
+
+    private func workspaceShortcutTitle(number: Int) -> String {
+        guard number != 1 else { return String(localized: "미분류") }
+        let projectIndex = number - 2
+        if projectStore.projects.indices.contains(projectIndex) {
+            return projectStore.projects[projectIndex].name
+        }
+        return String(format: String(localized: "Select Project %@"), String(number - 1))
     }
 
     @objc private func closeTab() {
@@ -886,16 +923,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         updateViewMenuState()
     }
 
-    private func handleTabGroupKeybind(_ event: NSEvent) -> Bool {
-        let modifiers = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
-        guard modifiers == .command,
-              let key = event.charactersIgnoringModifiers,
-              let shortcutNumber = Int(key),
-              tabs.selectGroup(shortcutNumber: shortcutNumber) else {
-            return false
+    func handleNavigationKeybind(_ event: NSEvent) -> Bool {
+        guard let shortcut = NumberNavigationShortcut(event: event) else { return false }
+        switch shortcut {
+        case .workspace(let number):
+            selectWorkspaceShortcut(number: number)
+        case .tab(let number):
+            selectTabShortcut(number: number)
         }
-
-        updateWindowTitle()
         return true
     }
 
@@ -1050,6 +1085,9 @@ extension AppDelegate: NSWindowDelegate {
 extension AppDelegate: NSMenuItemValidation {
     func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
         switch menuItem.action {
+        case #selector(gotoWorkspace(_:)):
+            menuItem.title = workspaceShortcutTitle(number: menuItem.tag)
+            return menuItem.tag == 1 || projectStore.projects.indices.contains(menuItem.tag - 2)
         case #selector(newTab),
              #selector(newTerminalTab),
              #selector(newMarkdownTab),
