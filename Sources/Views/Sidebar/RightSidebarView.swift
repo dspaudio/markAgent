@@ -18,6 +18,8 @@ struct RightSidebarView: View {
     var mentionedFileIDs: Set<GitChangedFile.ID> = []
 
     var snippetStore: PromptSnippetStore
+    var canSendSnippetToTerminal: () -> Bool = { false }
+    var onSendSnippetToTerminal: ((PromptSnippet) -> Void)?
     var timelineStore: AgentTimelineStore
 
     var scanner: DirectoryScanner
@@ -116,7 +118,11 @@ struct RightSidebarView: View {
     private func selectedBody(width: Double) -> some View {
         switch selectedTab {
         case .snippets:
-            PromptSnippetsSidebarView(store: snippetStore)
+            PromptSnippetsSidebarView(
+                store: snippetStore,
+                canSendToTerminal: canSendSnippetToTerminal,
+                onSendToTerminal: onSendSnippetToTerminal
+            )
         case .timeline:
             AgentTimelineSidebarView(store: timelineStore)
         case .gitHistory:

@@ -4328,3 +4328,17 @@ Ghostty 기본 링크 매처가 `AGENTS.md를`의 한글 조사까지 경로에 
 최종 작업트리 전체 Swift 438개와 release/debug 빌드가 통과했다. Release 바이너리의 실제 격리 QA 앱 PID 17282에서 절대경로·`./probe.md`·`probe.md`를 Cmd 클릭해 같은 문서와 본문을 확인했고 파일명만 있는 링크의 열기/닫기 20회도 모두 성공했다. get-task-allow로 서명한 QA 앱의 시작·파일 열기 후·20회 반복 후 누수는 기존 `com.apple.linkd.autoShortcut`/AppIntents NSXPC 순환 참조 416건·19,936바이트로 같았다. 기존 누수 때문에 leaks는 exit 1이며 누수 0으로 표현하지 않는다. 소유 QA 앱과 임시 fixture만 정리했다.
 
 변경 파일: `Sources/Views/Tabs/SearchAwareTerminalView.swift`, `Sources/Views/Tabs/TerminalTabView.swift`, `scripts/patches/AppTerminalView+MouseCapture.swift`, `Tests/MarkAgentTests/TerminalLinkTests.swift`, `history.md`
+
+---
+
+### 대화 3: 검증된 기능의 분리 커밋과 릴리즈 승인
+
+**사용자:**
+> dev pr 머지, main pr 머지하고 릴리즈를 진행해줘.
+
+**응답:**
+현재 로컬 날짜는 2026-10-13이며 원격에 `v26.10.13` 태그가 없고 같은 버전 ZIP 경로도 사용되지 않음을 확인했다. 원격 dev `32f9b877d3f154684fb26eb30963005ca27dd6f1`, main `661d77b36d587bb3dd17814dcc898048f35f131e`를 기준으로 기능 브랜치 `fix/file-links-prompt-send-20261013`를 만들었다.
+
+링크 수정과 히스토리를 `05f776f` 커밋에 기록하고 잠금 격리 작업 트리에서 해당 커밋만의 링크 회귀를 검증한다. 저장 프롬프트 전송은 원문·브라켓 붙여넣기 바이트·포커스와 미연결 터미널 비활성 회귀를 포함한 별도 기능 커밋으로 기록한다. 관련 없는 미추적 문서·기존 ZIP·사용자 설치 앱은 포함하거나 변경하지 않는다.
+
+변경 파일: `Sources/Views/Main/MainContainerView.swift`, `Sources/Views/Sidebar/PromptSnippetsSidebarView.swift`, `Sources/Views/Sidebar/RightSidebarView.swift`, `Sources/App/Resources/en.lproj/Localizable.strings`, `Sources/App/Resources/ko.lproj/Localizable.strings`, `Tests/MarkAgentTests/PromptSnippetTerminalSendTests.swift`, `history.md`

@@ -2,6 +2,11 @@ import SwiftUI
 
 struct PromptSnippetsSidebarView: View {
     var store: PromptSnippetStore
+    /// 활성 터미널에 뷰가 붙어 있을 때만 보내기 버튼을 활성화한다.
+    /// 클로저로 받아 이 뷰의 body에서 평가한다. 터미널 뷰는 갱신마다 `terminalView`를 다시 쓰므로
+    /// 상위 쉘 body에서 읽으면 관찰 추적이 쉘 전체를 반복 재렌더하게 된다.
+    var canSendToTerminal: () -> Bool = { false }
+    var onSendToTerminal: ((PromptSnippet) -> Void)?
 
     @State private var editor: PromptSnippetEditorState?
     @State private var snippetPendingDeletion: PromptSnippet?
@@ -89,6 +94,16 @@ struct PromptSnippetsSidebarView: View {
                 }
             }
             Spacer(minLength: 0)
+            Button {
+                onSendToTerminal?(snippet)
+            } label: {
+                Image(systemName: "arrow.left")
+            }
+            .buttonStyle(.plain)
+            .disabled(!canSendToTerminal() || onSendToTerminal == nil)
+            .help(String(localized: "터미널로 보내기"))
+            .accessibilityIdentifier("snippet.sendToTerminal")
+
             Button {
                 editor = PromptSnippetEditorState(snippet: snippet)
             } label: {
