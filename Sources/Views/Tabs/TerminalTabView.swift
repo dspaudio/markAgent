@@ -129,7 +129,24 @@ struct TerminalTabView: NSViewRepresentable {
         }
 
         func terminalDidRequestOpenURL(_ rawURL: String, kind: TerminalOpenURLKind) {
-            guard let state, !rawURL.isEmpty else { return }
+            guard let url = resolvedLinkURL(rawURL) else { return }
+            if url.isFileURL {
+                onOpenFile?(url)
+            } else {
+                openExternalURL(url)
+            }
+        }
+
+        func existingFileLink(_ text: String) -> String? {
+            guard let url = resolvedLinkURL(text), url.isFileURL else { return nil }
+            var isDirectory: ObjCBool = false
+            guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory),
+                  !isDirectory.boolValue else { return nil }
+            return url.absoluteString
+        }
+
+        private func resolvedLinkURL(_ rawURL: String) -> URL? {
+            guard let state, !rawURL.isEmpty else { return nil }
             let directory = URL(fileURLWithPath: state.workingDirectory.path, isDirectory: true)
             let url: URL?
             if rawURL.hasPrefix("~/") {
@@ -137,11 +154,27 @@ struct TerminalTabView: NSViewRepresentable {
             } else {
                 url = URL(string: rawURL, relativeTo: directory)?.absoluteURL
             }
-            guard let url else { return }
+            guard let url else { return nil }
             if url.isFileURL {
-                onOpenFile?(URL(fileURLWithPath: url.path).standardizedFileURL)
+                var fileURL = URL(fileURLWithPath: url.path).standardizedFileURL
+                // 기본 링크 매처가 파일명 뒤 한글 조사도 포함한다. 실제 파일명은 우선 보존한다.
+                if !FileManager.default.fileExists(atPath: fileURL.path) {
+                    for particle in ["으로", "에서", "에게", "와", "과", "을", "를", "은", "는", "이", "가", "도", "의", "로"] {
+                        guard fileURL.lastPathComponent.hasSuffix(particle) else { continue }
+                        let candidate = fileURL.deletingLastPathComponent().appendingPathComponent(
+                            String(fileURL.lastPathComponent.dropLast(particle.count))
+                        )
+                        var isDirectory: ObjCBool = false
+                        if FileManager.default.fileExists(atPath: candidate.path, isDirectory: &isDirectory),
+                           !isDirectory.boolValue {
+                            fileURL = candidate
+                            break
+                        }
+                    }
+                }
+                return fileURL
             } else {
-                openExternalURL(url)
+                return url
             }
         }
 
