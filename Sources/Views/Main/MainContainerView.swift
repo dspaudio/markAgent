@@ -1,3 +1,4 @@
+import GhosttyTerminal
 import SwiftUI
 
 enum ShellChromeMetrics {
@@ -249,6 +250,8 @@ struct MainContainerView: View {
                         onFocusGitFileInTab: focusGitDiffFile,
                         mentionedFileIDs: openMarkdownMentionedGitFileIDs,
                         snippetStore: snippetStore,
+                        canSendSnippetToTerminal: { tabs.activeTerminalTab?.state.terminalView != nil },
+                        onSendSnippetToTerminal: sendSnippetToActiveTerminal,
                         timelineStore: group.timelineStore,
                         scanner: scanner,
                         recentStore: recentStore,
@@ -441,6 +444,26 @@ struct MainContainerView: View {
     private func saveSnippetFromTerminalSelection(_ body: String) {
         _ = snippetStore.add(body: body)
         activeTabGroup?.showSnippetsSidebar()
+    }
+
+    private func sendSnippetToActiveTerminal(_ snippet: PromptSnippet) {
+        Self.sendSnippetToActiveTerminal(snippet, in: tabs)
+    }
+
+    /// 저장된 프롬프트 본문을 활성 터미널의 붙여넣기 경로(`sendText`)로 그대로 전달하고 포커스를 터미널로 되돌린다.
+    /// Enter는 보내지 않으며, 활성 탭이 터미널이 아니거나 뷰가 아직 붙지 않았으면 아무것도 하지 않는다.
+    @discardableResult
+    static func sendSnippetToActiveTerminal(_ snippet: PromptSnippet, in tabs: TabCollection) -> Bool {
+        guard let terminalTab = tabs.activeTerminalTab,
+              let terminalView = terminalTab.state.terminalView
+        else { return false }
+
+        terminalView.sendText(snippet.body)
+        let tabID = terminalTab.id
+        TerminalFocusPolicy.requestFocus(terminalView, isActive: { [weak tabs] in
+            tabs?.isActiveTab(id: tabID) == true
+        })
+        return true
     }
 
     private func openMarkdownFromSidebar(_ url: URL) {

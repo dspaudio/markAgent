@@ -125,7 +125,9 @@ final class SearchAwareTerminalView: AppTerminalView {
         detectedLink = nil
         invalidateMousePosition(modifiers: modifiers)
         updateMousePosition(at: point, modifiers: modifiers)
-        return detectedLink
+        if let detectedLink { return detectedLink }
+        guard let word = wordUnderPointer(at: point) else { return nil }
+        return (delegate as? TerminalTabView.Coordinator)?.existingFileLink(word)
     }
 
     private func commandClickLink(with event: NSEvent) -> String? {
