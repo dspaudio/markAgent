@@ -214,6 +214,7 @@
 | 119 | release hover 크래시 수정 | 최적화된 잘못된 C 호출을 직접 호출로 수정, 수정 전 signal11·수정 후 release 435개와 debug 11개 통과 |
 | 120 | 한글 조사와 상대 파일명 링크 수정 | 실제 Ghostty TUI의 실패를 재현하고 기존 파일 우선·한글 셀 토큰 보정, 절대·상대 경로 실제 클릭과 release 20회 반복 검증 |
 | 121 | 저장 프롬프트 터미널 전송 | 왼쪽 화살표·편집·삭제 순서, 원문 붙여넣기와 포커스 이동, 비터미널 비활성화 및 실제 두 줄 전송 검증 |
+| 122 | v26.10.13 릴리즈 준비 | 로컬 날짜의 두 버전 필드 적용, 분리 커밋·격리 검증과 dev/main 병합·서명·공증 ZIP 배포 준비 |
 
 ---
 
@@ -4342,3 +4343,14 @@ Ghostty 기본 링크 매처가 `AGENTS.md를`의 한글 조사까지 경로에 
 링크 수정과 히스토리를 `05f776f` 커밋에 기록하고 잠금 격리 작업 트리에서 해당 커밋만의 링크 회귀를 검증한다. 저장 프롬프트 전송은 원문·브라켓 붙여넣기 바이트·포커스와 미연결 터미널 비활성 회귀를 포함한 별도 기능 커밋으로 기록한다. 관련 없는 미추적 문서·기존 ZIP·사용자 설치 앱은 포함하거나 변경하지 않는다.
 
 변경 파일: `Sources/Views/Main/MainContainerView.swift`, `Sources/Views/Sidebar/PromptSnippetsSidebarView.swift`, `Sources/Views/Sidebar/RightSidebarView.swift`, `Sources/App/Resources/en.lproj/Localizable.strings`, `Sources/App/Resources/ko.lproj/Localizable.strings`, `Tests/MarkAgentTests/PromptSnippetTerminalSendTests.swift`, `history.md`
+
+---
+
+### 대화 4: v26.10.13 고정 후보와 dev/main 병합 준비
+
+**응답:**
+첫 링크 커밋 `05f776f`만의 격리 Ghostty 회귀 11개가 통과했다. 프롬프트 전송은 `3f3941b` 커밋으로 분리했고 같은 잠금 작업 트리에서 붙여넣기·포커스·행 레이아웃을 검증한다. 앱의 `CFBundleShortVersionString`과 `CFBundleVersion`을 로컬 날짜 `26.10.13`으로 동일하게 적용한다.
+
+고정 후보의 전체 Swift 테스트·release 빌드 및 단일 최종 게이트를 확인한 뒤 기능 브랜치를 dev로, dev를 main으로 순서대로 merge commit 방식으로 병합한다. GitHub CI workflow가 없어 로컬 검증 근거를 PR 본문에 포함한다. 병합 main의 파일 트리가 검증한 후보와 같음을 확인하고 Developer ID 서명, `markagent` 프로필 공증, stapling·압축 해제 Gatekeeper 검증을 수행한다. 새 태그와 공개 릴리즈·ZIP 게시 후 재다운로드 자산의 해시·버전·서명·공증을 확인한다. 사용자 설치 앱과 기존 릴리즈 자산은 교체하거나 종료하지 않는다.
+
+변경 파일: `Sources/App/Info.plist`, `history.md`
