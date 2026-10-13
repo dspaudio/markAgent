@@ -6,6 +6,120 @@ import XCTest
 
 final class TerminalLinkTests: XCTestCase {
     @MainActor
+    func testPlainHomePathWithKoreanParticleOpensExistingFile() async throws {
+        _ = NSApplication.shared
+        let directory = URL(fileURLWithPath: "/tmp", isDirectory: true)
+            .appendingPathComponent("ma-\(UUID().uuidString.prefix(8))", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let fileURL = directory.appendingPathComponent("AGENTS.md")
+        try "# Instructions".write(to: fileURL, atomically: true, encoding: .utf8)
+        let homePrefix = "~/" + String(repeating: "../", count: URL(fileURLWithPath: NSHomeDirectory()).pathComponents.count - 1)
+        let printedPath = homePrefix + fileURL.path.dropFirst()
+        let state = TerminalTabState(workingDirectory: FileManager.default.temporaryDirectory, userConfigProvider: { nil })
+        let session = InMemoryTerminalSession(write: { _ in }, resize: { _ in })
+        let coordinator = LinkSignalCoordinator()
+        coordinator.observeState(state)
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 800, height: 160),
+                              styleMask: [.titled], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        let view = SearchAwareTerminalView(frame: NSRect(x: 0, y: 0, width: 800, height: 160))
+        view.configuration = TerminalSurfaceOptions(backend: .inMemory(session))
+        view.delegate = coordinator
+        state.terminalView = view
+        view.controller = state.terminalViewState.controller
+        window.contentView?.addSubview(view)
+        defer {
+            coordinator.onTitle = nil
+            coordinator.onHover = nil
+            TerminalTabView.tearDown(view, coordinator: coordinator)
+            window.close()
+        }
+        let parsed = expectation(description: "홈 경로 출력 파싱")
+        coordinator.onTitle = { if $0 == "home-path-ready" { parsed.fulfill() } }
+        session.receive("\(printedPath)를 다시 읽어"
+                        + "\u{1B}]2;home-path-ready\u{7}")
+        await fulfillment(of: [parsed], timeout: 5)
+        let metrics = try XCTUnwrap(coordinator.metrics)
+        let point = view.convert(NSPoint(x: CGFloat(metrics.cellWidthPixels) / window.backingScaleFactor * 4.5,
+                                        y: view.bounds.height - CGFloat(metrics.cellHeightPixels) / window.backingScaleFactor / 2), to: nil)
+        var opened: URL?
+        coordinator.onOpenFile = { opened = $0 }
+        coordinator.openExternalURL = { XCTFail("파일 경로가 외부 URL로 해석됨: \($0)") }
+        for type in [NSEvent.EventType.leftMouseDown, .leftMouseUp] {
+            let event = try XCTUnwrap(NSEvent.mouseEvent(
+                with: type, location: point, modifierFlags: [.command],
+                timestamp: 0, windowNumber: window.windowNumber,
+                context: nil, eventNumber: 0, clickCount: 1, pressure: 1
+            ))
+            if type == .leftMouseDown { view.mouseDown(with: event) }
+            else { view.mouseUp(with: event) }
+        }
+        XCTAssertEqual(opened, fileURL)
+        state.workingDirectory = directory
+        let cjkURL = directory.appendingPathComponent("설계.md")
+        try "# CJK filename".write(to: cjkURL, atomically: true, encoding: .utf8)
+        for (index, entry) in [
+            (fileURL.path, fileURL), ("./AGENTS.md", fileURL), ("AGENTS.md", fileURL),
+            ("설계.md", cjkURL), ("설계.md를", cjkURL),
+        ].enumerated() {
+            let (path, expectedURL) = entry
+            let ready = expectation(description: "TUI 파일 경로 출력 파싱")
+            coordinator.onTitle = { if $0 == "path-ready-\(index)" { ready.fulfill() } }
+            session.receive("\u{1B}[?1000h\u{1B}[?1003h\u{1B}[H\u{1B}[2J\(path)"
+                            + "\u{1B}]2;path-ready-\(index)\u{7}")
+            await fulfillment(of: [ready], timeout: 5)
+            coordinator.onTitle = nil
+            XCTAssertEqual(view.wordUnderPointer(at: view.convert(point, from: nil)), path)
+            opened = nil
+            for type in [NSEvent.EventType.leftMouseDown, .leftMouseUp] {
+                let event = try XCTUnwrap(NSEvent.mouseEvent(
+                    with: type, location: point, modifierFlags: [.command],
+                    timestamp: 0, windowNumber: window.windowNumber,
+                    context: nil, eventNumber: 0, clickCount: 1, pressure: 1
+                ))
+                if type == .leftMouseDown { view.mouseDown(with: event) }
+                else { view.mouseUp(with: event) }
+            }
+            XCTAssertEqual(opened, expectedURL, path)
+            let hover = try XCTUnwrap(NSEvent.mouseEvent(
+                with: .mouseMoved, location: point, modifierFlags: [],
+                timestamp: 0, windowNumber: window.windowNumber,
+                context: nil, eventNumber: 0, clickCount: 0, pressure: 0
+            ))
+            view.mouseMoved(with: hover)
+            XCTAssertNotNil(view.hoveredLink, path)
+        }
+        let blankPoint = view.convert(NSPoint(x: CGFloat(metrics.cellWidthPixels) / window.backingScaleFactor * 70.5,
+                                             y: view.bounds.height - CGFloat(metrics.cellHeightPixels) / window.backingScaleFactor / 2), to: nil)
+        opened = nil
+        for type in [NSEvent.EventType.mouseMoved, .leftMouseDown, .leftMouseUp] {
+            let event = try XCTUnwrap(NSEvent.mouseEvent(
+                with: type, location: blankPoint, modifierFlags: [.command],
+                timestamp: 0, windowNumber: window.windowNumber,
+                context: nil, eventNumber: 0, clickCount: 1, pressure: 1
+            ))
+            if type == .mouseMoved { view.mouseMoved(with: event) }
+            else if type == .leftMouseDown { view.mouseDown(with: event) }
+            else { view.mouseUp(with: event) }
+        }
+        XCTAssertNil(opened)
+        XCTAssertNil(view.hoveredLink)
+        coordinator.terminalDidRequestOpenURL("\(printedPath)와", kind: .text)
+        XCTAssertEqual(opened, fileURL)
+        coordinator.terminalDidRequestOpenURL("\(printedPath)은", kind: .text)
+        XCTAssertEqual(opened, fileURL)
+
+        // 조사처럼 끝나는 실제 한글 파일은 잘라내지 않는다.
+        let koreanURL = directory.appendingPathComponent("AGENTS.md를")
+        try "# Korean filename".write(to: koreanURL, atomically: true, encoding: .utf8)
+        coordinator.terminalDidRequestOpenURL("\(printedPath)를", kind: .text)
+        XCTAssertEqual(opened, koreanURL)
+        coordinator.terminalDidRequestOpenURL("missing.md를", kind: .text)
+        XCTAssertEqual(opened, state.workingDirectory.appendingPathComponent("missing.md를"))
+    }
+
+    @MainActor
     func testExecTerminalPropagatesHyperlinkCapabilitiesToChildShell() async throws {
         let environment = ProcessInfo.processInfo.environment
         try await assertExecHyperlinkEnvironment(

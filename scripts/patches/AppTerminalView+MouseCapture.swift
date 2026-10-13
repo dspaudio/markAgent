@@ -32,6 +32,59 @@ extension AppTerminalView {
         )
     }
 
+    public func wordUnderPointer(at point: NSPoint) -> String? {
+        guard let surface = surface?.rawValue else { return nil }
+        func freeText(_ text: UnsafeMutablePointer<ghostty_text_s>) {
+            // 고정 1.4.0 바이너리의 실제 free_text ABI는 첫 번째 인자를 text로 읽는다.
+            ghostty_surface_free_text(UnsafeMutableRawPointer(text), text)
+        }
+        var word = ghostty_text_s()
+        guard ghostty_surface_quicklook_word(surface, &word) else { return nil }
+        defer { freeText(&word) }
+        let size = ghostty_surface_size(surface)
+        let scale = window?.backingScaleFactor ?? 1
+        let cellWidth = CGFloat(size.cell_width_px) / scale
+        let cellHeight = CGFloat(size.cell_height_px) / scale
+        guard word.text_len > 0, cellWidth > 0, cellHeight > 0 else { return nil }
+        let originSelection = ghostty_selection_s(
+            top_left: ghostty_point_s(tag: GHOSTTY_POINT_VIEWPORT, coord: GHOSTTY_POINT_COORD_EXACT, x: 0, y: 0),
+            bottom_right: ghostty_point_s(tag: GHOSTTY_POINT_VIEWPORT, coord: GHOSTTY_POINT_COORD_EXACT, x: 0, y: 0),
+            rectangle: true
+        )
+        var origin = ghostty_text_s()
+        guard ghostty_surface_read_text(surface, originSelection, &origin) else { return nil }
+        defer { freeText(&origin) }
+        let row = Int(((word.tl_px_y - origin.tl_px_y) / cellHeight).rounded())
+        let column = Int(((point.x - origin.tl_px_x) / cellWidth).rounded(.down))
+        guard (0..<Int(size.rows)).contains(row), (0..<Int(size.columns)).contains(column) else { return nil }
+        func text(_ first: Int, _ last: Int) -> String? {
+            let selection = ghostty_selection_s(
+                top_left: ghostty_point_s(tag: GHOSTTY_POINT_VIEWPORT, coord: GHOSTTY_POINT_COORD_EXACT,
+                                          x: UInt32(first), y: UInt32(row)),
+                bottom_right: ghostty_point_s(tag: GHOSTTY_POINT_VIEWPORT, coord: GHOSTTY_POINT_COORD_EXACT,
+                                              x: UInt32(last), y: UInt32(row)),
+                rectangle: true
+            )
+            var result = ghostty_text_s()
+            guard ghostty_surface_read_text(surface, selection, &result) else { return nil }
+            defer { freeText(&result) }
+            guard let bytes = result.text else { return "" }
+            return String(decoding: UnsafeRawBufferPointer(start: bytes, count: Int(result.text_len)),
+                          as: UTF8.self)
+        }
+        // native 단어 경계는 "설계.md"를 "설", "계", ".md"로 나눈다.
+        // 셀 선택으로 포인터가 가리키는 문자를 찾은 뒤 공백 경계까지 읽는다.
+        guard let cell = text(column, column),
+              !cell.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              let line = text(0, Int(size.columns) - 1),
+              let prefix = text(0, column), !prefix.isEmpty,
+              let clicked = line.index(line.startIndex, offsetBy: prefix.count - 1, limitedBy: line.endIndex),
+              clicked < line.endIndex, !line[clicked].isWhitespace else { return nil }
+        let start = line[..<clicked].lastIndex(where: \.isWhitespace).map { line.index(after: $0) } ?? line.startIndex
+        let end = line[clicked...].firstIndex(where: \.isWhitespace) ?? line.endIndex
+        return String(line[start..<end])
+    }
+
     public func hoverLinkRects(
         at point: NSPoint, matching: (NSPoint) -> Bool
     ) -> [NSRect] {

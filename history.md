@@ -85,6 +85,7 @@
 85. [세션 81: 터미널 Command 클릭 회귀와 v26.10.12 릴리즈](#세션-81-터미널-command-클릭-회귀와-v261012-릴리즈)
 86. [세션 82: 일반 hover 밑줄 복원과 후속 릴리즈](#세션-82-일반-hover-밑줄-복원과-후속-릴리즈)
 87. [세션 83: release hover 크래시 수정과 재배포](#세션-83-release-hover-크래시-수정과-재배포)
+88. [세션 84: 파일 경로 링크와 저장 프롬프트 전송](#세션-84-파일-경로-링크와-저장-프롬프트-전송)
 
 ---
 
@@ -211,6 +212,8 @@
 | 117 | 일반 hover 밑줄 복원 | 실제 링크 셀에만 밑줄 표시, 수정키·TUI 보고·선택 보존, 실제 해제 ABI 적용과 전체 435개 테스트 통과 |
 | 118 | v26.10.12.1 후속 릴리즈 준비 | 사용자 선택으로 날짜 뒤 .1 예외 적용, 기존 릴리즈 보존과 dev/main 병합·서명·공증 배포 진행 |
 | 119 | release hover 크래시 수정 | 최적화된 잘못된 C 호출을 직접 호출로 수정, 수정 전 signal11·수정 후 release 435개와 debug 11개 통과 |
+| 120 | 한글 조사와 상대 파일명 링크 수정 | 실제 Ghostty TUI의 실패를 재현하고 기존 파일 우선·한글 셀 토큰 보정, 절대·상대 경로 실제 클릭과 release 20회 반복 검증 |
+| 121 | 저장 프롬프트 터미널 전송 | 왼쪽 화살표·편집·삭제 순서, 원문 붙여넣기와 포커스 이동, 비터미널 비활성화 및 실제 두 줄 전송 검증 |
 
 ---
 
@@ -4282,3 +4285,46 @@ libghostty-spm 1.4.0 `356f730bec03281fc7b83666a129b0246137ea26`에 선택 복사
 사용자가 지정한 새 버전 `26.10.12.2`로 두 앱 버전 필드를 맞추고 기존 태그·자산을 보존한다. 검증된 수정과 히스토리만 커밋하여 dev PR, dev→main PR 순서로 병합하고 최종 main의 Developer ID 서명·공증·ZIP 다운로드 검증을 수행한다. 사용자 설치 앱은 교체하지 않는다.
 
 변경 파일: `Sources/App/Info.plist`, `history.md`
+
+---
+
+## 세션 84: 파일 경로 링크와 저장 프롬프트 전송
+
+> 날짜: 2026-10-13
+> 경로: ~/workspace/markAgent
+
+터미널에서 파일 경로를 Command 클릭할 때 열리지 않는 문제를 실제 Ghostty 출력으로 재현하고, 저장된 프롬프트를 활성 터미널로 보내는 버튼을 추가했다. 사용자가 요청한 dev/main PR 병합과 릴리즈는 기존 태그·배포물과 설치 앱을 보존하며 진행한다.
+
+### 대화 1: 한글 조사 경로 오류와 프롬프트 전송
+
+**사용자:**
+> 요청 요약: 이미지의 파일 경로를 cmd+클릭하면 파일을 찾을 수 없다고 하는 문제를 수정하고, 저장된 프롬프트 버튼을 <- 프롬프트 전송, 편집, 삭제 순으로 표시해줘.
+
+**응답:**
+Ghostty 기본 링크 매처가 `AGENTS.md를`의 한글 조사까지 경로에 포함하는 실패를 실제 Cmd 클릭 회귀로 확인했다. 원래 경로가 존재하면 보존하고, 원래 경로가 없으며 알려진 조사를 제거한 일반 파일이 존재할 때만 보정한다. 사용자 홈 파일을 바꾸지 않는 임시 파일 회귀로 정상 한글 파일명과 없는 파일 경로도 보존한다.
+
+저장된 프롬프트 행의 첫 버튼에 `arrow.left`를 추가하고 활성·연결된 터미널에 원문을 `sendText` 붙여넣기 경로로 전달한다. Enter는 추가하지 않고 터미널 포커스를 요청하며 비터미널 탭에서는 버튼을 비활성화한다. 활성 여부는 사이드바 body에서 평가하는 클로저로 전달해 터미널 뷰 재할당이 상위 쉘의 관찰 갱신을 반복하지 않게 한다.
+
+당시 작업트리의 전체 Swift 테스트 438개, debug 번들 및 변경 파일 진단이 통과했다. 실제 격리 QA 앱에서 두 줄 원문 전송·Enter 미추가·Markdown 탭 비활성화·터미널 복귀 후 활성화를 확인했다. 240/800 폭의 라이트·다크 행 캡처에서 3줄 미리보기와 버튼 순서를 확인했다. 소유 QA PID 6236의 시작·기능 실행 후·20회 전송 후 누수는 모두 기존 AppIntents/NSXPC 순환 참조 415건·19,888바이트였고, 당시 ad-hoc 앱 검사에는 read-only memory 제한 경고가 있었다.
+
+변경 파일: `Sources/Views/Tabs/TerminalTabView.swift`, `Tests/MarkAgentTests/TerminalLinkTests.swift`, `Sources/Views/Main/MainContainerView.swift`, `Sources/Views/Sidebar/PromptSnippetsSidebarView.swift`, `Sources/Views/Sidebar/RightSidebarView.swift`, `Sources/App/Resources/en.lproj/Localizable.strings`, `Sources/App/Resources/ko.lproj/Localizable.strings`, `Tests/MarkAgentTests/PromptSnippetTerminalSendTests.swift`, `history.md`
+
+---
+
+### 대화 2: 절대경로·상대경로와 지정 OMO 세션 확인
+
+**사용자:**
+> 이 링크도 안열렸어
+> 절대경로, 상대경로 모두 안열렸어
+> omo --session 01a11a38-f159-7fdf-9b22-36f4273fc19a 를 참조해
+
+**응답:**
+지정 세션 원본에서 이미지의 `/Users/wknam/.agents/AGENTS.md`는 `-f`로 검사하는 후보 경로이고 실제 출력은 `/Users/wknam/.codex/AGENTS.md`뿐임을 확인했다. 현재 실행 중인 설치 앱 PID 9206의 바이너리 해시가 수정본과 다름도 확인했으며 설치 앱을 교체하거나 종료하지 않았다.
+
+실제 TUI 재현에서 존재하는 절대경로와 `./AGENTS.md`는 열리지만 파일명만 있는 `AGENTS.md`는 감지되지 않았다. 기존 Ghostty 링크를 우선하며 미감지 텍스트는 native 셀 선택으로 읽어 실제 일반 파일일 때만 링크로 보완한다. 상대경로는 기존 Herdr effective directory를 사용하는 터미널 상태의 작업 디렉터리로 해석한다. Native 단어 API가 `설계.md`를 부분 단어로 나누므로 실제 셀 문자·줄 텍스트·native prefix를 사용해 공백 경계의 전체 파일명을 읽는다. CJK 폭을 문자 수나 offset_len으로 추정하지 않고 빈 셀의 클릭은 파일을 열지 않는다.
+
+고정 libghostty-spm 1.4.0의 실제 ABI에 맞춰 모든 텍스트 버퍼를 같은 text 주소를 전달하는 선언된 두 인자 C 함수로 해제한다. 선택 복사 PR #23의 병합 커밋 `65051461aadfa6ab46a239d0de701763279d83af`이 사용하는 리비전 `356f730bec03281fc7b83666a129b0246137ea26`에 포함됨을 확인했고 의존성·기존 패치를 유지했다.
+
+최종 작업트리 전체 Swift 438개와 release/debug 빌드가 통과했다. Release 바이너리의 실제 격리 QA 앱 PID 17282에서 절대경로·`./probe.md`·`probe.md`를 Cmd 클릭해 같은 문서와 본문을 확인했고 파일명만 있는 링크의 열기/닫기 20회도 모두 성공했다. get-task-allow로 서명한 QA 앱의 시작·파일 열기 후·20회 반복 후 누수는 기존 `com.apple.linkd.autoShortcut`/AppIntents NSXPC 순환 참조 416건·19,936바이트로 같았다. 기존 누수 때문에 leaks는 exit 1이며 누수 0으로 표현하지 않는다. 소유 QA 앱과 임시 fixture만 정리했다.
+
+변경 파일: `Sources/Views/Tabs/SearchAwareTerminalView.swift`, `Sources/Views/Tabs/TerminalTabView.swift`, `scripts/patches/AppTerminalView+MouseCapture.swift`, `Tests/MarkAgentTests/TerminalLinkTests.swift`, `history.md`
