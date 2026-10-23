@@ -86,6 +86,7 @@
 86. [세션 82: 일반 hover 밑줄 복원과 후속 릴리즈](#세션-82-일반-hover-밑줄-복원과-후속-릴리즈)
 87. [세션 83: release hover 크래시 수정과 재배포](#세션-83-release-hover-크래시-수정과-재배포)
 88. [세션 84: 파일 경로 링크와 저장 프롬프트 전송](#세션-84-파일-경로-링크와-저장-프롬프트-전송)
+89. [세션 85: 편집 메모리 누적 수정과 v26.10.23 릴리즈](#세션-85-편집-메모리-누적-수정과-v261023-릴리즈)
 
 ---
 
@@ -215,6 +216,7 @@
 | 120 | 한글 조사와 상대 파일명 링크 수정 | 실제 Ghostty TUI의 실패를 재현하고 기존 파일 우선·한글 셀 토큰 보정, 절대·상대 경로 실제 클릭과 release 20회 반복 검증 |
 | 121 | 저장 프롬프트 터미널 전송 | 왼쪽 화살표·편집·삭제 순서, 원문 붙여넣기와 포커스 이동, 비터미널 비활성화 및 실제 두 줄 전송 검증 |
 | 122 | v26.10.13 릴리즈 준비 | 로컬 날짜의 두 버전 필드 적용, 분리 커밋·격리 검증과 dev/main 병합·서명·공증 ZIP 배포 준비 |
+| 123 | 편집 메모리 누적 수정 | compact 원문 history와 flat PRE·CSS Highlight로 입력면을 유지하며 동일 입력 RSS 약 80% 감소, JS 38개·Swift 37개 및 독립 검토 통과 |
 
 ---
 
@@ -4354,3 +4356,44 @@ Ghostty 기본 링크 매처가 `AGENTS.md를`의 한글 조사까지 경로에 
 고정 후보의 전체 Swift 테스트·release 빌드 및 단일 최종 게이트를 확인한 뒤 기능 브랜치를 dev로, dev를 main으로 순서대로 merge commit 방식으로 병합한다. GitHub CI workflow가 없어 로컬 검증 근거를 PR 본문에 포함한다. 병합 main의 파일 트리가 검증한 후보와 같음을 확인하고 Developer ID 서명, `markagent` 프로필 공증, stapling·압축 해제 Gatekeeper 검증을 수행한다. 새 태그와 공개 릴리즈·ZIP 게시 후 재다운로드 자산의 해시·버전·서명·공증을 확인한다. 사용자 설치 앱과 기존 릴리즈 자산은 교체하거나 종료하지 않는다.
 
 변경 파일: `Sources/App/Info.plist`, `history.md`
+
+---
+
+## 세션 85: 편집 메모리 누적 수정과 v26.10.23 릴리즈
+
+> 날짜: 2026-10-23
+> 경로: ~/workspace/markAgent
+
+Markdown 원문 Edit에서 작은 문서를 직접 입력할 때 메모리가 급증하는 문제를 실제 앱에서 재현했다. Milkdown/ProseMirror 입력면과 정확한 원문·선택·Undo·Preview를 보존하며 누적 원인을 수정하고 사용자가 요청한 dev/main PR 병합과 릴리즈를 준비한다.
+
+### 대화 1: 원문 history와 WebKit 편집 DOM 메모리 수정
+
+**사용자:**
+> 요청 요약: 앱 Edit에서 회의.md를 직접 편집하면 메모리가 급증하고 크래시가 발생하는 문제를 수정해줘.
+
+**응답:**
+원문 history의 RawStep이 입력마다 전체 before/after 문자열을 보관하고 인접 PM step 병합도 막는 문제를 확인했다. compact splice가 실제 ProseMirror step의 apply·map·invert·merge를 위임하도록 바꿔 100KB 원문 200회 입력의 보관 payload를 41,000,000자에서 200자로 줄였다. 혼합 줄끝·UTF16·반복 문자열·다중 step과 undo/redo 회귀를 보강했다.
+
+이 수정만으로는 실제 WebContent 메모리가 계속 증가해 완료로 처리하지 않았다. 실제 native 할당 스택과 분리 대조에서 중첩된 편집 inline DOM이 누적의 앱 측 유발 조건임을 확인했다. raw schema는 CODE wrapper 없는 flat PRE를 쓰고 지원 WebKit에서는 CSS Highlight range로 문법 색상을 표시한다. 구형 WebKit의 기존 decoration 경로는 보존했다. Milkdown 초기 DOM 재부착으로 native range가 비는 문제는 매 plugin view update에서 다시 연결하고 destroy에서 소유 range·registry·observer를 해제하도록 수정했다.
+
+사용자 원본은 변경하지 않았다. 고정 원문 476자와 같은 4,086자 입력의 저장 결과 4,562자는 이전 baseline과 바이트 단위로 일치했다. 실제 앱 WebContent RSS는 727,424→148,000 KiB, peak footprint는 736.8M→208.7M으로 줄었다. 실제 Edit/Preview 전환·저장·복사·Undo/Redo와 넓고 좁은 폭의 라이트/다크 렌더를 확인했다.
+
+최종 JS 38개·Swift 집중 테스트 37개, 빌드·번들 해시·변경 소스 진단과 단일 독립 게이트 APPROVE를 확인했다. 32,768회 native 입력/8회 정확한 undo와 16,384회 성장 입력의 caret 검사를 통과했다. 빠른 성장 스트레스의 RSS 475,648 KiB·peak 734.7M은 남아 있어 모든 WebKit 메모리 증가가 사라졌다고 해석하지 않는다. 최종 host의 기존 LaunchServices NSXPC root 2개와 WebContent 32-byte dictionary, leaks 검사 보안 제한을 별도로 기록했다. 생성 번들의 세 공백 경고는 HEAD에도 있는 highlight.js 문법 문자열이며 의미를 바꾸는 trim은 하지 않았다.
+
+최종 편집기 번들 SHA256은 `2cfb9554afb2871183be7db99a178cbc14e484e6f3164522ce9a45d7e0b720e3`이다. 상세 증거는 로컬 `.omo/evidence/edit-memory-20261023/`에 보존하고 모든 소유 QA 프로세스 종료를 확인했다.
+
+변경 파일: `Sources/App/Resources/Editor/raw-document.js`, `Sources/App/Resources/Editor/raw-document.test.js`, `Sources/App/Resources/Editor/raw-schema.js`, `Sources/App/Resources/Editor/raw-presentation.js`, `Sources/App/Resources/Editor/editor.css`, `Sources/App/Resources/Editor/runtime.test.js`, `Sources/App/Resources/Editor/editor.js`, `Sources/App/Resources/Editor/editor.sha256`, `Tests/MarkAgentTests/EditorWebViewTests.swift`, `history.md`
+
+---
+
+### 대화 2: 기존 입력면과 색상 강조 유지
+
+**사용자:**
+> 수정 방향: 현재 입력면 유지
+> 원문 강조 표시: 색상 강조만 유지 (Recommended)
+> 내가 한글입력기를 다른걸 설치해서 그래. 한글입력 관련해서는 문제가 없어
+
+**응답:**
+격리된 textarea 후보를 통합하지 않고 Milkdown/ProseMirror contenteditable을 유지했다. 사용자가 수락한 대로 Edit의 굵게·기울임 글꼴 강조는 색상 중심 표시로 바꾸고 Preview의 semantic strong/em 서식은 보존했다. 별도로 설치한 한글 입력기 관련 추가 조사는 중단했으며 production 입력기 코드는 변경하지 않았다.
+
+변경 파일: `Sources/App/Resources/Editor/raw-schema.js`, `Sources/App/Resources/Editor/raw-presentation.js`, `Sources/App/Resources/Editor/editor.css`, `history.md`

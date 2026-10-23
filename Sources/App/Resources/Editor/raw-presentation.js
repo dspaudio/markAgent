@@ -13,6 +13,13 @@ const aliases = {
 };
 
 export const rawPresentationKey = new PluginKey("markAgentRawPresentation");
+const syntaxClasses = {
+  comment: ["comment", "quote"],
+  tag: ["tag", "name", "title", "section", "link"],
+  number: ["number", "literal", "attr", "variable"],
+  string: ["string", "regexp", "code", "addition"],
+  keyword: ["keyword", "type", "selector-tag", "bullet"]
+};
 
 // PM 문서의 LF UTF16 좌표를 사용한다. 화면 줄바꿈은 새 논리 줄이 아니다.
 export function sourceLineStarts(text) {
@@ -52,13 +59,17 @@ function presentation(doc, language) {
   }
   const text = doc.textContent;
   const decorations = syntaxRanges(text, language).map(range =>
-    Decoration.inline(range.from, range.to, {class: `raw-syntax ${range.classes}`}));
+    Decoration.inline(range.from, range.to, {class: `raw-syntax ${range.classes}`}, {classes: range.classes}));
   return {language, lines: sourceLineStarts(text), decorations: DecorationSet.create(doc, decorations)};
 }
 
 // 줄 번호는 contentDOM 바깥에 둔다. 복사/선택/IME에 widget 문자가 섞이지 않는다.
 export function rawPresentation(language) {
   let composing = false, alive = false;
+  const browser = globalThis.document?.defaultView;
+  const registry = browser?.CSS?.highlights, NativeHighlight = browser?.Highlight;
+  // 구형 macOS WebKit에서는 기존 장식을 유지한다.
+  const paintsRanges = Boolean(registry && NativeHighlight);
   return new Plugin({
     key: rawPresentationKey,
     state: {
@@ -77,7 +88,7 @@ export function rawPresentation(language) {
       }
     },
     props: {
-      decorations: state => rawPresentationKey.getState(state).decorations,
+      decorations: state => paintsRanges ? DecorationSet.empty : rawPresentationKey.getState(state).decorations,
       handleDOMEvents: {
         compositionstart() { composing = true; return false; },
         compositionend(view) {
@@ -99,8 +110,30 @@ export function rawPresentation(language) {
       gutter.setAttribute("aria-hidden", "true");
       gutter.setAttribute("contenteditable", "false");
       parent.append(gutter);
+      const highlights = new Map();
+      if (paintsRanges) {
+        for (const tone of Object.keys(syntaxClasses)) {
+          const highlight = new NativeHighlight();
+          highlights.set(tone, highlight);
+          registry.set(`ma-${tone}`, highlight);
+        }
+      }
       function update() {
-        const {lines} = rawPresentationKey.getState(view.state);
+        const value = rawPresentationKey.getState(view.state), {lines} = value;
+        if (paintsRanges) {
+          for (const highlight of highlights.values()) highlight.clear();
+          for (const decoration of value.decorations.find()) {
+            const classes = decoration.spec.classes.split(/\s+/);
+            const tone = Object.keys(syntaxClasses).find(key =>
+              syntaxClasses[key].some(name => classes.includes(`hljs-${name}`)));
+            if (!tone) continue;
+            const from = view.domAtPos(decoration.from), to = view.domAtPos(decoration.to);
+            const range = owner.createRange();
+            range.setStart(from.node, from.offset);
+            range.setEnd(to.node, to.offset);
+            highlights.get(tone).add(range);
+          }
+        }
         while (gutter.children.length > lines.length) gutter.lastElementChild.remove();
         while (gutter.children.length < lines.length) {
           const row = owner.createElement("div");
@@ -121,7 +154,13 @@ export function rawPresentation(language) {
       update();
       return {
         update,
-        destroy() { alive = false; composing = false; observer.disconnect(); gutter.remove(); }
+        destroy() {
+          alive = false; composing = false; observer.disconnect(); gutter.remove();
+          for (const [tone, highlight] of highlights) {
+            highlight.clear();
+            if (registry.get(`ma-${tone}`) === highlight) registry.delete(`ma-${tone}`);
+          }
+        }
       };
     }
   });
