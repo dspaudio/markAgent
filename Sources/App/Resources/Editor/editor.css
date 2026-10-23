@@ -48,3 +48,8 @@ body { font: 14px -apple-system, BlinkMacSystemFont, sans-serif; display: flex; 
 .hljs-comment, .hljs-quote { opacity: .6; }
 .hljs-strong { font-weight: bold; }
 .hljs-emphasis { font-style: italic; }
+::highlight(ma-keyword) { color: var(--syntax-keyword); }
+::highlight(ma-string) { color: var(--syntax-string); }
+::highlight(ma-number) { color: var(--syntax-number); }
+::highlight(ma-tag) { color: var(--syntax-tag); }
+::highlight(ma-comment) { color: color-mix(in srgb, currentColor 60%, transparent); }

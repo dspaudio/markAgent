@@ -7,7 +7,7 @@ export const rawSchema = [
   $node("raw_source", () => ({
     content: "text*", marks: "", code: true, defining: true,
     parseDOM: [{tag: "pre", preserveWhitespace: "full"}],
-    toDOM: () => ["pre", ["code", 0]],
+    toDOM: () => ["pre", 0],
     parseMarkdown: unused, toMarkdown: unused
   })),
   $node("text", () => ({group: "inline", parseMarkdown: unused, toMarkdown: unused}))
