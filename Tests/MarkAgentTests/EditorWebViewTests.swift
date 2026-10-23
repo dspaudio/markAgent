@@ -11,6 +11,39 @@ final class EditorWebViewTests: XCTestCase {
         .appendingPathComponent("Sources/App/Resources/Editor/index.html")
 
     @MainActor
+    func testRawSyntaxRangesSurviveMountAndThemeWithoutInlineWrappers() async throws {
+        _ = NSApplication.shared
+        let document = MarkdownDocument()
+        let source = "# 제목😀\r\n**굵게** `값`\r\n"
+        document.editableContent = source
+        let container = NSView(frame: NSRect(x: 0, y: 0, width: 600, height: 500))
+        let session = EditorSession(document: document)
+        document.editorSession = session
+        session.mount(in: container, assetURL: Self.assetURL,
+                      configuration: ["mode": "raw", "language": "markdown", "active": false])
+        try await session.waitUntilReady()
+        let webView = try XCTUnwrap(session.webView)
+        let readRanges = """
+            (() => {
+                const view = window.markAgentEditorView;
+                if (!window.Highlight || !CSS.highlights)
+                    return [...view.dom.querySelectorAll('.hljs-section')].map(node => node.textContent);
+                return [...(CSS.highlights.get('ma-tag') ?? [])].map(range => range.toString());
+            })()
+            """
+        let mounted = try await webView.evaluateJavaScript(readRanges) as? [String]
+        XCTAssertEqual(mounted, ["# 제목😀"])
+        try await session.configure(["theme": ["dark": true, "tag": "#14283c"]])
+        let themed = try await webView.evaluateJavaScript(readRanges) as? [String]
+        XCTAssertEqual(themed, ["# 제목😀"])
+        let sourceIntact = await document.withEditorSnapshot {}
+        XCTAssertTrue(sourceIntact)
+        XCTAssertEqual(document.editableContent, source)
+        await session.dispose()
+        document.editorSession = nil
+    }
+
+    @MainActor
     func testPreviewNativeSelectAllCopyExportsSemanticHTMLAndPlainText() async throws {
         _ = NSApplication.shared
         let document = MarkdownDocument()

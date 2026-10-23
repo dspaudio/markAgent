@@ -80,7 +80,7 @@ test("IME compositionend 신호 뒤 DOM의 마지막 입력을 flush 한다", as
   v.dom.dispatchEvent(new dom.CompositionEvent("compositionstart", {bubbles: true}));
   const pending = flush();
   expect(messages.at(-1).type).not.toBe("snapshot");
-  v.dom.querySelector("code").firstChild.textContent = "한글😀\n";
+  v.dom.querySelector("pre").firstChild.textContent = "한글😀\n";
   v.dom.dispatchEvent(new dom.CompositionEvent("compositionend", {bubbles: true, data: "한글😀"}));
   expect((await pending).text).toBe("한글😀\r\n");
 });
@@ -209,4 +209,31 @@ test("Preview 이미지 응답은 원문을 바꾸지 않고 portable data URI�
   range.selectNodeContents(view().dom); selection.removeAllRanges(); selection.addRange(range);
   expect(neutralCopy(view().dom).html).toContain(png);
   expect((await flush()).text).toBe(source);
+});
+
+test("원문 문법 색상은 편집 DOM을 감싸지 않고 범위만 갱신하고 해제한다", async () => {
+  const registry = new Map();
+  const browser = document.defaultView;
+  const previousCSS = Object.getOwnPropertyDescriptor(browser, "CSS"), previousHighlight = browser.Highlight;
+  Object.defineProperty(browser, "CSS", {configurable: true, value: {...browser.CSS, highlights: registry}});
+  browser.Highlight = class extends Set {};
+  registry.set("foreign", new Set());
+  try {
+    const raw = "# 제목😀\r\n**굵게** `값`\r\n";
+    await initialize(raw);
+    const v = view();
+    expect(v.dom.querySelectorAll("pre code, .raw-syntax").length).toBe(0);
+    expect([...v.dom.querySelector("pre").childNodes].filter(node => node.nodeType === 3).length).toBe(1);
+    expect([...registry.get("ma-tag")].map(range => range.toString())).toContain("# 제목😀");
+    v.dispatch(v.state.tr.insertText("앞", 3));
+    expect([...registry.get("ma-tag")].map(range => range.toString())).toContain("# 앞제목😀");
+    expect((await flush()).text).toBe(raw.replace("# 제목", "# 앞제목"));
+    await command({kind: "dispose"});
+    live = false;
+    expect([...registry.keys()]).toEqual(["foreign"]);
+  } finally {
+    if (live) { await command({kind: "dispose"}); live = false; }
+    Object.defineProperty(browser, "CSS", previousCSS);
+    browser.Highlight = previousHighlight;
+  }
 });
