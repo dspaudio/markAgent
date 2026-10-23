@@ -217,6 +217,7 @@
 | 121 | 저장 프롬프트 터미널 전송 | 왼쪽 화살표·편집·삭제 순서, 원문 붙여넣기와 포커스 이동, 비터미널 비활성화 및 실제 두 줄 전송 검증 |
 | 122 | v26.10.13 릴리즈 준비 | 로컬 날짜의 두 버전 필드 적용, 분리 커밋·격리 검증과 dev/main 병합·서명·공증 ZIP 배포 준비 |
 | 123 | 편집 메모리 누적 수정 | compact 원문 history와 flat PRE·CSS Highlight로 입력면을 유지하며 동일 입력 RSS 약 80% 감소, JS 38개·Swift 37개 및 독립 검토 통과 |
+| 124 | v26.10.23 릴리즈 준비 | 편집 메모리 수정 커밋을 기준으로 두 버전 필드를 로컬 날짜에 맞추고 dev/main PR 병합·서명·공증·재다운로드 검증 진행 |
 
 ---
 
@@ -4397,3 +4398,17 @@ Markdown 원문 Edit에서 작은 문서를 직접 입력할 때 메모리가 �
 격리된 textarea 후보를 통합하지 않고 Milkdown/ProseMirror contenteditable을 유지했다. 사용자가 수락한 대로 Edit의 굵게·기울임 글꼴 강조는 색상 중심 표시로 바꾸고 Preview의 semantic strong/em 서식은 보존했다. 별도로 설치한 한글 입력기 관련 추가 조사는 중단했으며 production 입력기 코드는 변경하지 않았다.
 
 변경 파일: `Sources/App/Resources/Editor/raw-schema.js`, `Sources/App/Resources/Editor/raw-presentation.js`, `Sources/App/Resources/Editor/editor.css`, `history.md`
+
+---
+
+### 대화 3: dev/main PR 병합과 v26.10.23 릴리즈
+
+**사용자:**
+> dev pr 머지, main pr 머지, 릴리즈 작업까지 진행해줘
+
+**응답:**
+편집 메모리 수정과 회귀·히스토리를 `dec8b5e` 커밋에 기록했다. 로컬 날짜는 2026-10-23이며 원격에 `v26.10.23` 태그가 없고 같은 버전 ZIP 경로도 사용되지 않음을 확인했다. 두 앱 버전 필드를 `26.10.23`으로 맞춘다. 열린 PR과 GitHub Actions workflow는 없으며 원격 dev `644f2b0a3edf6b9a3eaac4645633bf6cd1c05a08`, main `5ef7cc78504c6f2304767eeec414620a777da9fb`를 기준으로 `fix/editor-memory-20261023` 브랜치를 만들었다.
+
+고정 후보의 release 빌드·전체 테스트 및 실제 앱 검증을 확인한 뒤 기능 브랜치→dev, dev→main 순서로 merge commit PR을 병합한다. 검증한 후보와 병합 main의 파일 트리가 같음을 확인하고 Developer ID 서명, 사용 가능한 `markagent` 프로필 공증, staple/validate와 압축 해제 Gatekeeper 검증을 수행한다. 새 태그·공개 릴리즈·ZIP 게시 후 재다운로드 파일의 해시·버전·서명·공증을 확인한다. 기존 릴리즈·사용자 설치 앱·관련 없는 미추적 자료는 보존한다.
+
+변경 파일: `Sources/App/Info.plist`, `history.md`
